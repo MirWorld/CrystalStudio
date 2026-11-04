@@ -10,6 +10,7 @@ public record Sprite(RasterImage Bitmap, int X, int Y, int OriginalWidth = 0, in
     public int Width => OriginalWidth > 0 ? OriginalWidth : Bitmap.PixelWidth;
     public int Height => OriginalHeight > 0 ? OriginalHeight : Bitmap.PixelHeight;
 }
+public readonly record struct SpriteHeader(int Width, int Height, int X, int Y);
 public sealed class CrystalLibrary
 {
     public string Path { get; }
@@ -21,6 +22,17 @@ public sealed class CrystalLibrary
         if ((version != 2 && version != 3) || count < 0 || count > 2_000_000 || (version == 3 ? 12L : 8L) + count * 4L > r.BaseStream.Length) throw new InvalidDataException("Expected a Crystal version 2 or 3 library.");
         if (version == 3) r.ReadInt32();
         offsets = new int[count]; for (int i = 0; i < count; i++) { offsets[i] = r.ReadInt32(); if (offsets[i] < 0 || offsets[i] >= r.BaseStream.Length) throw new InvalidDataException("Invalid sprite offset."); }
+    }
+    public SpriteHeader? ReadHeader(int index)
+    {
+        if (index < 0 || index >= Count) return null;
+        using var r = new BinaryReader(File.OpenRead(Path)); r.BaseStream.Position = offsets[index];
+        int w = r.ReadInt16(), h = r.ReadInt16(), x = r.ReadInt16(), y = r.ReadInt16();
+        r.ReadInt16(); r.ReadInt16(); r.ReadByte(); int length = r.ReadInt32();
+        if (w <= 0 || h <= 0) return null;
+        if (w > 8192 || h > 8192 || length < 0 || length > r.BaseStream.Length - r.BaseStream.Position)
+            throw new InvalidDataException("Invalid sprite dimensions or length.");
+        return new(w, h, x, y);
     }
     public Sprite? Decode(int index)
     {

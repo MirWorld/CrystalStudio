@@ -9,6 +9,10 @@ internal static class MapSpriteDrawing
 
     internal static Rect Bounds(Sprite sprite, int x, int y, int library, int image,
         bool anchored, bool front = false, bool blend = false)
+        => Bounds(new SpriteHeader(sprite.Width, sprite.Height, sprite.X, sprite.Y), x, y, library, image, anchored, front, blend);
+
+    internal static Rect Bounds(SpriteHeader sprite, int x, int y, int library, int image,
+        bool anchored, bool front = false, bool blend = false)
     {
         double px = x * 48.0, py = y * 32.0;
         bool tile = (sprite.Width == 48 && sprite.Height == 32) || (sprite.Width == 96 && sprite.Height == 64);

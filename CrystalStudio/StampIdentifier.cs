@@ -4,7 +4,10 @@ namespace CrystalStudio;
 
 public sealed record StampScanProgress(string Phase,int Completed,int Total,int Matches);
 public sealed record StampScanResult(List<PlacedStamp> Matches,int Files,int SkippedFiles,int TemplatesWithoutImages,
-    int ForegroundImages=0,int MatchedForegroundImages=0,int TemplatesMissingImages=0);
+    int ForegroundImages=0,int MatchedForegroundImages=0,int TemplatesMissingImages=0)
+{
+    internal Dictionary<Guid,string> TemplatePaths { get; init; } = [];
+}
 
 public static class StampIdentifier
 {
@@ -13,6 +16,23 @@ public static class StampIdentifier
     private readonly record struct Claim(int Cell,ImageKey Image,Front? Foreground=null);
 
     public static StampScanResult Scan(MapDocument map,string folder,CancellationToken cancellation=default,IProgress<StampScanProgress>? progress=null)
+        => Scan(map, folder, cancellation, progress, null, null);
+
+    internal sealed record Catalogue(List<(StampEntry Entry,int Size,byte[]? Data)> Entries,int Skipped,bool ForegroundOnly=false);
+    internal static Catalogue LoadCatalogue(string folder,CancellationToken cancellation)
+    {
+        var ordered = new List<(StampEntry Entry,int Size,byte[]? Data)>(); int budget=32*1024*1024,skipped=0;
+        foreach(var entry in StampCatalog.Read(folder))
+        {
+            cancellation.ThrowIfCancellationRequested();
+            try { var header=ReadSize(entry.FilePath,ref budget); ordered.Add((entry,header.Size,header.Data)); }
+            catch(Exception ex) when(ex is IOException or InvalidDataException or UnauthorizedAccessException) { skipped++; }
+        }
+        return new(ordered.OrderByDescending(e=>e.Size).ThenBy(e=>e.Entry.RelativePath,StringComparer.OrdinalIgnoreCase).ToList(),skipped);
+    }
+
+    internal static StampScanResult Scan(MapDocument map,string folder,CancellationToken cancellation,IProgress<StampScanProgress>? progress,
+        Catalogue? catalogue,IReadOnlyList<PlacedStamp>? reservations)
     {
         if(!Directory.Exists(folder))throw new DirectoryNotFoundException("The stamp folder does not exist.");
         var timer=Stopwatch.StartNew();long lastReport=-200;var found=new List<PlacedStamp>();int skipped=0,noImages=0,missing=0,foreground=0,matchedForeground=0;
@@ -26,7 +46,7 @@ public static class StampIdentifier
             if(points.Count==0||points[^1]!=point)points.Add(point);
         }
         void Reserve(Claim claim){claims[claim]=claims.GetValueOrDefault(claim)+1;}
-        foreach(var stamp in map.PlacedStamps)foreach(var delta in stamp.Changes)
+        foreach(var stamp in reservations ?? map.PlacedStamps)foreach(var delta in stamp.Changes)
         {
             int k=(stamp.Y+delta.Y)*map.Width+stamp.X+delta.X;
             if(delta.OwnedFronts is { } owned)
@@ -44,18 +64,12 @@ public static class StampIdentifier
             if(cell.MiddleImage>0)Index(new(1,cell.MiddleLibrary,cell.MiddleImage),point);
             foreach(var f in cell.ForegroundImages)if((f.Image&0x7FFF)>0)Index(FrontKey(f),point);
         }
-        var entries=StampCatalog.Read(folder);var ordered=new List<(StampEntry Entry,int Size,byte[]? Data)>();
+        var paths=new Dictionary<Guid,string>();
+        catalogue ??= LoadCatalogue(folder,cancellation);
+        var ordered=catalogue.Entries;skipped+=catalogue.Skipped;int files=ordered.Count+catalogue.Skipped;
         // Sorting by footprint still happens before matching. Retain small files
         // from the header pass to avoid opening the catalogue twice, with a fixed
         // memory budget even for unusually large user catalogues.
-        int bufferBudget=32*1024*1024;
-        for(int i=0;i<entries.Count;i++)
-        {
-            cancellation.ThrowIfCancellationRequested();try{var header=ReadSize(entries[i].FilePath,ref bufferBudget);ordered.Add((entries[i],header.Size,header.Data));}
-            catch(Exception ex) when(ex is IOException or InvalidDataException or UnauthorizedAccessException){skipped++;}
-            Report("Reading stamp catalogue",i+1,entries.Count);
-        }
-        ordered=ordered.OrderByDescending(e=>e.Size).ThenBy(e=>e.Entry.RelativePath,StringComparer.OrdinalIgnoreCase).ToList();
         for(int i=0;i<ordered.Count;i++)
         {
             Report("Matching stamps",i,ordered.Count);cancellation.ThrowIfCancellationRequested();var entry=ordered[i].Entry;List<StampCell> cells;
@@ -74,6 +88,7 @@ public static class StampIdentifier
             }
             catch(Exception ex) when(ex is IOException or InvalidDataException or UnauthorizedAccessException){skipped++;continue;}
             bool foregroundOnly=cells.Any(c=>c.Cell.ForegroundImages.Count>0);
+            if(catalogue.ForegroundOnly&&!foregroundOnly){noImages++;continue;}
             StampCell? anchor=null;List<Location>? candidates=null;bool missingImages=false;
             var checks=new List<(StampCell Cell,int Frequency)>();
             foreach(var cell in cells)
@@ -120,13 +135,13 @@ public static class StampIdentifier
                     if((stampCell.BackImage&0x1FFFFFFF)>0)Reserve(new(k,new(0,stampCell.BackLibrary,stampCell.BackImage&0x1FFFFFFF)));
                     if(stampCell.MiddleImage>0)Reserve(new(k,new(1,stampCell.MiddleLibrary,stampCell.MiddleImage)));
                 }
-                found.Add(new(Guid.NewGuid(),entry.Name,(int)x,(int)y,source,deltas));
-                if(found.Count+map.PlacedStamps.Count>100000)throw new InvalidDataException("More than 100,000 stamp instances found; scan a smaller map.");
+                var id=Guid.NewGuid();found.Add(new(id,entry.Name,(int)x,(int)y,source,deltas));paths[id]=entry.FilePath;
+                if(found.Count+(reservations??map.PlacedStamps).Count>100000)throw new InvalidDataException("More than 100,000 stamp instances found; scan a smaller map.");
                 Report("Matching stamps",i+1,ordered.Count);
             }
         }
-        cancellation.ThrowIfCancellationRequested();Report("Complete",entries.Count,entries.Count,true);
-        return new(found,entries.Count,skipped,noImages,foreground,matchedForeground,missing);
+        cancellation.ThrowIfCancellationRequested();Report("Complete",files,files,true);
+        return new(found,files,skipped,noImages,foreground,matchedForeground,missing) { TemplatePaths=paths };
     }
     private static (int Size,byte[]? Data) ReadSize(string path,ref int bufferBudget)
     {

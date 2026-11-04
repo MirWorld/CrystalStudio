@@ -3282,5 +3282,293 @@
   "LanguagesavedRestartCrystalStudiotoapply_513C84B7": {
     "English": "Language saved. Restart Crystal Studio to apply.",
     "Chinese": "语言设置已保存，重启 Crystal Studio 后生效。"
+  },
+  "ExtractMapObjects_1151B2C9": {
+    "English": "Extract Map Objects",
+    "Chinese": "提取地图物体"
+  },
+  "Currentmap_A6E14D93": {
+    "English": "Current map",
+    "Chinese": "当前地图"
+  },
+  "Currentselection_BA8FC363": {
+    "English": "Current selection",
+    "Chinese": "当前选区"
+  },
+  "Mapdirectory_FFDE7D38": {
+    "English": "Map directory",
+    "Chinese": "地图目录"
+  },
+  "Resourcefolder_E4D24E62": {
+    "English": "Resource folder",
+    "Chinese": "资源目录"
+  },
+  "Searchcandidatesorsource_46143E9F": {
+    "English": "Search candidates or source",
+    "Chinese": "搜索候选或来源"
+  },
+  "Allcandidates_E2DF9422": {
+    "English": "All candidates",
+    "Chinese": "全部候选"
+  },
+  "Unreviewed_F5265A26": {
+    "English": "Unreviewed",
+    "Chinese": "未确认"
+  },
+  "Reviewed_FAD6057B": {
+    "English": "Reviewed",
+    "Chinese": "已确认"
+  },
+  "Existingobjects_8277F622": {
+    "English": "Existing objects",
+    "Chinese": "已有物体"
+  },
+  "Newobjects_4B24B93D": {
+    "English": "New objects",
+    "Chinese": "新物体"
+  },
+  "Selectionboundary_5ACB052B": {
+    "English": "Selection boundary",
+    "Chinese": "跨选区边界"
+  },
+  "Choosemaps_55696090": {
+    "English": "Choose maps…",
+    "Chinese": "选择地图目录…"
+  },
+  "Chooseresources_A80EAC2B": {
+    "English": "Choose resources…",
+    "Chinese": "选择资源目录…"
+  },
+  "Scan_EA1C510D": {
+    "English": "Scan",
+    "Chinese": "开始扫描"
+  },
+  "ReviewobjectboundariesandcollisionbeforesavingSourcemapsremainunc_5C76B2B4": {
+    "English": "Review object boundaries and collision before saving. Source maps remain unchanged.",
+    "Chinese": "保存前请确认物体边界与碰撞归属。源地图保持不变。"
+  },
+  "Previous_A57B08A4": {
+    "English": "Previous",
+    "Chinese": "上一页"
+  },
+  "Next_1FF57A29": {
+    "English": "Next",
+    "Chinese": "下一页"
+  },
+  "Reviewselected_06032AE3": {
+    "English": "Review selected",
+    "Chinese": "确认所选"
+  },
+  "Markunreviewed_C2A098E5": {
+    "English": "Mark unreviewed",
+    "Chinese": "标为未确认"
+  },
+  "Mergeselected_9E6BA404": {
+    "English": "Merge selected",
+    "Chinese": "合并所选"
+  },
+  "Excludeselected_2748363F": {
+    "English": "Exclude selected",
+    "Chinese": "排除所选"
+  },
+  "SavereviewedtoPalette_61B89585": {
+    "English": "Save reviewed to Palette",
+    "Chinese": "保存已确认项至调色板"
+  },
+  "ReviewupdatedUseUndotorestorethepreviousreview_4CFC273D": {
+    "English": "Review updated. Use Undo to restore the previous review.",
+    "Chinese": "复核已更新，可撤销至之前的状态。"
+  },
+  "Noscanresults_E636107A": {
+    "English": "No scan results.",
+    "Chinese": "尚无扫描结果。"
+  },
+  "0N0existing1N0new2N0duplicates3N0unreviewed4N0ready_DB54B78E": {
+    "English": "{0:N0} existing · {1:N0} new · {2:N0} duplicates · {3:N0} unreviewed · {4:N0} ready",
+    "Chinese": "已有 {0:N0} · 新增 {1:N0} · 重复 {2:N0} · 未确认 {3:N0} · 可保存 {4:N0}"
+  },
+  "Choosearesourcefolder_B9E8BD69": {
+    "English": "Choose a resource folder.",
+    "Chinese": "请选择资源目录。"
+  },
+  "Chooseamapdirectory_EC8F12BB": {
+    "English": "Choose a map directory.",
+    "Chinese": "请选择地图目录。"
+  },
+  "Creatingmapsnapshot_BC79B33F": {
+    "English": "Creating map snapshot…",
+    "Chinese": "正在创建地图快照…"
+  },
+  "Selectamapareafirst_8FFB4C3B": {
+    "English": "Select a map area first.",
+    "Chinese": "请先选择地图区域。"
+  },
+  "01N0maps2N0candidates3N0occurrences4_0493D36D": {
+    "English": "{0} · {1:N0} maps · {2:N0} candidates · {3:N0} occurrences\n{4}",
+    "Chinese": "{0} · {1:N0} 张地图 · {2:N0} 个候选 · {3:N0} 处来源\n{4}"
+  },
+  "Scancomplete0N0maps1N0warningsSelectcandidatestoreview_EF686667": {
+    "English": "Scan complete · {0:N0} maps · {1:N0} warnings. Select candidates to review.",
+    "Chinese": "扫描完成 · {0:N0} 张地图 · {1:N0} 条警告。请选择候选进行复核。"
+  },
+  "ScancancelledSourcemapsremainunchanged_2A767F2C": {
+    "English": "Scan cancelled. Source maps remain unchanged.",
+    "Chinese": "扫描已取消，源地图保持不变。"
+  },
+  "Savingreviewedobjects_C3FC5109": {
+    "English": "Saving reviewed objects…",
+    "Chinese": "正在保存已确认物体…"
+  },
+  "Saved0N0uniqueobjectsReport1_F8E0C3CE": {
+    "English": "Saved {0:N0} unique objects. Report: {1}",
+    "Chinese": "已保存 {0:N0} 个去重物体。报告：{1}"
+  },
+  "ExportcancelledCatalogueunchanged_A206C849": {
+    "English": "Export cancelled. Catalogue unchanged.",
+    "Chinese": "导出已取消，目录索引保持不变。"
+  },
+  "Allcategories_9D5097A8": {
+    "English": "All categories",
+    "Chinese": "全部分类"
+  },
+  "Unclassified_1372A381": {
+    "English": "Unclassified",
+    "Chinese": "待分类"
+  },
+  "Selectacandidatetoinspectitsfragmentscollisionandsources_8DA1000A": {
+    "English": "Select a candidate to inspect its fragments, collision and sources.",
+    "Chinese": "请选择候选，查看组成图片、碰撞和来源。"
+  },
+  "0N0selected_6958BC16": {
+    "English": "{0:N0} selected",
+    "Chinese": "已选 {0:N0} 项"
+  },
+  "Nameleaveemptytoretain_548E6AAC": {
+    "English": "Name (leave empty to retain)",
+    "Chinese": "名称（空白表示保留）"
+  },
+  "Allowcompleteobjectscrossingtheselection_1AD3B23E": {
+    "English": "Allow complete objects crossing the selection",
+    "Chinese": "允许保存跨选区的完整物体"
+  },
+  "Applynamecategoryboundary_AEDB6B29": {
+    "English": "Apply name / category / boundary",
+    "Chinese": "应用名称、分类与边界设置"
+  },
+  "Isolatedobject_CE907591": {
+    "English": "Isolated object",
+    "Chinese": "独立物体"
+  },
+  "Mapcontext_5996E153": {
+    "English": "Map context",
+    "Chinese": "地图上下文"
+  },
+  "Splitselectedfragments_6CA58BD4": {
+    "English": "Split selected fragments",
+    "Chinese": "拆分所选图片"
+  },
+  "Excludefragments_ACAEC054": {
+    "English": "Exclude fragments",
+    "Chinese": "排除所选图片"
+  },
+  "CollisionpinklowbluehighNearbyflagsstartunchecked_695A25B6": {
+    "English": "Collision: pink = low, blue = high. Nearby flags start unchecked.",
+    "Chinese": "碰撞：粉色为低阻挡，蓝色为高阻挡。附近的碰撞默认不选中。"
+  },
+  "Sources_CAF85B08": {
+    "English": "Sources",
+    "Chinese": "来源"
+  },
+  "01fragments2sources_BE9164C4": {
+    "English": "{0} · {1} fragments · {2} sources",
+    "Chinese": "{0} · {1} 张图片 · {2} 处来源"
+  },
+  "Confirmedplacementmetadata_4DFAC49F": {
+    "English": "Confirmed placement metadata.",
+    "Chinese": "已确认的放置元数据。"
+  },
+  "Matchedanexistingobjecttemplate_16C7A12F": {
+    "English": "Matched an existing object template.",
+    "Chinese": "与已有物体模板匹配。"
+  },
+  "Automaticsizelimitexceededindividualfragmentrequiresreview_DFE66189": {
+    "English": "Automatic size limit exceeded; individual fragment requires review.",
+    "Chinese": "超过自动分组范围限制，单张图片需要人工确认。"
+  },
+  "Artworkmissinggroupingrequiresreview_9CCCE980": {
+    "English": "Artwork missing; grouping requires review.",
+    "Chinese": "缺少图片资源，需要人工确认分组。"
+  },
+  "Groupedbyspriteboundslibraryandimagesequencereviewobjectboundarie_F91CA9AD": {
+    "English": "Grouped by sprite bounds, library and image sequence; review object boundaries.",
+    "Chinese": "根据图片显示范围、资源库与图片序号分组，请确认物体边界。"
+  },
+  "Categorysupportedbyatleast80offragments_0E26AA38": {
+    "English": "Category supported by at least 80% of fragments.",
+    "Chinese": "至少 80% 的组成图片支持该分类。"
+  },
+  "Manuallymergedreviewfragmentsandcollision_114B6FAA": {
+    "English": "Manually merged; review fragments and collision.",
+    "Chinese": "已人工合并，请确认图片与碰撞。"
+  },
+  "Enteranobjectname_A7E583D2": {
+    "English": "Enter an object name.",
+    "Chinese": "请输入物体名称。"
+  },
+  "Selectforegroundfragmentsfirst_38D9C647": {
+    "English": "Select foreground fragments first.",
+    "Chinese": "请先选择前景图片。"
+  },
+  "Onlycollisionpresentinthesourcecanbeincluded_65B34BB0": {
+    "English": "Only collision present in the source can be included.",
+    "Chinese": "仅可选择源地图中存在的碰撞。"
+  },
+  "Selectatleasttwocandidates_521325E2": {
+    "English": "Select at least two candidates.",
+    "Chinese": "请至少选择两个候选。"
+  },
+  "MergerequiressingleoccurrencesfromthesamesourceScanthatmapseparat_6BD97A06": {
+    "English": "Merge requires single occurrences from the same source. Scan that map separately to merge repeated objects.",
+    "Chinese": "合并需要同一来源中各自仅有一处的候选。对于重复物体，请单独扫描该地图后整理。"
+  },
+  "Mergedobjectsoverlapataforegroundanchor_6032DF44": {
+    "English": "Merged objects overlap at a foreground anchor.",
+    "Chinese": "所合并物体的前景锚点重叠。"
+  },
+  "Reviewatleastonecandidatebeforesaving_43D55B3F": {
+    "English": "Review at least one candidate before saving.",
+    "Chinese": "保存前请至少确认一个候选。"
+  },
+  "ThecataloguechangedduringexportScanagainbeforesaving_9753549F": {
+    "English": "The catalogue changed during export. Scan again before saving.",
+    "Chinese": "导出期间目录索引已变化，请重新扫描后保存。"
+  },
+  "Discoveringforegroundfragments_BC60E689": {
+    "English": "Discovering foreground fragments",
+    "Chinese": "正在发现前景图片"
+  },
+  "Mapcomplete_9BD840A6": {
+    "English": "Map complete",
+    "Chinese": "地图扫描完成"
+  },
+  "Readingmap_52C88853": {
+    "English": "Reading map",
+    "Chinese": "正在读取地图"
+  },
+  "Mergerequirescandidateswithoccurrencesinthesamesource_0B80DF25": {
+    "English": "Merge requires candidates with occurrences in the same source.",
+    "Chinese": "合并需要所选候选在同一来源中存在相应物体。"
+  },
+  "Undo_A8283ADE": {
+    "English": "Undo",
+    "Chinese": "撤销"
+  },
+  "Redo_74273989": {
+    "English": "Redo",
+    "Chinese": "重做"
+  },
+  "Invalidextractionoccurrencerecordsincatalogue_702E7E6B": {
+    "English": "Invalid extraction occurrence records in catalogue.",
+    "Chinese": "目录索引中的提取来源记录无效。"
   }
 }

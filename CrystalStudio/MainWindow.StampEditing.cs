@@ -158,6 +158,10 @@ public partial class MainWindow
                 if (File.Exists(target)) throw new IOException("A new stamp requires a new object filename.");
             }
             else target = map.Path!;
+            // Share the extraction writer lock so editing an object while the tool
+            // exports cannot overwrite a newer catalogue in this process/package.
+            using var catalogueLease = new FileStream(indexPath + ".extraction.lock", FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
+            index = StampCategories.Read(indexPath);
             string relative = StampCategories.CatalogueFile(index.ObjectRoot, target, stampFolder ?? StampCatalog.FindFolder());
             StampCategories.Resolve(index.ObjectRoot, relative);
             var json = JsonNode.Parse(File.ReadAllText(indexPath))!.AsObject();

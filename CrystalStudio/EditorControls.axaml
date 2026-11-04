@@ -111,6 +111,13 @@
       <ContentPresenter Name="PART_SelectedContentHost" Grid.Column="1" Content="{TemplateBinding SelectedContent}" ContentTemplate="{TemplateBinding SelectedContentTemplate}" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch"/>
     </Grid></ControlTemplate></Setter>
   </ControlTheme>
+  <ControlTheme x:Key="ExtractionCategoryTabs" TargetType="TabControl" BasedOn="{StaticResource CategoryTabControl}">
+    <Setter Property="Template"><ControlTemplate><Border BorderBrush="{DynamicResource Line}" BorderThickness="0,0,1,0" Margin="0,0,4,0">
+      <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+        <ItemsPresenter Name="PART_ItemsPresenter" ItemsPanel="{TemplateBinding ItemsPanel}"/>
+      </ScrollViewer>
+    </Border></ControlTemplate></Setter>
+  </ControlTheme>
   <ControlTheme x:Key="CategoryTabItem" TargetType="TabItem">
     <Setter Property="MinHeight" Value="34"/><Setter Property="Padding" Value="6,7"/><Setter Property="Margin" Value="0,1"/>
     <Setter Property="FontSize" Value="10"/><Setter Property="Foreground" Value="{DynamicResource Muted}"/>

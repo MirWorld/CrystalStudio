@@ -65,3 +65,32 @@ Release 自动测试通过 22 项，失败 0 项，跳过 0 项。测试覆盖�
 - `wpf-final-performance.json`、`avalonia-gpu-performance.json`、`performance-comparison.json`：以上性能表的原始数据；其他 Avalonia 性能 JSON 属于中间测量，不作为最终对照。
 - `avalonia-gpu-performance.stdout.log`、`real-map-roundtrip.map`：真实地图另存和重新读取的结果。
 - `benchmark\Program.cs`：对照测试程序；`published-sha256.json`：发布文件哈希。
+
+## 地图物体提取验收（2026-11-04）
+
+当前发布路径为 `HuaXiaServer/Build/CrystalStudioAvalonia/object-extraction/win-x64/CrystalStudio.exe`，采用 Windows x64、自包含运行时和 ReadyToRun。包内包含 9,170 个现有 `.X` 文件和 9,159 个分类条目。
+
+完整验证共 **46 项测试通过**。其中提取工具验证覆盖：多部件物体、连续树木、不同资源库与序号范围、较大模板优先、有效和过期元数据、前景动画与碰撞变体、跨选区保护、跨地图去重、分类阈值、分组范围限制、资源缺失、递归目录中的无效地图、取消扫描与导出、拆分/合并/排除及撤销重做、保留独立碰撞单元格和原地图上下文。
+
+保存验证逐字段比较导出前后的相对坐标、前景引用、动画参数、碰撞、门和灯光；此外在实际 Palette 控件中验证新物体的预览、选择、放置和撤销。保存到已有模板时验证文件复用、名称及分类更新、来源去重和自定义字段保留。分别在物体文件、报告、索引阶段注入故障，验证索引内容恢复及新文件清理；另有并发索引变化保护测试。
+
+所有 UI 测试共享 Avalonia 应用、启动语言和弹窗焦点，因此采用串行执行，避免一个测试关闭另一个测试的 Tooltip。产品语言设置仍然在重启后生效。
+
+真实资源使用 `D:/App/LomcnClient/Data`，地图使用 `0.map`、`0128.map`、`0129.map`。三图归并为 **735 个内容候选、4,035 处来源**，其中 481 个已有物体候选、254 个新候选。选择 20 个候选进行隔离目录中的保存与重新读取验证，内容指纹全部一致。三张源地图的 SHA-256 保持不变；测试不向游戏资源目录或源项目的物体目录写入内容。
+
+本机的一次三图扫描测量约为 2.51 秒；受控取消在进入模板匹配时发出请求，额外响应约为 0.38 毫秒。这些是本机样本，实际耗时随地图、目录大小、磁盘和资源完整性变化。详细时间以 `real-resources.json` 的最终记录为准，`batchSeconds` 仅包含扫描，`elapsedSeconds` 还包含导出、重新读取和第二次受控取消。
+
+最终发布程序经过中英文分别启动、载入 `0.map`、通过工具菜单打开提取窗口、扫描、切换建筑分类和选择物体的原生验证。每页显示 48 项，独立物体和地图上下文预览均可用；源地图窗口没有未保存标记，文件 SHA-256 保持不变。辅助原生程序的界面计时器在扫描期间持续响应；其单次测量的最大间隔约 162 毫秒，包含快照和界面初始化，不作为其他机器的性能保证。
+
+剩余限制：自动分组与分类建议需要人工确认，不能保证还原任意地图的原始美术物体边界。真实资源样本记录了 34 条告警，因此缺少可用图片的候选不能视为完整美术资源已验证。预览使用第一处来源的有限上下文，其他来源保留坐标供检查。Windows 以外平台和 NativeAOT 本次未验证。现有 nullable 和 AVLN3001 编译提示仍然存在。
+
+本次证据位于仓库根目录 `_codex_artifacts/crystalstudio-object-extraction`：
+
+- `publish-final.log`：最终完整测试与发布记录；`real-resources-final.trx` / `.log`：真实资源与取消计时验证。
+- `real-resources.json`：三图候选、来源、时间、保存数量及源地图哈希。
+- `verify-published.ps1`、`published-native.json`、`published-verification.log`：发布程序菜单、扫描和中英文原生验证。
+- `published-zh-CN.png`、`published-en-US.png` 及各自 `.uia.json`：发布程序的最终窗口。
+- `published-sha256.json`：发布程序、主程序集、运行时配置和分类索引的 SHA-256。
+- `native/Program.cs`、`native-zh-CN.json`：辅助原生窗口与界面计时器测量。
+
+使用方法见 README 的“地图物体提取工具”。
