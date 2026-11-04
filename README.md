@@ -1,0 +1,210 @@
+# Crystal Studio
+
+基于 Avalonia 11 和 .NET 10 的 Crystal 地图编辑器，保留原版紧凑界面、地图编辑、对象分类、面板停靠和生成器。
+
+The Crystal map editor based on Avalonia 11 and .net 10 retains the original compact interface, map editing, object classification, panel docking, and generator.
+
+> 原作者: https://github.com/Lilcooldoode
+> author: https://github.com/Lilcooldoode
+
+## Build from Source
+
+Requires the .NET 10 SDK. Keep the `CrystalStudio`, `catalogue` and
+`Objects` folders together, then run these commands from their parent folder:
+
+```powershell
+dotnet build CrystalStudio/CrystalStudio.csproj -c Release
+dotnet run --project CrystalStudio/CrystalStudio.csproj -c Release
+./Publish-Avalonia.ps1
+```
+
+发布脚本默认先执行自动验证，然后生成包含 .NET 运行时的 Windows x64 版本，目录为 `../Build/CrystalStudioAvalonia/win-x64`。`catalogue` 和 `Objects` 会一并复制。可通过 `-OutputDirectory` 指定其他目录。
+
+界面沿用原版 32×32 工具按钮、16–18 图标、26 高度的图层行以及紧凑页签。地图和交互覆盖层独立保存绘制结果，因此鼠标悬停不会重新提交地图；缩略视图按图集批量绘制，并保留原有层次、透明叠加、动画和灯光逻辑。
+
+`CRYSTALSTUDIO_PROFILE` 可指定独立配置目录；未设置时继续使用原版用户配置目录。当前验证目标为 Windows x64，其他平台和 NativeAOT 尚未验收。游戏资源仍需要原版支持的 Crystal `.lib`，该迁移没有增加 `.lib6` 格式支持。
+
+GUI 对照、14 项测试、真实地图保存校验及完整性能数据见 [VALIDATION.md](VALIDATION.md)。
+
+Game artwork is not included. You will need your game client's **Data** folder
+containing Crystal `.lib` files.
+
+## Getting Started
+
+1. Start the editor using the command above, or run `CrystalStudio.exe` from a published release.
+2. Open **Edit > Settings** and select your game client's **Data** folder.
+3. Open a map with **File > Open Map**, or choose **File > New Map**.
+4. Choose a tool and an asset, then edit the map.
+5. Save with **Ctrl+S**.
+
+For published releases, keep the `catalogue` and `Objects` folders beside the
+executable. They contain the editor's brushes, objects and generator data.
+
+## Basic Controls
+
+- **Mouse wheel:** Zoom.
+- **Middle mouse button** or **Space + drag:** Move around the map.
+- **Ctrl+Z:** Undo.
+- **Ctrl+Shift+Z:** Redo.
+- **F1:** Show all keyboard shortcuts.
+
+Use the **Layers** panel to show or hide map layers and collisions.
+
+The **Tools** menu contains the town, terrain, province and dungeon generators. Check the preview before applying a result. Province and dungeon generation replace the current map and can be undone.
+
+----
+
+# 笔刷原理
+
+当前实现中，**Library 的 Set 是按图片编号规则组织的自动地形笔刷；Categories 的物体是由多个地图单元格组成的 `.X` 模板。** 两者都引用 `.lib` 中的图片，但是组织方式和使用方式不同。
+
+**Library 的 Set 如何提取**
+
+程序先根据资源目录和文件名注册 Library ID，然后读取 `.lib` 的图片偏移表。需要某张图片时，按偏移读取尺寸、坐标和压缩数据，通过 GZip 解压为 BGRA 像素。对应 [Assets.cs](E:/WorkSpaceLegend/HuaXiaServer/CrystalStudio%20Source/CrystalStudio/Assets.cs:13)。
+
+Set 分组依赖固定的编号布局：
+
+| 布局 | 典型资源 | 每组编号跨度 | 用途 |
+| :--- | :--- | ---: | :--- |
+| Mir2 | `Tiles.lib` | 50 | 地表自动过渡 |
+| Mir3 | `Tiles30c.lib` | 30 | 一组包含 A、B 两种地形方向 |
+| Mir3Mini | `Tiles5c.lib` | 5 | 随机中心图块，不处理过渡边缘 |
+| Small | `SmTiles.lib` | 60 | 中间层自动过渡 |
+
+例如 Mir2 的 `Set n`，起始图片编号为：
+
+```text
+start = n × 50
+```
+
+组内部分编号有固定含义：
+
+- `+0～4`：中心区域的随机变体。
+- `+5～8`：四个外角。
+- `+10～13`：四个内凹角。
+- `+15、16`：上边；`+17、18`：下边。
+- `+20、22`：左边；`+21、23`：右边。
+
+因此，资源必须遵循这些布局规则，任意连续 50 张图片不一定能组成有效 Set。规则见 [AutoTileBrush.cs](E:/WorkSpaceLegend/HuaXiaServer/CrystalStudio%20Source/CrystalStudio/AutoTileBrush.cs:17)。
+
+Palette 中的 Set 缩略图也是临时组合出来的。Mir2 使用以下九张图，排列成一个完整地形区域，再缩小到 96×64：
+
+```text
++5     +15     +6
++20    +0      +21
++7     +17     +8
+```
+
+对应 [TilePatternPreview.cs](E:/WorkSpaceLegend/HuaXiaServer/CrystalStudio%20Source/CrystalStudio/TilePatternPreview.cs:6)。
+
+实际检查当前使用的 `Tiles.lib`：共有 **155,305 张图片**，按整数除法显示 **3,106 个 Set**，末尾不足一组的 5 张不会单独列为 Set。列表生成逻辑见 [MainWindow.axaml.cs](E:/WorkSpaceLegend/HuaXiaServer/CrystalStudio%20Source/CrystalStudio/MainWindow.axaml.cs:728)。
+
+**接缝处边缘平滑的原理**
+
+平滑主要由**美术资源预先绘制的过渡轮廓，以及程序对边、角图块的正确选择**实现。
+
+程序将每张地形图块的四个顶点表示为四个位：
+
+```text
+左上 1 ───── 右上 2
+  │             │
+左下 4 ───── 右下 8
+```
+
+每个位表示该顶点是否被当前地形覆盖。例如：
+
+| 覆盖掩码 | 选择的形状 |
+| ---: | :--- |
+| 15：四角都有 | 中心 |
+| 12：下面两角有 | 上边缘 |
+| 3：上面两角有 | 下边缘 |
+| 8：只有右下角有 | 左上外角 |
+| 14：只有左上角没有 | 左上内凹角 |
+
+绘制时，算法执行以下步骤：
+
+1. 从周围已有图块恢复共享顶点的覆盖状态。
+2. 将笔刷内部涉及的顶点标记为覆盖。
+3. 重新计算受影响图块及周围图块的四角掩码。
+4. 根据掩码选择中心、边缘或角图，并在同类变体中随机选取。
+
+因为相邻图块使用同一组共享顶点，所以边缘形状能够保持连续。对于掩码 `6`、`9` 这种仅对角覆盖的情况，现有图集没有对应形状，代码会将其填为完整覆盖，并继续更新邻居。
+
+地表图块通常是 96×64，覆盖 **2×2 个 48×32 地图单元格**，因此绘制坐标还会对齐到偶数格。
+
+另外，我抽查了当前资源 **Set 1 的中心、外角、内角和边缘共五张图，像素 Alpha 全部为 255**。因此，这一组的过渡背景已经绘制在图片中；放到不匹配的底色上，仍可能出现明显边界。普通 Set 笔刷不会自动为任意两种材质生成新的过渡图。
+
+**Categories 中的物体如何取得**
+
+当前加载过程是：
+
+```text
+catalogue/palette.json
+    → 分类、名称、文件路径
+    → Objects/对应对象.X
+    → 相对坐标和各层图片引用
+    → 从当前 .lib 读取图片
+    → 组合显示并作为物体模板放置
+```
+
+分类来自 JSON 中的 `type`、`subtype`、`regions`、`regionGroups`、`environments`、`tags`、`direction` 等字段，并非根据图片内容实时识别。加载与分组见 [StampCategories.cs](E:/WorkSpaceLegend/HuaXiaServer/CrystalStudio%20Source/CrystalStudio/StampCategories.cs:20)。
+
+当前有 **9,159 条分类记录**，对应文件全部存在；`Objects` 目录实际有 **9,170 个 `.X` 文件**，其中 11 个未登记在分类索引中。因此，仅向目录复制 `.X` 文件，不会自动使其出现在 Categories。
+
+当前分类缩略图会读取 `.X`，使用实际 Library 图片按图层和坐标重新绘制。虽然索引包含 `preview` PNG 路径，但这个界面的预览使用实时组合流程，见 [CategoryPalette.cs](E:/WorkSpaceLegend/HuaXiaServer/CrystalStudio%20Source/CrystalStudio/CategoryPalette.cs:153)。
+
+项目提供两种生成物体的方法：
+
+- **Export Selection**：选择地图区域，导出其中非空单元格，将坐标转换为相对选区中心的坐标，保存为 `.X`。它保留单元格各层内容，因此选区中的地面也可能一起导出。
+- **New Stamp**：创建对象编辑页，可以绘制或粘贴复制的地图内容；保存时裁剪空白、调整相对原点，并同步更新分类索引。包含地表图块时，原点按偶数格对齐。见 [MainWindow.StampEditing.cs](E:/WorkSpaceLegend/HuaXiaServer/CrystalStudio%20Source/CrystalStudio/MainWindow.StampEditing.cs:138)。
+
+`Identify Objects` 使用已有 `.X` 模板，通过图片编号和相对位置在地图中匹配对象。当前项目没有找到最初生成这批对象和分类的批处理脚本，因此无法确认最初的 9,159 个对象由人工整理还是外部工具生成。
+
+**物体 `.X` 的保存格式**
+
+`.X` 保存的是**相对坐标、图片引用和单元格属性**。图片像素仍在 `.lib` 中，名称和分类仍在 `palette.json` 中。
+
+当前保存器写入 **v2、小端序二进制格式**，现有 `Objects` 目录中的 9,170 个文件也全部是 v2。读写实现见 [Document.cs](E:/WorkSpaceLegend/HuaXiaServer/CrystalStudio%20Source/CrystalStudio/Document.cs:84)。
+
+文件头共 7 字节：
+
+```text
+43 23          ASCII "C#"
+02             版本号
+CellCount      Int32，单元格数量
+```
+
+随后依次保存每个单元格：
+
+| 字段，按写入顺序 | 类型／字节数 | 含义 |
+| :--- | :--- | :--- |
+| X、Y | Int32 × 2，8 字节 | 相对放置原点的格子坐标，可以为负 |
+| BackLibrary | Int16，2 字节 | 地表资源库 ID |
+| BackImage | Int32，4 字节 | 地表图号及标志 |
+| MiddleLibrary | Int16，2 字节 | 中间层资源库 ID |
+| MiddleImage | UInt16，2 字节 | 中间层图号 |
+| ForegroundCount | Byte，1 字节 | 当前实现允许 0 或 1 |
+| 前景记录，可选 | 6 字节 | Library:Int16、Image:Int16、Frames:Byte、Tick:Byte |
+| Door、DoorOffset | Byte × 2 | 门及偏移 |
+| MiddleFrames、MiddleTick | Byte × 2 | 中间层动画 |
+| TileAnimation、TileOffset | Int16 × 2 | 地表动画参数 |
+| TileFrames、Light | Byte × 2 | 地表动画帧数、灯光值 |
+
+因此，每个单元格占 **29 字节，无前景图**，或 **35 字节，有前景图**。
+
+还有几个格式细节：
+
+- 图号使用 **1 起始编号**，0 表示无图；访问 `.lib` 时减 1。
+- `BackImage` 的低 29 位保存图号；`0x20000000`、`0x40000000` 分别表示低、高阻挡。
+- 前景图号取 `Image & 0x7FFF`，需要保留其他标志位。
+- 文件没有独立的宽高字段，通过单元格坐标范围计算边界。
+- 读取器兼容 v0、v1、v2，重新保存统一写为 v2。
+
+例如实际文件 `mir_00000.X` 是一个摊位模板，包含 **25 个单元格、8 个前景图片引用、18 个带阻挡属性的单元格**，没有地表或中间层图片，文件大小为：
+
+```text
+7 + 25 × 29 + 8 × 6 = 780 字节
+```
+
+这也说明，一个看起来完整的物体可以由多张图片和额外的阻挡单元格共同组成。
+

@@ -1,0 +1,36 @@
+<local:EditorWindow xmlns="https://github.com/avaloniaui" xmlns:local="clr-namespace:CrystalStudio" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" x:Class="CrystalStudio.TownStampWindow" Title="Generate Town" Width="1060" Height="760" MinWidth="850" MinHeight="610" WindowStartupLocation="CenterOwner" ShowInTaskbar="False" Background="{DynamicResource Theme14171D}" Foreground="{DynamicResource ThemeE5E9F0}">
+    <Grid Margin="20">
+        <Grid.ColumnDefinitions><ColumnDefinition Width="260" /><ColumnDefinition Width="20" /><ColumnDefinition /></Grid.ColumnDefinitions>
+        <Grid.RowDefinitions><RowDefinition /><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+        <Grid><Grid.RowDefinitions><RowDefinition /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+            <ScrollViewer VerticalScrollBarVisibility="Auto"><StackPanel>
+                <TextBlock Text="Town Type" FontWeight="SemiBold" /><ComboBox x:Name="TypeList" Margin="0,6,0,14" SelectionChanged="SettingsChanged" AutomationProperties.Name="Town Type" />
+                <TextBlock Text="Street Layout" FontWeight="SemiBold" /><ComboBox x:Name="LayoutList" Margin="0,6,0,14" SelectionChanged="SettingsChanged" AutomationProperties.Name="Street Layout" SelectedValueBinding="{Binding Tag}"><ComboBoxItem Content="High Street Village" Tag="{x:Static local:TownLayout.HighStreet}" /><ComboBoxItem Content="Planned Crossroads" Tag="{x:Static local:TownLayout.Crossroads}" /><ComboBoxItem Content="Market Square" Tag="{x:Static local:TownLayout.MarketSquare}" /><ComboBoxItem Content="Village Green" Tag="{x:Static local:TownLayout.VillageGreen}" /><ComboBoxItem Content="Town Blocks" Tag="{x:Static local:TownLayout.Grid}" /><ComboBoxItem Content="Winding High Street" Tag="{x:Static local:TownLayout.WindingStreet}" /><ComboBoxItem Content="Forked Village Lanes" Tag="{x:Static local:TownLayout.ForkedLanes}" /><ComboBoxItem Content="Linked Hamlets" Tag="{x:Static local:TownLayout.LinkedHamlets}" /></ComboBox>
+                <TextBlock Text="Town Size (Map Cells)" FontWeight="SemiBold" /><ComboBox x:Name="SizeList" Margin="0,6,0,14" SelectionChanged="SettingsChanged" AutomationProperties.Name="Town Size"><ComboBoxItem Content="Small · 64 × 64" Tag="64" /><ComboBoxItem Content="Medium · 96 × 96" Tag="96" /><ComboBoxItem Content="Large · 144 × 144" Tag="144" /><ComboBoxItem Content="Very Large · 192 × 192" Tag="192" /></ComboBox>
+                <TextBlock><Run Text="Building Amount · " /><Run Text="{Binding ElementName=DensitySlider, Path=Value, StringFormat=F0}" /><Run Text="%" /></TextBlock>
+                <Slider x:Name="DensitySlider" Minimum="25" Maximum="90" Value="65" TickFrequency="5" IsSnapToTickEnabled="True" Margin="0,6,0,14" ValueChanged="SettingsChanged" AutomationProperties.Name="Building Amount" />
+                <TextBlock><Run Text="Minimum Gap · " /><Run Text="{Binding ElementName=GapSlider, Path=Value, StringFormat=F0}" /><Run Text=" Cells" /></TextBlock>
+                <Slider x:Name="GapSlider" Minimum="2" Maximum="8" Value="3" TickFrequency="1" IsSnapToTickEnabled="True" Margin="0,6,0,14" ValueChanged="SettingsChanged" AutomationProperties.Name="Building Gap" />
+                <TextBlock><Run Text="Wall / Fence Chance · " /><Run Text="{Binding ElementName=WallChanceSlider, Path=Value, StringFormat=F0}" /><Run Text="%" /></TextBlock>
+                <Slider x:Name="WallChanceSlider" Minimum="0" Maximum="100" Value="40" TickFrequency="5" IsSnapToTickEnabled="True" Margin="0,6,0,14" ValueChanged="SettingsChanged" AutomationProperties.Name="Wall and Fence Chance" ToolTip.Tip="Chance to Enclose a Garden, Neighbourhood or Whole Settlement with Matching Gateways. Zero Disables Enclosures." />
+                <CheckBox x:Name="GroundToggle" Content="Include Town Ground and Streets" IsChecked="True" Margin="0,0,0,12" IsCheckedChanged="SettingsChanged" />
+                <TextBlock Text="Ground and Paths" FontWeight="SemiBold" /><ComboBox x:Name="PathList" Margin="0,6,0,14" SelectionChanged="SettingsChanged" IsEnabled="{Binding ElementName=GroundToggle, Path=IsChecked}" SelectedValueBinding="{Binding Style}" AutomationProperties.Name="Ground and Paths" ToolTip.Tip="Compatible Ground and Path Tiles with Matching Blended Edges" />
+                <TextBlock Text="Decorations" FontWeight="SemiBold" /><ComboBox x:Name="DecorationList" Margin="0,6,0,14" SelectionChanged="SettingsChanged" AutomationProperties.Name="Decoration Amount"><ComboBoxItem Content="None" /><ComboBoxItem Content="Sparse" /><ComboBoxItem Content="Moderate" /></ComboBox>
+                <CheckBox x:Name="GreeneryToggle" Content="Include Trees and Gardens" IsChecked="True" Margin="0,0,0,16" IsCheckedChanged="SettingsChanged" />
+            </StackPanel></ScrollViewer>
+            <StackPanel Grid.Row="1" Margin="0,16,0,0"><TextBlock Text="Seed" /><DockPanel Margin="0,6,0,0"><Button DockPanel.Dock="Right" Content="Shuffle" Click="ShuffleClick" ToolTip.Tip="Randomize Only the Seed" Padding="10,4" Margin="8,0,0,0" /><TextBox x:Name="SeedBox" Text="1" TextChanged="SettingsChanged" AutomationProperties.Name="Town Seed" /></DockPanel></StackPanel>
+        </Grid>
+        <Border Grid.Column="2" Background="{DynamicResource Theme252C38}" BorderBrush="{DynamicResource Line}" BorderThickness="1" CornerRadius="6" Padding="12">
+            <Grid><Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition /></Grid.RowDefinitions>
+                <DockPanel><CheckBox x:Name="DetailToggle" DockPanel.Dock="Right" Content="Centre Detail" IsCheckedChanged="DetailChanged" /><TextBlock Text="Town Preview" FontWeight="SemiBold" /></DockPanel>
+                <Image x:Name="PreviewImage" Grid.Row="1" Stretch="Uniform" Margin="0,12,0,0" RenderOptions.BitmapInterpolationMode="None" AutomationProperties.Name="Generated Town Preview" />
+                <TextBlock x:Name="PreviewHint" Grid.Row="1" Text="Preparing Town Artwork…" TextWrapping="Wrap" TextAlignment="Center" VerticalAlignment="Center" HorizontalAlignment="Center" Margin="24" Foreground="{DynamicResource Muted}" />
+            </Grid>
+        </Border>
+        <TextBlock x:Name="FeedbackText" Grid.Row="1" Grid.ColumnSpan="3" TextWrapping="Wrap" Foreground="{DynamicResource Muted}" Margin="0,14,0,0" />
+        <DockPanel Grid.Row="2" Grid.ColumnSpan="3" Margin="0,16,0,0">
+            <Button x:Name="RandomizeButton" DockPanel.Dock="Left" Content="Randomize" IsEnabled="False" Click="RandomizeClick" Padding="18,7" ToolTip.Tip="Randomize All Town Settings and the Seed" />
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right"><Button Content="Cancel" IsCancel="True" Padding="18,7" Margin="0,0,8,0" /><Button x:Name="UseButton" Content="Use Town" IsEnabled="False" Click="UseClick" Padding="18,7" /></StackPanel>
+        </DockPanel>
+    </Grid>
+</local:EditorWindow>
