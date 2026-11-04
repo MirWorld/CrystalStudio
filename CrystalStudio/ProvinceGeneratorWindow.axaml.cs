@@ -43,7 +43,7 @@ public partial class ProvinceGeneratorWindow : EditorWindow
             ready = true; RandomizeButton.IsEnabled = true; UpdateDoorOptions(); Schedule();
         }
         catch (OperationCanceledException) { }
-        catch (Exception ex) { if (!closed) { PreviewHint.Text = "Province artwork unavailable"; FeedbackText.Text = ex.Message; } }
+        catch (Exception ex) { if (!closed) { PreviewHint.Text = LocalText.T("Province artwork unavailable"); FeedbackText.Text = (ex.Message); } }
     }
     private void SettingsChanged(object sender, RoutedEventArgs e) { UpdateDoorOptions(); Schedule(); }
     private void UpdateDoorOptions()
@@ -51,15 +51,13 @@ public partial class ProvinceGeneratorWindow : EditorWindow
         if (DoorCountSlider==null || StyleList.SelectedItem is not ProvinceStyle style) return;
         var family=(walls ?? suppliedWalls)?.Families.Single(f=>f.Id==style.WallId);
         DoorCountSlider.IsEnabled=family?.SupportsDoors==true && CliffSlider.Value>0;
-        DoorHint.Text=family?.SupportsDoors!=true ? "This style has no matching cliff entrance objects."
-            : CliffSlider.Value==0 ? "Enable cliffs to place entrances."
-            : "Total across generated cliffs. Random entrances stay apart. Maps without suitable cliffs may fit fewer.";
+        DoorHint.Text = (family?.SupportsDoors!=true ? LocalText.T("This style has no matching cliff entrance objects.") : (CliffSlider.Value==0 ? LocalText.T("Enable cliffs to place entrances.") : LocalText.T("Total across generated cliffs. Random entrances stay apart. Maps without suitable cliffs may fit fewer.")));
     }
     private void Schedule()
     {
         if (!ready || closed || changingSettings) return;
         revision++; timer.Stop(); pending?.Cancel(); Plan = null; ApplyButton.IsEnabled = false;
-        PreviewImage.Opacity = .4; PreviewHint.IsVisible = true; PreviewHint.Text = "Updating province…"; timer.Start();
+        PreviewImage.Opacity = .4; PreviewHint.IsVisible = true; PreviewHint.Text = LocalText.T("Updating province…"); timer.Start();
     }
     private void ShuffleClick(object sender, RoutedEventArgs e) => SeedBox.Text = Random.Shared.Next(int.MaxValue).ToString();
     private void RandomizeClick(object sender, RoutedEventArgs e)
@@ -81,7 +79,7 @@ public partial class ProvinceGeneratorWindow : EditorWindow
     {
         timer.Stop();
         if (!ready || closed) return;
-        if (!int.TryParse(SeedBox.Text, out int seed)) { PreviewHint.Text = FeedbackText.Text = "Enter a whole-number seed."; return; }
+        if (!int.TryParse(SeedBox.Text, out int seed)) { PreviewHint.Text = ((FeedbackText.Text = LocalText.T("Enter a whole-number seed."))); return; }
         var options = new ProvinceOptions(seed, StyleList.SelectedItem as ProvinceStyle, (int)ForestSlider.Value,
             (int)CliffSlider.Value, (int)BeachSlider.Value, (int)RiverSlider.Value, (int)VegetationSlider.Value, (int)TownCountSlider.Value,
             DoorCountSlider.IsEnabled ? (int)DoorCountSlider.Value : 0);
@@ -113,13 +111,12 @@ public partial class ProvinceGeneratorWindow : EditorWindow
             if (closed || request != revision) return;
             Plan = plan; PreviewImage.Source = bitmap; PreviewImage.Opacity = 1;
             PreviewHint.IsVisible = false; ApplyButton.IsEnabled = true;
-            FeedbackText.Text = $"{plan.Style.Name} · {document.Width}×{document.Height} · Seed {seed}\n" + string.Join(" · ", plan.Features) +
-                (plan.Notes.Count == 0 ? "" : "\n" + string.Join(" ", plan.Notes));
+            FeedbackText.Text = string.Concat(string.Concat(LocalText.Format("{0} · {1}×{2} · Seed {3}\n",plan.Style.Name,document.Width,document.Height,seed), (string.Join(" · ", plan.Features))), ((plan.Notes.Count == 0 ? ("") : string.Concat(("\n"), (string.Join(" ", plan.Notes))))));
         }
         catch (OperationCanceledException) { }
         catch (Exception ex)
         {
-            if (!closed && request == revision) { Plan = null; ApplyButton.IsEnabled = false; PreviewImage.Source = null; PreviewHint.Text = "Preview unavailable"; FeedbackText.Text = ex.Message; }
+            if (!closed && request == revision) { Plan = null; ApplyButton.IsEnabled = false; PreviewImage.Source = null; PreviewHint.Text = LocalText.T("Preview unavailable"); FeedbackText.Text = (ex.Message); }
         }
         finally { if (ReferenceEquals(pending, job)) pending = null; job.Dispose(); }
     }

@@ -43,9 +43,9 @@ public sealed partial class MapViewport : SceneControl
     public void CancelPickup(){PickedStampId=null;InvalidateVisual();}
     public bool PickupAt(int x,int y)
     {
-        var stamp=Document.StampAt(x,y);if(stamp==null){Message?.Invoke("No remembered stamp here \u00b7 Imported map objects need to be placed as stamps first");return false;}
-        if(stamp.Wall!=null){Message?.Invoke("Connected wall \u00b7 Use Wall (W) to extend it or Shift to remove sections");return false;}
-        PickedStampId=stamp.Id;pickupOffset=(x-stamp.X,y-stamp.Y);InvalidateVisual();Changed?.Invoke();Message?.Invoke(Tool==EditorTool.Clone?$"{stamp.Name} \u00b7 Click to clone \u00b7 Escape to cancel":$"{stamp.Name} \u00b7 Click to move \u00b7 Delete to remove \u00b7 Escape to cancel");return true;
+        var stamp=Document.StampAt(x,y);if(stamp==null){Message?.Invoke(LocalText.T("No remembered stamp here \u00b7 Imported map objects need to be placed as stamps first"));return false;}
+        if(stamp.Wall!=null){Message?.Invoke(LocalText.T("Connected wall \u00b7 Use Wall (W) to extend it or Shift to remove sections"));return false;}
+        PickedStampId=stamp.Id;pickupOffset=(x-stamp.X,y-stamp.Y);InvalidateVisual();Changed?.Invoke();Message?.Invoke(((Tool==EditorTool.Clone ? (LocalText.Format("{0} · Click to clone · Escape to cancel", stamp.Name)) : (LocalText.Format("{0} · Click to move · Delete to remove · Escape to cancel", stamp.Name)))));return true;
     }
     public bool MovePickedTo(int x,int y)
     {
@@ -53,24 +53,24 @@ public sealed partial class MapViewport : SceneControl
         if(PickedStamp is not PlacedStamp picked)return false;
         var target=PickedTarget(x,y);
         var placement=GetStampPreviewPlacement(picked.Cells,target.X,target.Y,id);
-        if(!placement.Allowed){Message?.Invoke(placement.Feedback);InvalidateVisual();return false;}
-        if(!Document.MoveStamp(id,target.X,target.Y,History,InvalidateCell)){Message?.Invoke("Placement blocked \u00b7 Stamp data cannot be placed");return false;}
-        History.Commit();CancelPickup();Changed?.Invoke();Message?.Invoke("Stamp moved");return true;
+        if(!placement.Allowed){Message?.Invoke(LocalText.Placement(placement));InvalidateVisual();return false;}
+        if(!Document.MoveStamp(id,target.X,target.Y,History,InvalidateCell)){Message?.Invoke(LocalText.T("Placement blocked \u00b7 Stamp data cannot be placed"));return false;}
+        History.Commit();CancelPickup();Changed?.Invoke();Message?.Invoke(LocalText.T("Stamp moved"));return true;
     }
     public bool DeletePicked()
     {
         if(Tool==EditorTool.Clone)return false;
         if(PickedStampId is not Guid id)return false;
-        bool deleted=Document.DeleteStamp(id,History,InvalidateCell);History.Commit();CancelPickup();Changed?.Invoke();Message?.Invoke("Stamp deleted");return deleted;
+        bool deleted=Document.DeleteStamp(id,History,InvalidateCell);History.Commit();CancelPickup();Changed?.Invoke();Message?.Invoke(LocalText.T("Stamp deleted"));return deleted;
     }
     public bool ClonePickedTo(int x,int y)
     {
         if(PickedStamp is not PlacedStamp picked)return false;
         var target=PickedTarget(x,y);int targetX=target.X,targetY=target.Y;
         var placement=GetStampPreviewPlacement(picked.Cells,targetX,targetY);
-        if(!placement.Allowed){Message?.Invoke(placement.Feedback);InvalidateVisual();return false;}
-        if(Document.PlaceStamp(picked.Cells,targetX,targetY,picked.Name,History,InvalidateCell)==null){Message?.Invoke("Placement blocked \u00b7 Stamp data cannot be placed");return false;}
-        History.Commit();CancelPickup();Changed?.Invoke();Message?.Invoke("Stamp cloned");return true;
+        if(!placement.Allowed){Message?.Invoke(LocalText.Placement(placement));InvalidateVisual();return false;}
+        if(Document.PlaceStamp(picked.Cells,targetX,targetY,picked.Name,History,InvalidateCell)==null){Message?.Invoke(LocalText.T("Placement blocked \u00b7 Stamp data cannot be placed"));return false;}
+        History.Commit();CancelPickup();Changed?.Invoke();Message?.Invoke(LocalText.T("Stamp cloned"));return true;
     }
     public bool GridVisible { get; set; } = true;
     public bool LowCollisionVisible { get; set; }
@@ -453,10 +453,10 @@ public sealed partial class MapViewport : SceneControl
         {
             lastPaint=(x,y);
             var placement=GetStampPreviewPlacement(Stamp,x,y);
-            if(!placement.Allowed){Message?.Invoke(placement.Feedback);InvalidateVisual();return;}
+            if(!placement.Allowed){Message?.Invoke(LocalText.Placement(placement));InvalidateVisual();return;}
             var placed=Document.PlaceStamp(Stamp,x,y,StampName,History,InvalidateCell);
             if (placed != null) AssetUsed?.Invoke();
-            Message?.Invoke(placed==null?"Placement blocked \u00b7 Stamp data or instance limit prevents placement":$"{StampName} placed");
+            Message?.Invoke(((placed==null ? (LocalText.T("Placement blocked \u00b7 Stamp data or instance limit prevents placement")) : (LocalText.Format("{0} placed", StampName)))));
             return;
         }
         if (!Document.Contains(x, y)) return; lastPaint = (x, y);
@@ -487,7 +487,7 @@ public sealed partial class MapViewport : SceneControl
         bool collision = IsCollisionLayer;
         if (!collision && Layer is not (MapLayer.Ground or MapLayer.Middle))
         {
-            Message?.Invoke("Fill works on ground tiles, middle tiles (smtiles), and low/high collisions");
+            Message?.Invoke(LocalText.T("Fill works on ground tiles, middle tiles (smtiles), and low/high collisions"));
             return 0;
         }
         if (!Document.Contains(x, y) || !collision && SpriteIndex < 0) return 0;
@@ -534,7 +534,7 @@ public sealed partial class MapViewport : SceneControl
         History.Commit();
         if (!collision) AssetUsed?.Invoke();
         Changed?.Invoke();
-        Message?.Invoke(collision ? $"Applied {(Layer == MapLayer.LowCollision ? "low" : "high")} collision to {count:N0} cells" : $"Filled {count:N0} tiles");
+        Message?.Invoke(((collision ? (LocalText.Format("Applied {0} collision to {1:N0} cells", LocalText.T(Layer == MapLayer.LowCollision ? "low" : "high"), count)) : (LocalText.Format("Filled {0:N0} tiles", count)))));
         return count;
     }
     public void FillSelection() { if (Selection is not Rect r || SpriteIndex < 0 && !IsCollisionLayer) return; History.Begin(); var previous = Tool; Tool = EditorTool.Pencil; lastPaint = (-999, -999); for (int y = (int)r.Y; y < r.Bottom; y++) for (int x = (int)r.X; x < r.Right; x++) Apply(x, y); Tool = previous; History.Commit(); Changed?.Invoke(); }

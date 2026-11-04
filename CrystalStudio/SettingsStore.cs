@@ -2,7 +2,7 @@ using System.IO;
 using System.Text.Json;
 namespace CrystalStudio;
 
-public sealed record LibrarySettings(string? LibraryFolder = null);
+public sealed record LibrarySettings(string? LibraryFolder = null, string? Language = null);
 
 public sealed class SettingsStore
 {

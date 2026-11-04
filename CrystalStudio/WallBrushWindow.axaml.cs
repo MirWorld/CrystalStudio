@@ -39,14 +39,14 @@ public partial class WallBrushWindow : EditorWindow
         SectionPreview.Source = null;
         draft = null;
         if (WallTypeList.SelectedItem is not WallFamily family)
-        { PreviewHint.Text = catalogueError ?? "No wall types are available."; UseBrushButton.IsEnabled = false; return; }
+        { PreviewHint.Text = (catalogueError ?? LocalText.T("No wall types are available.")); UseBrushButton.IsEnabled = false; return; }
         FacingModes.IsVisible = family.HasFacingModes ? true : false;
         draft = modes[(family.Id, family.HasFacingModes && InnerMode.IsChecked == true)];
         UseBrushButton.IsEnabled = true;
         string? unavailable = draft.Availability(assets);
-        AvailabilityHint.Text = unavailable ?? "";
+        AvailabilityHint.Text = (unavailable ?? "");
         AvailabilityHint.IsVisible = unavailable == null ? false : true;
-        PreviewHint.Text = unavailable ?? "Loading section preview…";
+        PreviewHint.Text = (unavailable ?? LocalText.T("Loading section preview…"));
         if (unavailable == null) { RefreshPreview(); if (SectionPreview.Source == null) previewTimer.Start(); }
     }
 
@@ -56,7 +56,7 @@ public partial class WallBrushWindow : EditorWindow
         var bitmap = StampPreview.Create(draft.BrushPreview(), assets, 620, 370);
         if (bitmap == null) return;
         SectionPreview.Source = bitmap;
-        PreviewHint.Text = "";
+        PreviewHint.Text = ("");
         previewTimer.Stop();
     }
 

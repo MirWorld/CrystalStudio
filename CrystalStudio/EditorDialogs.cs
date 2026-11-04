@@ -16,7 +16,7 @@ internal abstract class EditorFileDialog
     {
         var parts = Filter.Split('|'); var types = new List<FilePickerFileType>();
         for (int i = 0; i + 1 < parts.Length; i += 2)
-            types.Add(new FilePickerFileType(parts[i]) { Patterns = parts[i + 1].Split(';') });
+            types.Add(new FilePickerFileType(LocalText.T(parts[i])) { Patterns = parts[i + 1].Split(';') });
         return types;
     }
     protected async Task<IStorageFolder?> Folder(EditorWindow owner) => string.IsNullOrWhiteSpace(InitialDirectory)
@@ -31,7 +31,7 @@ internal sealed class OpenFileDialog : EditorFileDialog
     protected override async Task<bool> Select(EditorWindow owner)
     {
         var items = await owner.StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
-        { Title = Title, AllowMultiple = Multiselect, FileTypeFilter = Types(), SuggestedStartLocation = await Folder(owner) });
+        { Title = LocalText.T(Title), AllowMultiple = Multiselect, FileTypeFilter = Types(), SuggestedStartLocation = await Folder(owner) });
         FileNames = items.Select(f => f.TryGetLocalPath()).OfType<string>().ToArray();
         FileName = FileNames.FirstOrDefault() ?? "";
         return FileNames.Length > 0;
@@ -43,7 +43,7 @@ internal sealed class SaveFileDialog : EditorFileDialog
     protected override async Task<bool> Select(EditorWindow owner)
     {
         var file = await owner.StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
-        { Title = Title, FileTypeChoices = Types(), SuggestedStartLocation = await Folder(owner), SuggestedFileName = FileName,
+        { Title = LocalText.T(Title), FileTypeChoices = Types(), SuggestedStartLocation = await Folder(owner), SuggestedFileName = FileName,
             DefaultExtension = DefaultExt.TrimStart('.'), ShowOverwritePrompt = OverwritePrompt });
         FileName = file?.TryGetLocalPath() ?? "";
         return FileName.Length > 0;
@@ -60,7 +60,7 @@ internal sealed class OpenFolderDialog
     {
         var location = string.IsNullOrWhiteSpace(InitialDirectory) ? null : await owner.StorageProvider.TryGetFolderFromPathAsync(InitialDirectory);
         var folders = await owner.StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions
-        { Title = Title, SuggestedStartLocation = location, AllowMultiple = false });
+        { Title = LocalText.T(Title), SuggestedStartLocation = location, AllowMultiple = false });
         FolderName = folders.FirstOrDefault()?.TryGetLocalPath() ?? "";
         return FolderName.Length > 0;
     }
@@ -76,10 +76,10 @@ internal static class MessageBox
     public static MessageBoxResult Show(EditorWindow? owner, string message, string title = "Crystal Studio",
         MessageBoxButton buttons = MessageBoxButton.OK, MessageBoxImage image = MessageBoxImage.None)
     {
-        var dialog = new EditorWindow { Title = title, Width = 520, SizeToContent = SizeToContent.Height,
+        var dialog = new EditorWindow { Title = LocalText.T(title), Width = 520, SizeToContent = SizeToContent.Height,
             CanResize = false, WindowStartupLocation = WindowStartupLocation.CenterOwner, Owner = owner, ShowInTaskbar = false };
         var content = new StackPanel { Margin = new Thickness(22), Spacing = 18 };
-        content.Children.Add(new TextBlock { Text = message, TextWrapping = TextWrapping.Wrap, MaxHeight = 440 });
+        content.Children.Add(new TextBlock { Text = LocalText.T(message), TextWrapping = TextWrapping.Wrap, MaxHeight = 440 });
         var row = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Spacing = 8 };
         var result = MessageBoxResult.Cancel;
         var options = buttons switch
@@ -91,7 +91,7 @@ internal static class MessageBox
         };
         foreach (var option in options)
         {
-            var button = new Button { Content = option.ToString(), MinWidth = 76, IsDefault = option == options[0], IsCancel = option == MessageBoxResult.Cancel };
+            var button = new Button { Content = LocalText.T(option.ToString()), MinWidth = 76, IsDefault = option == options[0], IsCancel = option == MessageBoxResult.Cancel };
             button.Click += (_, _) => { result = option; dialog.Close(); }; row.Children.Add(button);
         }
         content.Children.Add(row); dialog.Content = content; dialog.ShowDialog(); return result;

@@ -22,7 +22,7 @@ public partial class MainWindow
         RegisterEditorName("PaletteTabs", paletteTabs);
         InitializeCategoryPalette();
         foreach (string title in new[] { "Library", "Favourites", "Recently Used", "Categories" })
-            paletteTabs.Items.Add(new TabItem { Header = title, Theme = (Style)this.FindResource("PaletteTabItem") });
+            paletteTabs.Items.Add(new TabItem { Header = LocalText.T(title), Theme = (Style)this.FindResource("PaletteTabItem") });
         ((TabItem)paletteTabs.Items[0]).Content = palette;
         paletteTabs.SelectedIndex = 0;
         paletteTabs.SelectionChanged += (_, e) =>
@@ -48,7 +48,7 @@ public partial class MainWindow
     private void SaveAssetHistory()
     {
         try { assetHistory.Save(); }
-        catch (Exception ex) { Status.Text = $"Could not save favourites and recent assets: {ex.Message}"; }
+        catch (Exception ex) { Status.Text = LocalText.Format("Could not save favourites and recent assets: {0}",ex.Message); }
     }
 
     private void RememberActiveAsset()
@@ -61,7 +61,7 @@ public partial class MainWindow
         if (sender is not Button { DataContext: AssetChoice { Asset: AssetReference asset } choice }) return;
         bool pinned = assetHistory.ToggleFavourite(asset);
         choice.IsFavourite = pinned;
-        Status.Text = pinned ? $"{choice.Label} pinned to Favourites" : $"{choice.Label} unpinned";
+        Status.Text = (pinned ? LocalText.Format("{0} pinned to Favourites",choice.Label) : LocalText.Format("{0} unpinned",choice.Label));
         SaveAssetHistory();
         if (FavouritesPalette) BuildPage(); else UpdateWorkspace();
         e.Handled = true;
@@ -72,7 +72,7 @@ public partial class MainWindow
         if (ActiveAssetReference() is not AssetReference asset) return;
         bool pinned = assetHistory.ToggleFavourite(asset);
         foreach (var choice in choices.Where(c => c.Asset?.SameAsset(asset) == true)) choice.IsFavourite = pinned;
-        Status.Text = pinned ? "Active asset pinned to Favourites" : "Active asset unpinned";
+        Status.Text = (pinned ? LocalText.T("Active asset pinned to Favourites") : LocalText.T("Active asset unpinned"));
         SaveAssetHistory();
         if (FavouritesPalette) BuildPage(); else UpdateWorkspace();
     }
@@ -126,14 +126,14 @@ public partial class MainWindow
             choices.Add(choice);
             if (choice.StampCells == null) _ = ReadStampChoiceAsync(choice, version);
         }
-        PageLabel.Text = filteredCount == 0 ? "No Saved Assets" : $"Page {page + 1} of {(filteredCount + PageSize - 1) / PageSize}";
+        PageLabel.Text = (filteredCount == 0 ? LocalText.T("No Saved Assets") : LocalText.Format("Page {0} of {1}",page + 1,(filteredCount + PageSize - 1) / PageSize));
         UpdateWorkspace();
     }
 
     private void RestoreTile(AssetChoice choice)
     {
         if (choice.Asset is not AssetReference asset || !TileAvailable(asset))
-        { Status.Text = "Asset unavailable \u00b7 Load its original library folder in Settings"; return; }
+        { Status.Text = LocalText.T("Asset unavailable \u00b7 Load its original library folder in Settings"); return; }
         restoringAsset = true;
         try
         {

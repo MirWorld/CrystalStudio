@@ -17,6 +17,7 @@
   <ItemGroup>
     <InternalsVisibleTo Include="CrystalStudio.Tests" />
     <EmbeddedResource Include="DefaultWorkspace.json" />
+    <EmbeddedResource Include="Localization/Strings.json" />
     <EmbeddedResource Include="PreviewLights/*.png" />
     <Content Include="../Objects/**/*.X" Link="Objects/%(RecursiveDir)%(Filename)%(Extension)" CopyToPublishDirectory="PreserveNewest" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="../catalogue/previews/**/*.png" Link="catalogue/previews/%(RecursiveDir)%(Filename)%(Extension)" CopyToPublishDirectory="PreserveNewest" CopyToOutputDirectory="PreserveNewest" />

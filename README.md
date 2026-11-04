@@ -24,7 +24,15 @@ dotnet run --project CrystalStudio/CrystalStudio.csproj -c Release
 
 `CRYSTALSTUDIO_PROFILE` 可指定独立配置目录；未设置时继续使用原版用户配置目录。当前验证目标为 Windows x64，其他平台和 NativeAOT 尚未验收。游戏资源仍需要原版支持的 Crystal `.lib`，该迁移没有增加 `.lib6` 格式支持。
 
-GUI 对照、14 项测试、真实地图保存校验及完整性能数据见 [VALIDATION.md](VALIDATION.md)。
+Palette 的 Categories 使用左侧纵向分类 Tab，右侧按面板宽度排列预览网格。卡片底部仅显示精简名称，鼠标悬停后显示完整标题、副标题及对象路径。保留 Type、Region、Environment、Facing 分组及搜索；每页 24 项，切换分类时记住页码、滚动位置和选中对象，方向键可按网格选择。
+
+分类预览仅为可见卡片加载，切换分类或页码时取消旧请求；后台预览并发上限为 2，最近使用的缩略图最多缓存 128 张，因此无需一次生成整个分类的预览。
+
+GUI 支持简体中文和 English。通过 **View → Language (restart required)**（**视图 → 语言（重启后生效）**）或 **Edit → Settings**（**编辑 → 设置**）选择语言。选择后自动保存，下次启动生效，当前窗口继续使用原语言。首次启动时默认使用系统界面语言；非中文系统默认使用英文。
+
+语言设置独立于资源目录保存，首次配置资源目录前也可选择语言。界面文字、内置分类及选项提供中英文显示；物体名称、资源文件名、文件路径和分类保存标识保留原文，因此地图与物体格式保持兼容。外部异常详情及未登记的目录名称可能仍显示原文。
+
+当前 Windows 版本位于 `../Build/CrystalStudioAvalonia/i18n-restart/win-x64/CrystalStudio.exe`。GUI 对照、22 项测试、语言重启验证、真实地图保存校验及性能数据见 [VALIDATION.md](VALIDATION.md)。
 
 Game artwork is not included. You will need your game client's **Data** folder
 containing Crystal `.lib` files.
@@ -60,7 +68,7 @@ The **Tools** menu contains the town, terrain, province and dungeon generators. 
 
 **Library 的 Set 如何提取**
 
-程序先根据资源目录和文件名注册 Library ID，然后读取 `.lib` 的图片偏移表。需要某张图片时，按偏移读取尺寸、坐标和压缩数据，通过 GZip 解压为 BGRA 像素。对应 [Assets.cs](E:/WorkSpaceLegend/HuaXiaServer/CrystalStudio%20Source/CrystalStudio/Assets.cs:13)。
+程序先根据资源目录和文件名注册 Library ID，然后读取 `.lib` 的图片偏移表。需要某张图片时，按偏移读取尺寸、坐标和压缩数据，通过 GZip 解压为 BGRA 像素。对应 [Assets.cs](CrystalStudio/Assets.cs)。
 
 Set 分组依赖固定的编号布局：
 
@@ -85,7 +93,7 @@ start = n × 50
 - `+15、16`：上边；`+17、18`：下边。
 - `+20、22`：左边；`+21、23`：右边。
 
-因此，资源必须遵循这些布局规则，任意连续 50 张图片不一定能组成有效 Set。规则见 [AutoTileBrush.cs](E:/WorkSpaceLegend/HuaXiaServer/CrystalStudio%20Source/CrystalStudio/AutoTileBrush.cs:17)。
+因此，资源必须遵循这些布局规则，任意连续 50 张图片不一定能组成有效 Set。规则见 [AutoTileBrush.cs](CrystalStudio/AutoTileBrush.cs)。
 
 Palette 中的 Set 缩略图也是临时组合出来的。Mir2 使用以下九张图，排列成一个完整地形区域，再缩小到 96×64：
 
@@ -95,9 +103,9 @@ Palette 中的 Set 缩略图也是临时组合出来的。Mir2 使用以下九�
 +7     +17     +8
 ```
 
-对应 [TilePatternPreview.cs](E:/WorkSpaceLegend/HuaXiaServer/CrystalStudio%20Source/CrystalStudio/TilePatternPreview.cs:6)。
+对应 [TilePatternPreview.cs](CrystalStudio/TilePatternPreview.cs)。
 
-实际检查当前使用的 `Tiles.lib`：共有 **155,305 张图片**，按整数除法显示 **3,106 个 Set**，末尾不足一组的 5 张不会单独列为 Set。列表生成逻辑见 [MainWindow.axaml.cs](E:/WorkSpaceLegend/HuaXiaServer/CrystalStudio%20Source/CrystalStudio/MainWindow.axaml.cs:728)。
+实际检查当前使用的 `Tiles.lib`：共有 **155,305 张图片**，按整数除法显示 **3,106 个 Set**，末尾不足一组的 5 张不会单独列为 Set。列表生成逻辑见 [MainWindow.axaml.cs](CrystalStudio/MainWindow.axaml.cs)。
 
 **接缝处边缘平滑的原理**
 
@@ -147,16 +155,16 @@ catalogue/palette.json
     → 组合显示并作为物体模板放置
 ```
 
-分类来自 JSON 中的 `type`、`subtype`、`regions`、`regionGroups`、`environments`、`tags`、`direction` 等字段，并非根据图片内容实时识别。加载与分组见 [StampCategories.cs](E:/WorkSpaceLegend/HuaXiaServer/CrystalStudio%20Source/CrystalStudio/StampCategories.cs:20)。
+分类来自 JSON 中的 `type`、`subtype`、`regions`、`regionGroups`、`environments`、`tags`、`direction` 等字段，并非根据图片内容实时识别。加载与分组见 [StampCategories.cs](CrystalStudio/StampCategories.cs)。
 
 当前有 **9,159 条分类记录**，对应文件全部存在；`Objects` 目录实际有 **9,170 个 `.X` 文件**，其中 11 个未登记在分类索引中。因此，仅向目录复制 `.X` 文件，不会自动使其出现在 Categories。
 
-当前分类缩略图会读取 `.X`，使用实际 Library 图片按图层和坐标重新绘制。虽然索引包含 `preview` PNG 路径，但这个界面的预览使用实时组合流程，见 [CategoryPalette.cs](E:/WorkSpaceLegend/HuaXiaServer/CrystalStudio%20Source/CrystalStudio/CategoryPalette.cs:153)。
+当前分类缩略图会读取 `.X`，使用实际 Library 图片按图层和坐标重新绘制。虽然索引包含 `preview` PNG 路径，但这个界面的预览使用实时组合流程，见 [CategoryPalette.cs](CrystalStudio/CategoryPalette.cs)。
 
 项目提供两种生成物体的方法：
 
 - **Export Selection**：选择地图区域，导出其中非空单元格，将坐标转换为相对选区中心的坐标，保存为 `.X`。它保留单元格各层内容，因此选区中的地面也可能一起导出。
-- **New Stamp**：创建对象编辑页，可以绘制或粘贴复制的地图内容；保存时裁剪空白、调整相对原点，并同步更新分类索引。包含地表图块时，原点按偶数格对齐。见 [MainWindow.StampEditing.cs](E:/WorkSpaceLegend/HuaXiaServer/CrystalStudio%20Source/CrystalStudio/MainWindow.StampEditing.cs:138)。
+- **New Stamp**：创建对象编辑页，可以绘制或粘贴复制的地图内容；保存时裁剪空白、调整相对原点，并同步更新分类索引。包含地表图块时，原点按偶数格对齐。见 [MainWindow.StampEditing.cs](CrystalStudio/MainWindow.StampEditing.cs)。
 
 `Identify Objects` 使用已有 `.X` 模板，通过图片编号和相对位置在地图中匹配对象。当前项目没有找到最初生成这批对象和分类的批处理脚本，因此无法确认最初的 9,159 个对象由人工整理还是外部工具生成。
 
@@ -164,7 +172,7 @@ catalogue/palette.json
 
 `.X` 保存的是**相对坐标、图片引用和单元格属性**。图片像素仍在 `.lib` 中，名称和分类仍在 `palette.json` 中。
 
-当前保存器写入 **v2、小端序二进制格式**，现有 `Objects` 目录中的 9,170 个文件也全部是 v2。读写实现见 [Document.cs](E:/WorkSpaceLegend/HuaXiaServer/CrystalStudio%20Source/CrystalStudio/Document.cs:84)。
+当前保存器写入 **v2、小端序二进制格式**，现有 `Objects` 目录中的 9,170 个文件也全部是 v2。读写实现见 [Document.cs](CrystalStudio/Document.cs)。
 
 文件头共 7 字节：
 

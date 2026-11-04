@@ -29,6 +29,8 @@ public class EditorWindow : Window
         });
         Opened += (_, _) =>
         {
+            foreach (var choice in this.GetVisualDescendants().OfType<ComboBox>())
+                if (choice.ItemTemplate == null && choice.DisplayMemberBinding == null) choice.ItemTemplate = LocalText.ChoiceTemplate;
             // WPF window sizes include native decorations. Avalonia sizes the
             // client area, so retain the original requested outer dimensions.
             if (SizeToContent == SizeToContent.Manual && FrameSize is { } frame)

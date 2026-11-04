@@ -99,18 +99,35 @@
       </Track>
     </Grid></ControlTemplate></Setter>
   </ControlTheme>
-  <ControlTheme x:Key="StampCategoryItem" TargetType="TreeViewItem" BasedOn="{StaticResource {x:Type TreeViewItem}}">
-    <Setter Property="MinHeight" Value="20"/><Setter Property="Padding" Value="3,2"/><Setter Property="Foreground" Value="{DynamicResource ThemeE5E9F0}"/>
-    <Setter Property="Template"><ControlTemplate><Grid ColumnDefinitions="16,*" RowDefinitions="Auto,Auto">
-      <ToggleButton Name="PART_ExpandCollapseChevron" Width="16" Height="20" Focusable="False" IsChecked="{Binding IsExpanded, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}">
-        <ToggleButton.Template><ControlTemplate><Grid Background="Transparent"><Path Name="Arrow" Data="M 0,0 L 4,3.5 L 0,7 Z" Fill="{DynamicResource Muted}" HorizontalAlignment="Center" VerticalAlignment="Center" RenderTransformOrigin="50%,50%"/></Grid></ControlTemplate></ToggleButton.Template>
-        <ToggleButton.Styles><Style Selector="ToggleButton:checked /template/ Path#Arrow"><Setter Property="RenderTransform"><RotateTransform Angle="90"/></Setter></Style></ToggleButton.Styles>
-      </ToggleButton>
-      <Border Name="HeaderChrome" Grid.Column="1" Padding="{TemplateBinding Padding}" CornerRadius="3" Background="Transparent"><ContentPresenter Name="PART_HeaderPresenter" Content="{TemplateBinding Header}" ContentTemplate="{TemplateBinding HeaderTemplate}" HorizontalContentAlignment="Stretch"/></Border>
-      <ItemsPresenter Name="PART_ItemsPresenter" Grid.Row="1" Grid.Column="1" ItemsPanel="{TemplateBinding ItemsPanel}" IsVisible="{TemplateBinding IsExpanded}"/>
+  <ControlTheme x:Key="CategoryTabControl" TargetType="TabControl">
+    <Setter Property="Background" Value="Transparent"/><Setter Property="BorderThickness" Value="0"/>
+    <Setter Property="ItemsPanel"><ItemsPanelTemplate><StackPanel Orientation="Vertical"/></ItemsPanelTemplate></Setter>
+    <Setter Property="Template"><ControlTemplate><Grid ColumnDefinitions="90,*">
+      <Border BorderBrush="{DynamicResource Line}" BorderThickness="0,0,1,0" Margin="0,0,4,0">
+        <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+          <ItemsPresenter Name="PART_ItemsPresenter" ItemsPanel="{TemplateBinding ItemsPanel}"/>
+        </ScrollViewer>
+      </Border>
+      <ContentPresenter Name="PART_SelectedContentHost" Grid.Column="1" Content="{TemplateBinding SelectedContent}" ContentTemplate="{TemplateBinding SelectedContentTemplate}" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch"/>
     </Grid></ControlTemplate></Setter>
-    <Style Selector="^:empty /template/ ToggleButton#PART_ExpandCollapseChevron"><Setter Property="IsVisible" Value="False"/></Style>
-    <Style Selector="^:selected /template/ Border#HeaderChrome"><Setter Property="Background" Value="{DynamicResource Theme29313E}"/></Style>
-    <Style Selector="^ /template/ Border#HeaderChrome:pointerover"><Setter Property="Background" Value="{DynamicResource Theme29313E}"/></Style>
+  </ControlTheme>
+  <ControlTheme x:Key="CategoryTabItem" TargetType="TabItem">
+    <Setter Property="MinHeight" Value="34"/><Setter Property="Padding" Value="6,7"/><Setter Property="Margin" Value="0,1"/>
+    <Setter Property="FontSize" Value="10"/><Setter Property="Foreground" Value="{DynamicResource Muted}"/>
+    <Setter Property="HorizontalAlignment" Value="Stretch"/><Setter Property="Cursor" Value="Hand"/>
+    <Setter Property="AutomationProperties.Name" Value="{Binding Name}"/>
+    <Setter Property="Template"><ControlTemplate><Border Name="Chrome" Background="Transparent" BorderBrush="Transparent" BorderThickness="2,0,0,0" Padding="{TemplateBinding Padding}">
+      <ContentPresenter Content="{TemplateBinding Header}" ContentTemplate="{TemplateBinding HeaderTemplate}" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Center"/>
+    </Border></ControlTemplate></Setter>
+    <Style Selector="^:pointerover /template/ Border#Chrome"><Setter Property="Background" Value="{DynamicResource Theme29313E}"/></Style>
+    <Style Selector="^:selected /template/ Border#Chrome"><Setter Property="Background" Value="{DynamicResource Theme2B3657}"/><Setter Property="BorderBrush" Value="{DynamicResource Accent}"/></Style>
+    <Style Selector="^:selected"><Setter Property="Foreground" Value="{DynamicResource ThemeE5E9F0}"/><Setter Property="FontWeight" Value="SemiBold"/></Style>
+    <Style Selector="^:focus-visible /template/ Border#Chrome"><Setter Property="BorderBrush" Value="{DynamicResource Accent}"/></Style>
+  </ControlTheme>
+  <ControlTheme x:Key="CategoryCard" TargetType="ListBoxItem" BasedOn="{StaticResource LayerRow}">
+    <Setter Property="MinHeight" Value="0"/><Setter Property="Padding" Value="3"/><Setter Property="Margin" Value="2"/>
+    <Setter Property="Focusable" Value="True"/>
+    <Setter Property="HorizontalContentAlignment" Value="Stretch"/><Setter Property="Cursor" Value="Hand"/>
+    <Setter Property="AutomationProperties.Name" Value="{Binding Label}"/>
   </ControlTheme>
 </ResourceDictionary>

@@ -5,7 +5,7 @@ namespace CrystalStudio;
 
 public partial class MainWindow
 {
-    private readonly Button stampProperties = new() { Content = "Stamp Categories\u2026", IsVisible = false, Margin = new Thickness(4) };
+    private readonly Button stampProperties = new() { Content = LocalText.T("Stamp Categories\u2026"), IsVisible = false, Margin = new Thickness(4) };
 
     private void InitializeStampEditing(Grid canvas)
     {
@@ -19,7 +19,7 @@ public partial class MainWindow
         {
             if (e.Source is AvaloniaObject source && FindStampItem(source) is AssetChoice { StampPath: { } path }) OpenStampEditor(path);
         };
-        categoryTree?.AddHandler(InputElement.DoubleTappedEvent, new EventHandler<TappedEventArgs>((_, e) =>
+        CategoryTabs.AddHandler(InputElement.DoubleTappedEvent, new EventHandler<TappedEventArgs>((_, e) =>
         {
             if (categoryIndex != null && e.Source is AvaloniaObject source && FindStampItem(source) is StampCategoryNode { Stamp: { } stamp })
                 OpenStampEditor(StampCategories.Resolve(categoryIndex.ObjectRoot, stamp.File));
@@ -52,7 +52,7 @@ public partial class MainWindow
         Viewport.Tool = EditorTool.Select;
         Viewport.Fit(); Viewport.Focus();
         UpdateLabels(); UpdateMapTabLabels();
-        Status.Text = "New stamp \u00b7 Paint cells or press Ctrl+V and click to paste copied map data \u00b7 Ctrl+S to save";
+        Status.Text = LocalText.T("New stamp \u00b7 Paint cells or press Ctrl+V and click to paste copied map data \u00b7 Ctrl+S to save");
     }
     private void OpenStampEditor(string path)
     {
@@ -98,7 +98,7 @@ public partial class MainWindow
         var known = index.Objects.Concat(category == null ? [] : new[] { category }).ToList();
         static List<string> Options(IEnumerable<string?> values) => values.Where(v => !string.IsNullOrWhiteSpace(v)).Select(v => v!).Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(v => v, StringComparer.OrdinalIgnoreCase).ToList();
         var panel = new StackPanel { Margin = new Thickness(16) };
-        void Label(string text) => panel.Children.Add(new TextBlock { Text = text, Margin = new Thickness(0, 8, 0, 3) });
+        void Label(string text) => panel.Children.Add(new TextBlock { Text = LocalText.T(text), Margin = new Thickness(0, 8, 0, 3) });
         Label("Name");
         var name = new TextBox { Text = category?.Name ?? (map.Path == null ? map.Name : Path.GetFileNameWithoutExtension(map.Path)) }; panel.Children.Add(name);
         ComboBox Single(string label, IEnumerable<string?> options, string? selected, bool optional = true)
@@ -123,8 +123,8 @@ public partial class MainWindow
         var direction = Single("Direction", known.Select(s => s.Direction), category?.Direction);
         var directionStatus = Single("Direction Status", known.Select(s => s.DirectionStatus).Append("unknown"), category?.DirectionStatus ?? "unknown", false);
         var review = Single("Review Status", known.Select(s => s.ReviewStatus).Append("unreviewed"), category?.ReviewStatus ?? "unreviewed", false);
-        var dialog = new EditorWindow { Owner = this, Title = "Stamp Categories", Width = 460, Height = 650, WindowStartupLocation = WindowStartupLocation.CenterOwner, Content = new ScrollViewer { Content = panel } };
-        var apply = new Button { Content = "Apply", Margin = new Thickness(0, 16, 0, 0) }; panel.Children.Add(apply);
+        var dialog = new EditorWindow { Owner = this, Title = LocalText.T("Stamp Categories"), Width = 460, Height = 650, WindowStartupLocation = WindowStartupLocation.CenterOwner, Content = new ScrollViewer { Content = panel } };
+        var apply = new Button { Content = LocalText.T("Apply"), Margin = new Thickness(0, 16, 0, 0) }; panel.Children.Add(apply);
         apply.Click += (_, _) =>
         {
             static string? Value(ComboBox input) => input.SelectedItem is string { Length: > 0 } text ? text : null;
@@ -192,7 +192,7 @@ public partial class MainWindow
             selectedStampPath = null; selectedStampPreview = null;
             _ = DiscoverStampsAsync();
             if (CategoryPalette) BuildPage();
-            UpdateLabels(); UpdateMapTabLabels(); Status.Text = $"Saved {Path.GetFileName(target)} and catalogue";
+            UpdateLabels(); UpdateMapTabLabels(); Status.Text = LocalText.Format("Saved {0} and catalogue",Path.GetFileName(target));
             return true;
         }
         catch (Exception ex) { MessageBox.Show(this, ex.Message, "Save stamp failed"); return false; }

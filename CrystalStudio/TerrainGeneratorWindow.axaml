@@ -1,4 +1,4 @@
-<local:EditorWindow xmlns="https://github.com/avaloniaui" xmlns:local="clr-namespace:CrystalStudio" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" x:Class="CrystalStudio.TerrainGeneratorWindow" Title="Generate Terrain" Width="1060" Height="760" MinWidth="830" MinHeight="630" WindowStartupLocation="CenterOwner" ShowInTaskbar="False" Background="{DynamicResource Theme14171D}" Foreground="{DynamicResource ThemeE5E9F0}">
+<local:EditorWindow xmlns="https://github.com/avaloniaui" xmlns:local="clr-namespace:CrystalStudio" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" x:Class="CrystalStudio.TerrainGeneratorWindow" Title="{local:Loc GenerateTerrain_CEAD3634}" Width="1060" Height="760" MinWidth="830" MinHeight="630" WindowStartupLocation="CenterOwner" ShowInTaskbar="False" Background="{DynamicResource Theme14171D}" Foreground="{DynamicResource ThemeE5E9F0}">
     <Window.Resources><ResourceDictionary /></Window.Resources>
     <Grid Margin="20">
         <Grid.ColumnDefinitions><ColumnDefinition Width="280" /><ColumnDefinition Width="20" /><ColumnDefinition /></Grid.ColumnDefinitions>
@@ -6,56 +6,56 @@
         <Grid x:Name="OptionsPanel">
             <Grid.RowDefinitions><RowDefinition /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
         <ScrollViewer VerticalScrollBarVisibility="Auto"><StackPanel>
-            <TextBlock Text="Category" FontWeight="SemiBold" /><ComboBox x:Name="BiomeList" Margin="0,6,0,12" SelectionChanged="BiomeChanged" AutomationProperties.Name="Terrain Category" />
-            <TextBlock Text="Base Terrain" FontWeight="SemiBold" /><ComboBox x:Name="BaseList" Margin="0,6,0,12" SelectionChanged="BaseChanged" AutomationProperties.Name="Base Terrain" />
+            <TextBlock Text="{local:Loc Category_292C06F0}" FontWeight="SemiBold" /><ComboBox x:Name="BiomeList" Margin="0,6,0,12" SelectionChanged="BiomeChanged" AutomationProperties.Name="{local:Loc TerrainCategory_00E2D2A9}" />
+            <TextBlock Text="{local:Loc BaseTerrain_BA62BD90}" FontWeight="SemiBold" /><ComboBox x:Name="BaseList" Margin="0,6,0,12" SelectionChanged="BaseChanged" AutomationProperties.Name="{local:Loc BaseTerrain_BA62BD90}" />
             <TabControl x:Name="TerrainTabs" Theme="{StaticResource PaletteTabControl}">
-            <TabItem Header="Ground" Theme="{StaticResource PaletteTabItem}"><StackPanel Margin="0,12,0,0">
-            <TextBlock Text="Irregular Patches" FontWeight="SemiBold" /><ComboBox x:Name="PatchList" Margin="0,6,0,12" SelectionChanged="SettingsChanged" AutomationProperties.Name="Patch Terrain" />
+            <TabItem Header="{local:Loc Ground_151BF493}" Theme="{StaticResource PaletteTabItem}"><StackPanel Margin="0,12,0,0">
+            <TextBlock Text="{local:Loc IrregularPatches_ACAD2854}" FontWeight="SemiBold" /><ComboBox x:Name="PatchList" Margin="0,6,0,12" SelectionChanged="SettingsChanged" AutomationProperties.Name="{local:Loc PatchTerrain_9AE9F901}" />
             <Grid>
                 <Grid.ColumnDefinitions><ColumnDefinition /><ColumnDefinition Width="16" /><ColumnDefinition /></Grid.ColumnDefinitions>
                 <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
-                <TextBlock><Run Text="Patch Amount · " /><Run Text="{Binding ElementName=CoverageSlider, Path=Value, StringFormat=P0}" /></TextBlock>
-                <Slider x:Name="CoverageSlider" Grid.Row="1" Minimum="0" Maximum="1" Value="0.45" SmallChange="0.05" Margin="0,4,0,12" ValueChanged="SettingsChanged" AutomationProperties.Name="Patch Amount" />
-                <TextBlock Grid.Column="2"><Run Text="Scale · " /><Run Text="{Binding ElementName=ScaleSlider, Path=Value, StringFormat=F0}" /><Run Text=" Tiles" /></TextBlock>
-                <Slider x:Name="ScaleSlider" Grid.Row="1" Grid.Column="2" Minimum="2" Maximum="40" Value="10" TickFrequency="1" IsSnapToTickEnabled="True" Margin="0,4,0,12" ValueChanged="SettingsChanged" AutomationProperties.Name="Patch Scale" ToolTip.Tip="Patch Scale in Ground Tiles" />
+                <TextBlock><Run Text="{local:Loc PatchAmount_FF4AB804}" /><Run Text="{Binding ElementName=CoverageSlider, Path=Value, StringFormat=P0}" /></TextBlock>
+                <Slider x:Name="CoverageSlider" Grid.Row="1" Minimum="0" Maximum="1" Value="0.45" SmallChange="0.05" Margin="0,4,0,12" ValueChanged="SettingsChanged" AutomationProperties.Name="{local:Loc PatchAmount_D2A175CE}" />
+                <TextBlock Grid.Column="2"><Run Text="{local:Loc Scale_6D70FD25}" /><Run Text="{Binding ElementName=ScaleSlider, Path=Value, StringFormat=F0}" /><Run Text="{local:Loc Tiles_AB71A9B0}" /></TextBlock>
+                <Slider x:Name="ScaleSlider" Grid.Row="1" Grid.Column="2" Minimum="2" Maximum="40" Value="10" TickFrequency="1" IsSnapToTickEnabled="True" Margin="0,4,0,12" ValueChanged="SettingsChanged" AutomationProperties.Name="{local:Loc PatchScale_023973EE}" ToolTip.Tip="{local:Loc PatchScaleinGroundTiles_E70AB6CE}" />
             </Grid>
-            <TextBlock Text="Winding Paths" FontWeight="SemiBold" /><ComboBox x:Name="PathList" Margin="0,6,0,12" SelectionChanged="SettingsChanged" AutomationProperties.Name="Path Terrain" />
+            <TextBlock Text="{local:Loc WindingPaths_A5115EFC}" FontWeight="SemiBold" /><ComboBox x:Name="PathList" Margin="0,6,0,12" SelectionChanged="SettingsChanged" AutomationProperties.Name="{local:Loc PathTerrain_C00CBBC9}" />
             <Grid>
                 <Grid.ColumnDefinitions><ColumnDefinition /><ColumnDefinition Width="16" /><ColumnDefinition /></Grid.ColumnDefinitions>
                 <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
-                <TextBlock><Run Text="Path Width · " /><Run Text="{Binding ElementName=WidthSlider, Path=Value, StringFormat=F0}" /><Run Text=" Tiles" /></TextBlock>
-                <Slider x:Name="WidthSlider" Grid.Row="1" Minimum="2" Maximum="10" Value="3" TickFrequency="1" IsSnapToTickEnabled="True" Margin="0,4,0,12" VerticalAlignment="Center" ValueChanged="SettingsChanged" AutomationProperties.Name="Path Width" ToolTip.Tip="Path Width in Ground Tiles" />
-                <TextBlock Grid.Column="2" Text="Connected Routes" />
-                <ComboBox x:Name="RouteList" Grid.Row="1" Grid.Column="2" Margin="0,4,0,12" SelectionChanged="SettingsChanged" AutomationProperties.Name="Connected Routes"><ComboBoxItem Content="1" /><ComboBoxItem Content="2" /><ComboBoxItem Content="3" /></ComboBox>
+                <TextBlock><Run Text="{local:Loc PathWidth_73E050AF}" /><Run Text="{Binding ElementName=WidthSlider, Path=Value, StringFormat=F0}" /><Run Text="{local:Loc Tiles_AB71A9B0}" /></TextBlock>
+                <Slider x:Name="WidthSlider" Grid.Row="1" Minimum="2" Maximum="10" Value="3" TickFrequency="1" IsSnapToTickEnabled="True" Margin="0,4,0,12" VerticalAlignment="Center" ValueChanged="SettingsChanged" AutomationProperties.Name="{local:Loc PathWidth_1478B526}" ToolTip.Tip="{local:Loc PathWidthinGroundTiles_F75A3F4A}" />
+                <TextBlock Grid.Column="2" Text="{local:Loc ConnectedRoutes_973CBCC5}" />
+                <ComboBox x:Name="RouteList" Grid.Row="1" Grid.Column="2" Margin="0,4,0,12" SelectionChanged="SettingsChanged" AutomationProperties.Name="{local:Loc ConnectedRoutes_973CBCC5}"><ComboBoxItem Content="1" /><ComboBoxItem Content="2" /><ComboBoxItem Content="3" /></ComboBox>
             </Grid>
             </StackPanel></TabItem>
-            <TabItem x:Name="WaterTab" Header="Water" Theme="{StaticResource PaletteTabItem}"><StackPanel Margin="0,12,0,0">
-                <TextBlock Text="Rivers and Coasts" FontWeight="SemiBold" />
+            <TabItem x:Name="WaterTab" Header="{local:Loc Water_7CA7DEA9}" Theme="{StaticResource PaletteTabItem}"><StackPanel Margin="0,12,0,0">
+                <TextBlock Text="{local:Loc RiversandCoasts_E1058126}" FontWeight="SemiBold" />
                 <StackPanel Orientation="Horizontal" Margin="0,8,0,12">
-                    <CheckBox x:Name="RiverToggle" Content="River" IsEnabled="False" IsCheckedChanged="SettingsChanged" Foreground="{DynamicResource ThemeE5E9F0}" AutomationProperties.Name="River" Margin="0,0,24,0" />
-                    <CheckBox x:Name="BeachToggle" Content="Beach" IsEnabled="False" IsCheckedChanged="SettingsChanged" Foreground="{DynamicResource ThemeE5E9F0}" AutomationProperties.Name="Beach" />
+                    <CheckBox x:Name="RiverToggle" Content="{local:Loc River_07F18967}" IsEnabled="False" IsCheckedChanged="SettingsChanged" Foreground="{DynamicResource ThemeE5E9F0}" AutomationProperties.Name="{local:Loc River_07F18967}" Margin="0,0,24,0" />
+                    <CheckBox x:Name="BeachToggle" Content="{local:Loc Beach_C1624A26}" IsEnabled="False" IsCheckedChanged="SettingsChanged" Foreground="{DynamicResource ThemeE5E9F0}" AutomationProperties.Name="{local:Loc Beach_C1624A26}" />
                 </StackPanel>
-                <CheckBox x:Name="BridgeToggle" Content="Bridge Crossing" IsEnabled="False" Margin="0,0,0,12" IsCheckedChanged="SettingsChanged" Foreground="{DynamicResource ThemeE5E9F0}" AutomationProperties.Name="Bridge Crossing" />
+                <CheckBox x:Name="BridgeToggle" Content="{local:Loc BridgeCrossing_C66FECDC}" IsEnabled="False" Margin="0,0,0,12" IsCheckedChanged="SettingsChanged" Foreground="{DynamicResource ThemeE5E9F0}" AutomationProperties.Name="{local:Loc BridgeCrossing_C66FECDC}" />
             </StackPanel></TabItem>
             </TabControl>
         </StackPanel></ScrollViewer>
             <StackPanel Grid.Row="1" Margin="0,12,0,0">
-                <TextBlock Text="Seed" />
-                <DockPanel Margin="0,6,0,0"><Button DockPanel.Dock="Right" Content="Shuffle" Click="ShuffleClick" Padding="10,4" Margin="8,0,0,0" ToolTip.Tip="Randomize Only the Seed" /><TextBox x:Name="SeedBox" Text="1" TextChanged="SettingsChanged" AutomationProperties.Name="Terrain Seed" /></DockPanel>
+                <TextBlock Text="{local:Loc Seed_367EF06B}" />
+                <DockPanel Margin="0,6,0,0"><Button DockPanel.Dock="Right" Content="{local:Loc Shuffle_317CB3A7}" Click="ShuffleClick" Padding="10,4" Margin="8,0,0,0" ToolTip.Tip="{local:Loc RandomizeOnlytheSeed_B0D48D6E}" /><TextBox x:Name="SeedBox" Text="1" TextChanged="SettingsChanged" AutomationProperties.Name="{local:Loc TerrainSeed_66B2DBC6}" /></DockPanel>
             </StackPanel>
         </Grid>
         <Border Grid.Column="2" Background="{DynamicResource Theme252C38}" BorderBrush="{DynamicResource Line}" BorderThickness="1" CornerRadius="6" Padding="12">
             <Grid><Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition /></Grid.RowDefinitions>
-                <DockPanel><CheckBox x:Name="DetailToggle" DockPanel.Dock="Right" Content="Centre Detail" IsCheckedChanged="DetailChanged" Foreground="{DynamicResource ThemeE5E9F0}" /><TextBlock Text="Terrain Preview" FontWeight="SemiBold" /></DockPanel>
-                <Image x:Name="PreviewImage" Grid.Row="1" Stretch="Uniform" Margin="0,12,0,0" RenderOptions.BitmapInterpolationMode="None" AutomationProperties.Name="Generated Terrain Preview" />
-                <TextBlock x:Name="PreviewHint" Grid.Row="1" Text="Preview updates automatically." TextWrapping="Wrap" TextAlignment="Center" VerticalAlignment="Center" HorizontalAlignment="Center" Margin="24" Foreground="{DynamicResource Muted}" />
+                <DockPanel><CheckBox x:Name="DetailToggle" DockPanel.Dock="Right" Content="{local:Loc CentreDetail_E3824490}" IsCheckedChanged="DetailChanged" Foreground="{DynamicResource ThemeE5E9F0}" /><TextBlock Text="{local:Loc TerrainPreview_5190551A}" FontWeight="SemiBold" /></DockPanel>
+                <Image x:Name="PreviewImage" Grid.Row="1" Stretch="Uniform" Margin="0,12,0,0" RenderOptions.BitmapInterpolationMode="None" AutomationProperties.Name="{local:Loc GeneratedTerrainPreview_58F8296A}" />
+                <TextBlock x:Name="PreviewHint" Grid.Row="1" Text="{local:Loc Previewupdatesautomatically_9358B260}" TextWrapping="Wrap" TextAlignment="Center" VerticalAlignment="Center" HorizontalAlignment="Center" Margin="24" Foreground="{DynamicResource Muted}" />
             </Grid>
         </Border>
         <TextBlock x:Name="FeedbackText" Grid.Row="1" Grid.ColumnSpan="3" TextWrapping="Wrap" Foreground="{DynamicResource Muted}" Margin="0,14,0,0" />
         <DockPanel Grid.Row="2" Grid.ColumnSpan="3" Margin="0,16,0,0" LastChildFill="False">
-            <Button x:Name="ApplyButton" DockPanel.Dock="Right" Content="Apply Terrain" IsEnabled="False" Click="ApplyClick" Padding="18,7" />
-            <Button DockPanel.Dock="Right" Content="Cancel" IsCancel="True" Margin="0,0,8,0" Padding="18,7" />
-            <Button x:Name="RandomizeButton" DockPanel.Dock="Left" Content="Randomize" Click="RandomizeClick" Padding="18,7" IsEnabled="False" ToolTip.Tip="Randomize All Generation Settings Using Compatible Terrain" />
+            <Button x:Name="ApplyButton" DockPanel.Dock="Right" Content="{local:Loc ApplyTerrain_4E9707E3}" IsEnabled="False" Click="ApplyClick" Padding="18,7" />
+            <Button DockPanel.Dock="Right" Content="{local:Loc Cancel_19766ED6}" IsCancel="True" Margin="0,0,8,0" Padding="18,7" />
+            <Button x:Name="RandomizeButton" DockPanel.Dock="Left" Content="{local:Loc Randomize_1F7483C8}" Click="RandomizeClick" Padding="18,7" IsEnabled="False" ToolTip.Tip="{local:Loc RandomizeAllGenerationSettingsUsingCompatibleTerrain_FCCC5394}" />
         </DockPanel>
     </Grid>
 </local:EditorWindow>

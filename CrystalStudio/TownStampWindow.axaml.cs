@@ -54,7 +54,7 @@ public partial class TownStampWindow : EditorWindow
     private void Schedule()
     {
         version++; pending?.Cancel(); Plan = null; UseButton.IsEnabled = false;
-        PreviewImage.Source = null; PreviewHint.IsVisible = true; PreviewHint.Text = "Preparing town preview…";
+        PreviewImage.Source = null; PreviewHint.IsVisible = true; PreviewHint.Text = LocalText.T("Preparing town preview…");
         debounce.Stop(); debounce.Start();
     }
     private async Task GenerateAsync()
@@ -106,12 +106,10 @@ public partial class TownStampWindow : EditorWindow
             Plan = plan; PreviewImage.Source = bitmap; PreviewHint.IsVisible = false; UseButton.IsEnabled = true;
             int houses = plan.Buildings.Count(b => b.Piece.Role == "house");
             string boundary = plan.Walls.Count == 0 ? "Open settlement" : string.Join(", ", plan.Walls.Select(w => $"{w.Purpose}: {w.Name}"));
-            FeedbackText.Text = $"{plan.LayoutName} · {plan.GroundName} · {houses} houses · {plan.Buildings.Count - houses} market, civic and garden objects · {boundary} · Seed {seed}" +
-                (skipped[selected.Id] > 0 ? $" · {skipped[selected.Id]} unavailable pieces skipped" : "") +
-                ". Click a clear area on the map to place the complete town. Ctrl+Z undoes it.";
+            FeedbackText.Text = string.Concat(string.Concat(LocalText.Format("{0} · {1} · {2} houses · {3} market, civic and garden objects · {4} · Seed {5}",plan.LayoutName,plan.GroundName,houses,plan.Buildings.Count - houses,boundary,seed), ((skipped[selected.Id] > 0 ? LocalText.Format(" · {0} unavailable pieces skipped",skipped[selected.Id]) : ("")))), LocalText.T(". Click a clear area on the map to place the complete town. Ctrl+Z undoes it."));
         }
         catch (OperationCanceledException) { }
-        catch (Exception ex) { if (ready && request == version) { PreviewHint.Text = ex.Message; FeedbackText.Text = "Town preview unavailable. Adjust the settings or libraries."; } }
+        catch (Exception ex) { if (ready && request == version) { PreviewHint.Text = (ex.Message); FeedbackText.Text = LocalText.T("Town preview unavailable. Adjust the settings or libraries."); } }
         finally { if (ReferenceEquals(pending, job)) pending = null; working = false; if (ready && request != version) debounce.Start(); }
     }
     private void DetailChanged(object sender, RoutedEventArgs e) { if (ready) Schedule(); }

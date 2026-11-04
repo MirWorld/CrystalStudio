@@ -45,7 +45,7 @@ public sealed partial class MapViewport
         bool hadDraft = pendingWall.Count > 0;
         pendingWall.Clear(); wallStrokePath.Clear(); lastWall = null; wallPlanKey = null;
         wallRunOrigin = wallRunEnd = null;
-        if (notify && hadDraft) Message?.Invoke("Unfinished wall cancelled · Completed walls kept");
+        if (notify && hadDraft) Message?.Invoke(LocalText.T("Unfinished wall cancelled · Completed walls kept"));
     }
 
     private void BeginWallStroke(int x, int y)
@@ -122,19 +122,19 @@ public sealed partial class MapViewport
 
     public bool PaintWall(int x, int y, bool erase = false)
     {
-        if (WallFamily is not { } family) { CancelWallDraft(); Message?.Invoke(WallCatalogueError ?? "Choose a wall type in Wall settings (W)"); return false; }
+        if (WallFamily is not { } family) { CancelWallDraft(); Message?.Invoke((WallCatalogueError ?? LocalText.T("Choose a wall type in Wall settings (W)"))); return false; }
         var availabilityKey = (family, Assets);
         if (wallAvailabilityKey != availabilityKey)
         { wallAvailability = family.Availability(Assets); wallAvailabilityKey = availabilityKey; }
-        if (!erase && wallAvailability != null) { CancelWallDraft(); Message?.Invoke(wallAvailability); return false; }
+        if (!erase && wallAvailability != null) { CancelWallDraft(); Message?.Invoke((wallAvailability)); return false; }
         var plan = PlanWall(x, y, erase)!;
         // A rejected attempt is discarded, including its interpolation origin.
         // It must not become an invisible draft combined with later placements.
-        if (!plan.Allowed) { CancelWallDraft(); Message?.Invoke(plan.Error!); return false; }
+        if (!plan.Allowed) { CancelWallDraft(); Message?.Invoke((plan.Error!)); return false; }
         if (!plan.HasChanges) return true;
         bool applied = Document.ApplyWallPlan(plan, History, InvalidateCell);
         if (!applied) CancelWallDraft();
-        if (applied) Message?.Invoke(erase ? "Wall section removed · Connections updated" : $"{family.DisplayName} · Connections updated");
+        if (applied) Message?.Invoke(((erase ? (LocalText.T("Wall section removed · Connections updated")) : (LocalText.Format("{0} · Connections updated", family.DisplayName)))));
         return applied;
     }
 

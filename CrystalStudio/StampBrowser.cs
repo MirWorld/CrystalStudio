@@ -12,7 +12,7 @@ public partial class MainWindow
             var result=await Task.Run(()=>{var folder=StampCatalog.FindFolder();return (Folder:folder,Entries:StampCatalog.Read(folder));});
             await Dispatcher.UIThread.InvokeAsync(()=>{if(version!=catalogVersion)return;stampFolder=result.Folder;stampEntries=result.Entries;});
         }
-        catch(Exception ex){await Dispatcher.UIThread.InvokeAsync(()=>{if(version==catalogVersion){stampEntries=[];stampFolder=null;Status.Text=$"Unable to read Objects folder: {ex.Message}";}});}
+        catch(Exception ex){await Dispatcher.UIThread.InvokeAsync(()=>{if(version==catalogVersion){stampEntries=[];stampFolder=null;Status.Text = LocalText.Format("Unable to read Objects folder: {0}",ex.Message);}});}
         finally{await Dispatcher.UIThread.InvokeAsync(()=>{if(version==catalogVersion){stampIndexLoading=false;if(StampMode || SavedPalette || CategoryPalette){page=0;BuildPage();UpdateLabels();}}});}
     }
     private void BuildStampPage()
@@ -28,7 +28,7 @@ public partial class MainWindow
             choices.Add(choice);
             if(choice.StampCells==null)_=ReadStampChoiceAsync(choice,version);else if(choice.Bitmap==null&&assets!=null)choice.Bitmap=StampPreview.Create(choice.StampCells,assets);
         }
-        PageLabel.Text=stampIndexLoading?"Finding Stamps\u2026":filtered.Count==0?"No Stamps Found":$"Page {page+1} of {Math.Max(1,(filtered.Count+PageSize-1)/PageSize)}";
+        PageLabel.Text = (stampIndexLoading ? LocalText.T("Finding Stamps\u2026") : (filtered.Count==0 ? LocalText.T("No Stamps Found") : LocalText.Format("Page {0} of {1}",page+1,Math.Max(1,(filtered.Count+PageSize-1)/PageSize))));
         UpdateWorkspace();
     }
     private async Task ReadStampChoiceAsync(AssetChoice choice,int version)
@@ -48,7 +48,7 @@ public partial class MainWindow
             if(IsSelectedStampChoice(choice))SelectStamp(choice);
             });
         }
-        catch(Exception ex){await Dispatcher.UIThread.InvokeAsync(()=>{if(version==pageVersion){choice.LoadError=choice.Description=$"Could not load stamp: {ex.Message}";if(IsSelectedStampChoice(choice))Status.Text=choice.Description;}});}
+        catch(Exception ex){await Dispatcher.UIThread.InvokeAsync(()=>{if(version==pageVersion){choice.LoadError=choice.Description=$"Could not load stamp: {ex.Message}";if(IsSelectedStampChoice(choice))Status.Text = (choice.Description);}});}
         finally{stampReaders.Release();}
     }
     private static IEnumerable<int> ReferencedLibraries(Cell c)
@@ -62,7 +62,7 @@ public partial class MainWindow
         if(choice.StampCells==null)return;
         Viewport.Stamp=choice.StampCells;selectedStampPath=choice.StampPath;selectedStampName=choice.Label;Viewport.StampName=choice.Label;selectedStampPreview=choice.Bitmap;
         Viewport.Tool=EditorTool.Stamp;BrushSize.IsEnabled=true;RememberActiveAsset();
-        Viewport.InvalidateVisual();UpdateLabels();Status.Text=$"{choice.Label} \u00b7 {choice.StampCells.Count:N0} cells \u00b7 Click the map to place";
+        Viewport.InvalidateVisual();UpdateLabels();Status.Text = LocalText.Format("{0} · {1:N0} cells · Click the map to place",choice.Label,choice.StampCells.Count);
     }
 }
 

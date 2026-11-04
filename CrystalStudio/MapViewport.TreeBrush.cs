@@ -21,7 +21,7 @@ public sealed partial class MapViewport
 
     private void PaintTrees(int x, int y)
     {
-        if (Trees.Count == 0) { Message?.Invoke($"Choose {SpecialBrushKind.Plural()} in {SpecialBrushKind.BrushName()} settings first"); return; }
+        if (Trees.Count == 0) { Message?.Invoke(LocalText.Format("Choose {0} in {1} settings first",SpecialBrushKind.Plural(),SpecialBrushKind.BrushName())); return; }
         foreach (var placement in PlanTrees(x, y))
             Document.PlaceStamp(placement.Cells, placement.X, placement.Y, placement.Tree.Name, History, InvalidateCell);
     }

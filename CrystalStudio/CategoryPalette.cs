@@ -7,16 +7,26 @@ public sealed class StampCategoryNode : INotifyPropertyChanged
 {
     public required string Label { get; init; }
     public string Detail { get; init; } = "";
-    public string Description => Label + (Detail.Length == 0 ? "" : "\n" + Detail);
+    public string Description => Label
+        + (Detail.Length == 0 ? "" : "\n" + string.Join(" \u00b7 ", Detail.Split(" \u00b7 ").Select(LocalText.T)))
+        + (Stamp == null ? "" : "\n" + Stamp.File);
     public CategorizedStamp? Stamp { get; init; }
-    public bool HasStamp => Stamp != null;
-    public List<CategorizedStamp>? Members { get; init; }
-    public ObservableCollection<StampCategoryNode> Children { get; private set; } = [];
-    internal void Populate(IEnumerable<StampCategoryNode> children)
+    public string ShortLabel
     {
-        Children=new(children);Populated=true;PropertyChanged?.Invoke(this,new(nameof(Children)));
+        get
+        {
+            if (Stamp == null) return Label;
+            string file = Path.GetFileNameWithoutExtension(Stamp.File);
+            foreach (string separator in new[] { " - ", " \u2014 ", " \u2013 " })
+            {
+                string suffix = separator + file;
+                if (Label.EndsWith(suffix, StringComparison.OrdinalIgnoreCase))
+                    return Label[..^suffix.Length].Trim();
+            }
+            return Label;
+        }
     }
-    public bool Populated { get; set; }
+    public bool LoadWhenVisible { get; init; }
     public Func<RasterImage?>? PreviewLoader { get; init; }
     public Func<CancellationToken, Task<RasterImage?>>? LivePreviewLoader { get; init; }
     public CancellationToken PreviewCancellation { get; init; }
@@ -25,9 +35,14 @@ public sealed class StampCategoryNode : INotifyPropertyChanged
     private bool previewRequested;
     private RasterImage? bitmap;
     private CancellationTokenSource? visiblePreview;
-    public void ReleasePreview()
+    public void PausePreview()
     {
         visiblePreview?.Cancel(); visiblePreview = null;
+        previewRequested = bitmap != null;
+    }
+    public void ReleasePreview()
+    {
+        PausePreview();
         previewRequested = false; bitmap = null;
     }
     internal void SetBitmap(RasterImage value)
@@ -38,14 +53,16 @@ public sealed class StampCategoryNode : INotifyPropertyChanged
     {
         get
         {
-            if(!previewRequested&&(PreviewLoader!=null||LivePreviewLoader!=null)&&!PreviewCancellation.IsCancellationRequested)
-            {
-                previewRequested=true;
-                visiblePreview=CancellationTokenSource.CreateLinkedTokenSource(PreviewCancellation);
-                _ = LoadPreviewAsync(Dispatcher.UIThread, visiblePreview);
-            }
+            if (!LoadWhenVisible) RequestPreview();
             return bitmap;
         }
+    }
+    internal void RequestPreview()
+    {
+        if(previewRequested || (PreviewLoader==null&&LivePreviewLoader==null) || PreviewCancellation.IsCancellationRequested)return;
+        previewRequested=true;
+        visiblePreview=CancellationTokenSource.CreateLinkedTokenSource(PreviewCancellation);
+        _ = LoadPreviewAsync(Dispatcher.UIThread, visiblePreview);
     }
     private async Task LoadPreviewAsync(Dispatcher dispatcher, CancellationTokenSource request)
     {
@@ -77,11 +94,33 @@ public sealed class StampCategoryNode : INotifyPropertyChanged
     }
 }
 
+public sealed class StampCategoryGroup
+{
+    public required string Name { get; init; }
+    public required List<CategorizedStamp> Members { get; init; }
+    public string Count => Members.Count.ToString("N0");
+    public string Description => LocalText.Format("{0}\n{1} stamps", LocalText.T(Name), Count);
+    public ObservableCollection<StampCategoryNode> Items { get; } = [];
+    internal int Page { get; set; }
+    internal Vector ScrollOffset { get; set; }
+    internal string? SelectedFile { get; set; }
+    public override string ToString() => Name;
+}
+
 public partial class MainWindow
 {
-    private TreeView? categoryTree;
+    private const int CategoryPageSize = 24;
     private ComboBox? categoryGrouping;
     private StampCategoryIndex? categoryIndex;
+    private StampCategoryIndex? displayedCategoryIndex;
+    private AssetStore? categoryPreviewAssets;
+    private string? categoryQuery, categoryGroupingKey;
+    private List<StampCategoryGroup> categoryGroups = [];
+    private StampCategoryGroup? displayedCategory;
+    private bool rebuildingCategories, restoringCategoryPosition, categoryWasVisible;
+    private int matchingCategoryStamps;
+    private readonly Dictionary<string, RasterImage> categoryPreviewCache = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Queue<string> categoryPreviewOrder = new();
     private bool categoriesLoading, categoriesAttempted;
     private string? categoryError;
     private AssetChoice? selectedCategoryChoice;
@@ -93,23 +132,11 @@ public partial class MainWindow
     {
         categoryGrouping = new ComboBox { ItemsSource = new[] { "Type", "Region", "Environment", "Facing" },
             SelectedIndex = 0, IsVisible = false };
-        categoryGrouping.SetTip("Group stamps by category");
+        ToolTip.SetTip(categoryGrouping, LocalText.T("Group stamps by category"));
         RegisterEditorName("CategoryGrouping", categoryGrouping);
         ((StackPanel)LibraryList.Parent).Children.Insert(2, categoryGrouping);
         categoryGrouping.SelectionChanged += (_, _) => { if (CategoryPalette) BuildPage(); };
-        categoryTree = new TreeView { IsVisible = false, Background = Brushes.Transparent,
-            BorderThickness = new Thickness(0), ItemTemplate = (Avalonia.Markup.Xaml.Templates.TreeDataTemplate)this.FindResource("StampCategoryTemplate"),
-            ItemContainerTheme = (Style)this.FindResource("StampCategoryItem") };
-        categoryTree.SetResource(ForegroundProperty, "ThemeE5E9F0");
-        categoryTree.SetValue(ScrollViewer.HorizontalScrollBarVisibilityProperty, ScrollBarVisibility.Disabled);
-        // Dock grids can probe content with an unbounded height before arranging
-        // their star rows. Keep every measure pass within the current viewport.
-        categoryTree.Bind(MaxHeightProperty, new Avalonia.Data.Binding("Bounds.Height") { Source = AssetArea });
-        categoryTree.AddHandler(TreeViewItem.ExpandedEvent, new EventHandler<RoutedEventArgs>(CategoryExpanded));
-        categoryTree.SelectionChanged += CategorySelected;
         Closed += (_,_) => { categoryPreviews.Cancel(); categoryPreviews.Dispose(); ClearCategorySelection(); };
-        RegisterEditorName("CategoryTree", categoryTree);
-        AssetArea.Children.Insert(1, categoryTree);
     }
 
     private async Task LoadCategoriesAsync()
@@ -129,60 +156,202 @@ public partial class MainWindow
         finally { await Dispatcher.UIThread.InvokeAsync(() => { categoriesLoading = false; if (!closed && CategoryPalette) BuildPage(); }); }
     }
 
-    private void BuildCategoryTree()
+    private void BuildCategoryBrowser()
     {
-        categoryPreviews.Cancel();categoryPreviews.Dispose();categoryPreviews=new();
-        pageVersion++; choices.Clear(); ClearCategorySelection(); filteredCount = 0;
-        categoryTree!.Items.Clear();
         if (!categoriesAttempted) { _ = LoadCategoriesAsync(); UpdateWorkspace(); return; }
         string query = AssetSearch.Text.Trim(), grouping = (string?)categoryGrouping!.SelectedItem ?? "Type";
-        var filtered = categoryIndex?.Objects.Where(s => StampCategories.Matches(s, query)).ToList() ?? [];
-        filteredCount = filtered.Count;
-        foreach (var group in filtered.SelectMany(s => StampCategories.Groups(s, grouping).Select(g => (Group: g, Stamp: s)))
-            .GroupBy(s => s.Group).OrderBy(g => g.Key, StringComparer.OrdinalIgnoreCase))
+        bool assetsChanged = !ReferenceEquals(categoryPreviewAssets, assets);
+        bool indexChanged = !ReferenceEquals(displayedCategoryIndex, categoryIndex);
+        if (assetsChanged || indexChanged)
         {
-            var members = group.Select(s => s.Stamp).OrderBy(s => s.Name, StringComparer.OrdinalIgnoreCase).ToList();
-            var node = new StampCategoryNode { Label = $"{group.Key} ({members.Count:N0})", Members = members };
-            node.Children.Add(new() { Label = "" }); // Populate only when expanded.
-            categoryTree.Items.Add(node);
+            categoryPreviewCache.Clear(); categoryPreviewOrder.Clear();
+            categoryPreviewAssets = assets; displayedCategoryIndex = categoryIndex;
         }
-        PageLabel.Text = categoriesLoading ? "Loading Categories\u2026" : $"{filteredCount:N0} stamps";
+        if (assetsChanged || indexChanged || categoryQuery != query || categoryGroupingKey != grouping)
+        {
+            var selected = CategoryTabs.SelectedItem as StampCategoryGroup;
+            string? selectedName = selected?.Name;
+            bool sameFilter = categoryQuery == query && categoryGroupingKey == grouping;
+            var previous = sameFilter ? categoryGroups.ToDictionary(g => g.Name) : [];
+            ReleaseCategoryPage();
+            var filtered = categoryIndex?.Objects.Where(s => MatchesCategorySearch(s, query)).ToList() ?? [];
+            matchingCategoryStamps = filtered.Count;
+            categoryGroups = filtered.SelectMany(s => StampCategories.Groups(s, grouping).Select(g => (Group: g, Stamp: s)))
+                .GroupBy(s => s.Group).OrderBy(g => g.Key, StringComparer.OrdinalIgnoreCase)
+                .Select(g =>
+                {
+                    var result = new StampCategoryGroup { Name = g.Key, Members = g.Select(s => s.Stamp).OrderBy(s => s.Name, StringComparer.OrdinalIgnoreCase).ToList() };
+                    if (previous.TryGetValue(g.Key, out var old))
+                    { result.Page = old.Page; result.ScrollOffset = old.ScrollOffset; result.SelectedFile = old.SelectedFile; }
+                    return result;
+                }).ToList();
+            categoryQuery = query; categoryGroupingKey = grouping;
+            rebuildingCategories = true;
+            try
+            {
+                CategoryTabs.ItemsSource = categoryGroups;
+                CategoryTabs.SelectedItem = categoryGroups.FirstOrDefault(g => g.Name == selectedName) ?? categoryGroups.FirstOrDefault();
+            }
+            finally { rebuildingCategories = false; }
+        }
+        BuildCategoryPage();
+    }
+
+    private static bool MatchesCategorySearch(CategorizedStamp stamp, string query) => StampCategories.Matches(stamp, query) ||
+        LocalText.Language == "zh-CN" && string.Join(' ', new[] { stamp.Type, stamp.Subtype }.Concat(stamp.Regions).Concat(stamp.RegionGroups).Concat(stamp.Environments).Concat(stamp.Tags)
+            .Where(value => value != null).Select(value => LocalText.T(value!))).Contains(query.Trim(), StringComparison.OrdinalIgnoreCase);
+
+    private void CategoryTabChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (!ReferenceEquals(e.Source, CategoryTabs) || rebuildingCategories || !CategoryPalette) return;
+        BuildCategoryPage();
+    }
+
+    private void ReleaseCategoryPage()
+    {
+        ClearCategorySelection();
+        categoryPreviews.Cancel(); categoryPreviews.Dispose(); categoryPreviews = new();
+        if (displayedCategory != null)
+        {
+            foreach (var node in displayedCategory.Items)
+            { node.PropertyChanged -= CategoryPreviewChanged; node.ReleasePreview(); }
+            displayedCategory.Items.Clear();
+        }
+    }
+
+    private void BuildCategoryPage()
+    {
+        rebuildingCategories = true;
+        try
+        {
+            ReleaseCategoryPage();
+            pageVersion++; choices.Clear();
+            displayedCategory = CategoryTabs.SelectedItem as StampCategoryGroup;
+            filteredCount = displayedCategory?.Members.Count ?? 0;
+            if (displayedCategory != null && categoryIndex != null)
+            {
+                displayedCategory.Page = Math.Clamp(displayedCategory.Page, 0, Math.Max(0, (filteredCount - 1) / CategoryPageSize));
+                page = displayedCategory.Page;
+                string objectRoot = categoryIndex.ObjectRoot;
+                var previewAssets = assets;
+                foreach (var stamp in displayedCategory.Members.Skip(page * CategoryPageSize).Take(CategoryPageSize))
+                {
+                    string path = StampCategories.Resolve(objectRoot, stamp.File);
+                    var node = new StampCategoryNode
+                    {
+                        Label = stamp.Name, Stamp = stamp, LoadWhenVisible = true,
+                        Detail = string.Join(" \u00b7 ", new[] { stamp.Type, stamp.Subtype }.Where(s => !string.IsNullOrWhiteSpace(s)).Distinct())
+                            + (stamp.ReviewStatus == "stale" ? " \u00b7 Needs review" : ""),
+                        LivePreviewLoader = token => RenderCategoryPreviewAsync(path, previewAssets, token),
+                        PreviewCancellation = categoryPreviews.Token
+                    };
+                    if (categoryPreviewCache.TryGetValue(path, out var cached)) node.SetBitmap(cached);
+                    node.PropertyChanged += CategoryPreviewChanged;
+                    displayedCategory.Items.Add(node);
+                }
+            }
+            else page = 0;
+        }
+        finally { rebuildingCategories = false; }
+        RestoreCategoryPosition();
         UpdateWorkspace();
     }
 
-    private void CategoryExpanded(object sender,RoutedEventArgs e)
+    private void ChangeCategoryPage(int delta)
     {
-        if (categoryIndex==null||e.Source is not TreeViewItem { DataContext: StampCategoryNode { Members: { } members, Populated: false } node }) return;
-        string objectRoot=categoryIndex.ObjectRoot;
-        var previewAssets=assets;
-        node.Populate(members.Select(stamp => new StampCategoryNode { Label = stamp.Name, Stamp = stamp,
-                LivePreviewLoader = token => RenderCategoryPreviewAsync(StampCategories.Resolve(objectRoot,stamp.File),previewAssets,token), PreviewCancellation=categoryPreviews.Token,
-                Detail = $"{stamp.Subtype ?? stamp.Type ?? "Unknown type"}{(stamp.ReviewStatus == "stale" ? " \u00b7 Needs review" : "")}" }));
+        if (displayedCategory == null) return;
+        int target = Math.Clamp(displayedCategory.Page + delta, 0, Math.Max(0, (displayedCategory.Members.Count - 1) / CategoryPageSize));
+        if (target == displayedCategory.Page) return;
+        displayedCategory.Page = target; displayedCategory.ScrollOffset = default;
+        BuildCategoryPage();
+    }
+
+    private void CategoryItemsLoaded(object sender, RoutedEventArgs e)
+    {
+        if (sender is not ListBox list) return;
+        list.AddHandler(InputElement.KeyDownEvent, CategoryItemsKeyDown, RoutingStrategies.Tunnel);
+        if (list.GetVisualDescendants().OfType<ScrollViewer>().FirstOrDefault() is { } scroll)
+        {
+            void Changed(object? _, ScrollChangedEventArgs args)
+            {
+                if (!rebuildingCategories && !restoringCategoryPosition && list.DataContext is StampCategoryGroup group && ReferenceEquals(displayedCategory, group))
+                    group.ScrollOffset = scroll.Offset;
+            }
+            void Unloaded(object? _, RoutedEventArgs args)
+            { scroll.ScrollChanged -= Changed; list.RemoveHandler(InputElement.KeyDownEvent, CategoryItemsKeyDown); list.Unloaded -= Unloaded; }
+            scroll.ScrollChanged += Changed; list.Unloaded += Unloaded;
+        }
+        RestoreCategoryPosition();
+    }
+
+    private void CategoryItemsKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (sender is not ListBox list || list.Items.Count == 0 || e.Key is not (Key.Left or Key.Right or Key.Up or Key.Down or Key.Home or Key.End)) return;
+        var panel = list.GetVisualDescendants().OfType<ResponsivePanel>().FirstOrDefault();
+        int columns = panel == null ? 1 : Math.Max(1, Math.Min(list.Items.Count, (int)Math.Floor(panel.Bounds.Width / panel.ItemMinWidth)));
+        int current = list.SelectedIndex;
+        int target = current < 0 ? 0 : e.Key switch
+        {
+            Key.Left => current - 1, Key.Right => current + 1,
+            Key.Up => current - columns, Key.Down => current + columns,
+            Key.Home => 0, Key.End => list.Items.Count - 1, _ => current
+        };
+        list.SelectedIndex = Math.Clamp(target, 0, list.Items.Count - 1);
+        list.ScrollIntoView(list.SelectedItem!);
+        (list.ContainerFromIndex(list.SelectedIndex) as Control)?.Focus();
+        e.Handled = true;
+    }
+
+    private void RestoreCategoryPosition()
+    {
+        int version = pageVersion;
+        var group = displayedCategory;
+        var offset = group?.ScrollOffset ?? default;
+        Dispatcher.UIThread.Post(() =>
+        {
+            if (closed || version != pageVersion || group == null || !CategoryPalette || !ReferenceEquals(group, CategoryTabs.SelectedItem)) return;
+            var list = CategoryTabs.GetVisualDescendants().OfType<ListBox>().FirstOrDefault(l => ReferenceEquals(l.DataContext, group));
+            if (list == null) return;
+            restoringCategoryPosition = true;
+            try
+            {
+                list.SelectedItem = group.Items.FirstOrDefault(n => n.Stamp?.File == group.SelectedFile);
+                if (list.GetVisualDescendants().OfType<ScrollViewer>().FirstOrDefault() is { } scroll) scroll.Offset = offset;
+                group.ScrollOffset = offset;
+            }
+            finally { restoringCategoryPosition = false; }
+        }, DispatcherPriority.Loaded);
     }
 
     private void CategorySelected(object sender, SelectionChangedEventArgs e)
     {
         ClearCategorySelection();
-        if (categoryTree?.SelectedItem is not StampCategoryNode { Stamp: { } stamp } node || categoryIndex == null) return;
+        if (rebuildingCategories || sender is not ListBox { SelectedItem: StampCategoryNode { Stamp: { } stamp } node } || categoryIndex == null) return;
+        if (displayedCategory != null) displayedCategory.SelectedFile = stamp.File;
         var reference = AssetReference.Stamp(StampCategories.Resolve(categoryIndex.ObjectRoot, stamp.File));
         var choice = new AssetChoice { Asset = reference, StampPath = reference.StampPath, Label = stamp.Name,
-            Description = $"{stamp.File}\n{stamp.Type ?? "Unknown type"} \u00b7 {stamp.Subtype}\n{string.Join(", ", stamp.RegionGroups)}",
+            Description = node.Description,
             Bitmap = node.Bitmap, IsFavourite = assetHistory.IsFavourite(reference) };
         selectedCategoryChoice = choice;
-        selectedCategoryNode=node;node.PropertyChanged+=CategoryPreviewChanged;
-        Status.Text = "Loading stamp\u2026";
+        selectedCategoryNode=node;
+        Status.Text = LocalText.T("Loading stamp\u2026");
         _ = ReadStampChoiceAsync(choice, pageVersion);
     }
 
     private void ClearCategorySelection()
     {
-        if(selectedCategoryNode!=null)selectedCategoryNode.PropertyChanged-=CategoryPreviewChanged;
         selectedCategoryNode=null;selectedCategoryChoice=null;
     }
     private void CategoryPreviewChanged(object? sender,PropertyChangedEventArgs e)
     {
-        if(e.PropertyName!=nameof(StampCategoryNode.Bitmap)||sender is not StampCategoryNode node||
-            !ReferenceEquals(node,selectedCategoryNode)||selectedCategoryChoice==null||node.Bitmap==null)return;
+        if(e.PropertyName!=nameof(StampCategoryNode.Bitmap)||sender is not StampCategoryNode { Stamp: { } stamp } node||node.Bitmap==null)return;
+        if (categoryIndex != null)
+        {
+            string path = StampCategories.Resolve(categoryIndex.ObjectRoot, stamp.File);
+            if (categoryPreviewCache.TryAdd(path, node.Bitmap)) categoryPreviewOrder.Enqueue(path);
+            while (categoryPreviewOrder.Count > 128) categoryPreviewCache.Remove(categoryPreviewOrder.Dequeue());
+        }
+        if (!ReferenceEquals(node,selectedCategoryNode)||selectedCategoryChoice==null)return;
         selectedCategoryChoice.Bitmap=node.Bitmap;
         if(IsSelectedStampChoice(selectedCategoryChoice)&&selectedStampPath==selectedCategoryChoice.StampPath)
         {selectedStampPreview=node.Bitmap;SelectedPreview.Source=ActivePreview();}
@@ -205,18 +374,23 @@ public partial class MainWindow
 
     private void UpdateCategoryWorkspace()
     {
-        categoryTree!.IsVisible = CategoryPalette ? true : false;
+        CategoryTabs.IsVisible = CategoryPalette && matchingCategoryStamps > 0;
         categoryGrouping!.IsVisible = CategoryPalette ? true : false;
         AssetList.IsVisible = CategoryPalette ? false : true;
-        ((Control)PreviousButton.Parent).IsVisible = CategoryPalette ? false : true;
+        ((Control)PreviousButton.Parent).IsVisible = true;
+        if (categoryWasVisible && !CategoryPalette) ReleaseCategoryPage();
+        categoryWasVisible = CategoryPalette;
         if (!CategoryPalette) return;
-        AssetTitle.Text = "Stamp Categories"; AssetCount.Text = $"{filteredCount:N0} stamps";
+        AssetTitle.Text = LocalText.T("Categories"); AssetCount.Text = ($"{filteredCount:N0} / {matchingCategoryStamps:N0}");
+        ToolTip.SetTip(AssetCount, LocalText.T("Current category / all matching stamps"));
+        PageLabel.Text = (categoriesLoading ? LocalText.T("Loading Categories\u2026") : (filteredCount == 0 ? LocalText.T("No Stamps") : LocalText.Format("Page {0} of {1}",page + 1,(filteredCount + CategoryPageSize - 1) / CategoryPageSize)));
+        ToolTip.SetTip(PageLabel, displayedCategory?.Description);
         LibraryList.IsVisible = StampFolderHint.IsVisible = false;
-        AssetSearch.Tag = "Search Stamps and Categories\u2026"; AssetSearch.SetTip("Search Names, Types, Regions and Tags");
+        (AssetSearch).Tag = LocalText.T("Search Stamps and Categories\u2026"); ToolTip.SetTip(AssetSearch, LocalText.T("Search Names, Types, Regions and Tags"));
         AssetEmpty.IsVisible = filteredCount == 0 ? true : false;
-        EmptyTitle.Text = categoriesLoading ? "Loading Categories\u2026" : categoryError != null ? "Categories Unavailable" : "No Matching Stamps";
-        EmptyDescription.Text = categoryError ?? "Try another stamp name or category.";
-        EmptyAction.Content = categoryError != null ? "Reload Categories" : "Clear Search";
+        EmptyTitle.Text = (categoriesLoading ? LocalText.T("Loading Categories\u2026") : (categoryError != null ? LocalText.T("Categories Unavailable") : LocalText.T("No Matching Stamps")));
+        EmptyDescription.Text = (categoryError ?? LocalText.T("Try another stamp name or category."));
+        EmptyAction.Content = (categoryError != null ? LocalText.T("Reload Categories") : LocalText.T("Clear Search"));
         EmptyAction.IsVisible = categoriesLoading ? false : true;
     }
 }

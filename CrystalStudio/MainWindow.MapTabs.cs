@@ -44,8 +44,8 @@ public partial class MainWindow
         map.Label.Margin = new Thickness(4, 2, 8, 2);
         map.Label.VerticalAlignment = VerticalAlignment.Center;
         header.Children.Add(map.Label);
-        var close = new Button { Content = "\u00d7", Padding = new Thickness(4, 0, 4, 0), Background = Brushes.Transparent, BorderThickness = new Thickness(0) };
-        close.SetTip("Close Map"); close.Theme = (Style)this.FindResource("QuietButton");
+        var close = new Button { Content = ("\u00d7"), Padding = new Thickness(4, 0, 4, 0), Background = Brushes.Transparent, BorderThickness = new Thickness(0) };
+        ToolTip.SetTip(close, LocalText.T("Close Map")); close.Theme = (Style)this.FindResource("QuietButton");
         var tab = new TabItem { Header = header, Tag = map };
         close.Click += (_, e) => { e.Handled = true; CloseMapTab(tab); };
         header.Children.Add(close);
@@ -65,8 +65,8 @@ public partial class MainWindow
             Viewport.RestoreEditorState(map.State);
             inspectorCell = null;
             UpdateCellInspector(-1, -1);
-            Coordinates.Text = "- , -";
-            Status.Text = map.Path == null ? map.Name : System.IO.Path.GetFileName(map.Path);
+            Coordinates.Text = ("- , -");
+            Status.Text = MapDisplayName(map);
             UpdateLabels();
         }
         finally { switchingMap = false; }
@@ -95,8 +95,16 @@ public partial class MainWindow
         {
             var map = (OpenMapTab)tab.Tag;
             bool dirty = map.CategoryDirty || (ReferenceEquals(map, activeMap) ? Viewport.History.Dirty : map.State.History.Dirty);
-            map.Label.Text = (map.Path == null ? map.Name : System.IO.Path.GetFileName(map.Path)) + (dirty ? " *" : "");
-            tab.SetTip(map.Path ?? map.Name);
+            (map.Label).Text = string.Concat(MapDisplayName(map), (dirty ? " *" : ""));
+            ToolTip.SetTip(tab, map.Path == null ? MapDisplayName(map) : (map.Path));
         }
+    }
+
+    private static string MapDisplayName(OpenMapTab map)
+    {
+        if (map.Path != null) return (System.IO.Path.GetFileName(map.Path));
+        string prefix = map.IsStamp ? "Untitled stamp " : "Untitled ";
+        return map.Name.StartsWith(prefix, StringComparison.Ordinal) && int.TryParse(map.Name[prefix.Length..], out int number)
+            ? LocalText.Format(map.IsStamp ? "Untitled stamp {0}" : "Untitled {0}", number) : (map.Name);
     }
 }

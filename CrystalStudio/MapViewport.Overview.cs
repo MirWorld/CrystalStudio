@@ -99,7 +99,7 @@ public sealed partial class MapViewport
             {
                 await Dispatcher.UIThread.InvokeAsync(() =>
                 {
-                    if (generation == overviewGeneration) { overviewBusy = false; overviewDirty = true; Message?.Invoke($"Overview: {ex.Message}"); }
+                    if (generation == overviewGeneration) { overviewBusy = false; overviewDirty = true; Message?.Invoke(LocalText.Format("Overview: {0}",ex.Message)); }
                 });
             }
         }, token);

@@ -73,7 +73,7 @@ public sealed class DockWorkspace : Grid
             zone.SetResource(BackgroundProperty, "Theme1C2028");
             zones.Add(side, zone); Children.Add(zone);
         }
-        dropPreview.Child = new TextBlock { Text = "Dock here", Foreground = Brushes.White, FontWeight = FontWeight.SemiBold, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
+        dropPreview.Child = new TextBlock { Text = LocalText.T("Dock here"), Foreground = Brushes.White, FontWeight = FontWeight.SemiBold, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
         SetRowSpan(dropOverlay, 3); SetColumnSpan(dropOverlay, 3); dropOverlay.ZIndex = 100; dropOverlay.Children.Add(dropPreview); Children.Add(dropOverlay);
         owner.Closing += (_, e) => { if (e.Cancel) return; Save(); shuttingDown = true; };
         owner.Closed += (_, _) => { foreach (var p in panes) p.EditorWindow?.Close(); };
@@ -83,14 +83,14 @@ public sealed class DockWorkspace : Grid
         var p = new Pane(title, content, side, size); panes.Add(p); p.Frame.SetResource(Border.BackgroundProperty, "Theme1C2028");
         var body = new DockPanel(); p.Frame.Child = null;
         var header = new Border { Background = Line, Padding = new(7, 4, 7, 4), Cursor = EditorCursors.SizeAll };
-        header.SetTip("Drag to dock or float; right-click for panel positions.");
+        ToolTip.SetTip(header, LocalText.T("Drag to dock or float; right-click for panel positions."));
         header.SetResource(Border.BackgroundProperty, "Theme3B4555");
-        header.Child = new TextBlock { Text = "\u283F  " + title, FontSize = 11, TextTrimming = TextTrimming.CharacterEllipsis };
+        header.Child = new TextBlock { Text = string.Concat(("\u283F  "), LocalText.T(title)), FontSize = 11, TextTrimming = TextTrimming.CharacterEllipsis };
         ((TextBlock)header.Child).SetResource(TextBlock.ForegroundProperty, "ThemeE5E9F0");
         var menu = new ContextMenu();
-        foreach (Dock d in Enum.GetValues<Dock>()) { var item = new MenuItem { Header = "Dock " + d }; item.Click += (_, _) => Move(p, d); menu.Items.Add(item); }
-        var floating = new MenuItem { Header = "Float EditorWindow" }; floating.Click += (_, _) => Float(p); menu.Items.Add(floating); header.ContextMenu = menu;
-        var hide = new MenuItem { Header = "Hide Section" }; hide.Click += (_, _) => SetVisible(p, false); menu.Items.Add(hide);
+        foreach (Dock d in Enum.GetValues<Dock>()) { var item = new MenuItem { Header = string.Concat(LocalText.T("Dock "), LocalText.T(d.ToString()))}; item.Click += (_, _) => Move(p, d); menu.Items.Add(item); }
+        var floating = new MenuItem { Header = LocalText.T("Float EditorWindow")}; floating.Click += (_, _) => Float(p); menu.Items.Add(floating); header.ContextMenu = menu;
+        var hide = new MenuItem { Header = LocalText.T("Hide Section")}; hide.Click += (_, _) => SetVisible(p, false); menu.Items.Add(hide);
         Point start = default; bool pressed = false, moved = false; IPointer? dragPointer = null;
         owner.AddHandler(KeyDownEvent, (_, e) =>
         {
@@ -151,7 +151,7 @@ public sealed class DockWorkspace : Grid
         if (IsLayoutLocked && saved is null) return;
         if (p.EditorWindow is not null) { p.EditorWindow.Activate(); return; }
         Detach(p); p.Visible = true;
-        var w = new EditorWindow { Title = p.Title + " \u2014 Crystal Studio", Owner = owner, Content = p.Frame, Background = Surface, Foreground = owner.Foreground, FontFamily = owner.FontFamily, Width = saved?.Width ?? 380, Height = saved?.Height ?? 450, MinWidth = 180, MinHeight = 120, ShowInTaskbar = false };
+        var w = new EditorWindow { Title = string.Concat(LocalText.T(p.Title), LocalText.T(" \u2014 Crystal Studio")), Owner = owner, Content = p.Frame, Background = Surface, Foreground = owner.Foreground, FontFamily = owner.FontFamily, Width = saved?.Width ?? 380, Height = saved?.Height ?? 450, MinWidth = 180, MinHeight = 120, ShowInTaskbar = false };
         w.SetResource(EditorWindow.BackgroundProperty, "Theme1C2028"); w.SetResource(EditorWindow.ForegroundProperty, "ThemeE5E9F0");
         p.EditorWindow = w;
         if (saved is not null && double.IsFinite(saved.Left) && double.IsFinite(saved.Top))
@@ -177,7 +177,7 @@ public sealed class DockWorkspace : Grid
             if (sectionItems.TryGetValue(p.Title, out var item)) { item.IsChecked = p.Visible; item.IsEnabled = !IsLayoutLocked; }
             var header = (Border)((DockPanel)p.Frame.Child).Children[0];
             header.Cursor = IsLayoutLocked ? EditorCursors.Arrow : EditorCursors.SizeAll;
-            header.SetTip(IsLayoutLocked ? "Panel Layout Is Locked. Unlock It in the View Menu." : "Drag to a Workspace Edge to Dock, or Outside to Float. Right-Click for Panel Positions.");
+            ToolTip.SetTip(header, (IsLayoutLocked ? LocalText.T("Panel Layout Is Locked. Unlock It in the View Menu.") : LocalText.T("Drag to a Workspace Edge to Dock, or Outside to Float. Right-Click for Panel Positions.")));
             foreach (var action in header.ContextMenu.Items.OfType<MenuItem>()) action.IsEnabled = !IsLayoutLocked;
             if (p.EditorWindow is { } window)
             {
@@ -274,7 +274,7 @@ public sealed class DockWorkspace : Grid
     private void AddSectionItem(Pane p)
     {
         if (sectionsMenu is null || sectionItems.ContainsKey(p.Title)) return;
-        var item = new MenuItem { Header = p.Title, ToggleType = MenuItemToggleType.CheckBox, IsChecked = p.Visible, StaysOpenOnClick = true };
+        var item = new MenuItem { Header = LocalText.T(p.Title), ToggleType = MenuItemToggleType.CheckBox, IsChecked = p.Visible, StaysOpenOnClick = true };
         item.Click += (_, _) => SetVisible(p, item.IsChecked);
         sectionItems[p.Title] = item; sectionsMenu.Items.Add(item);
     }
@@ -321,7 +321,7 @@ public sealed class DockWorkspace : Grid
             origin = new Point(side == Dock.Right ? Bounds.Width - width : 0, side == Dock.Bottom ? Bounds.Height - height : 0);
         }
         Canvas.SetLeft(dropPreview, origin.X); Canvas.SetTop(dropPreview, origin.Y); dropPreview.Width = width; dropPreview.Height = height;
-        ((TextBlock)dropPreview.Child).Text = "Dock " + side + (before is null ? "" : " / Before " + before.Title);
+        (((TextBlock)dropPreview.Child)).Text = string.Concat(string.Concat(LocalText.T("Dock "), LocalText.T(side.ToString())), ((before is null ? ("") : string.Concat(LocalText.T(" / Before "), LocalText.T(before.Title)))));
         dropOverlay.IsVisible = true;
     }
     private void Save()

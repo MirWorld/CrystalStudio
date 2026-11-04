@@ -24,7 +24,7 @@ public sealed class MapMinimap : SceneControl
     public MapMinimap()
     {
         Focusable = true; ClipToBounds = true; Cursor = EditorCursors.Hand;
-        this.SetTip("Click to centre the map; drag the viewport rectangle to pan. Mouse wheel zooms.");
+        ToolTip.SetTip(this, LocalText.T("Click to centre the map; drag the viewport rectangle to pan. Mouse wheel zooms."));
         Loaded += (_, _) => { Attach(); InvalidateVisual(); };
         Unloaded += (_, _) => { StopNavigation(); Detach(); };
     }

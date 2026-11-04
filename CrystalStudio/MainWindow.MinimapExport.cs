@@ -28,9 +28,9 @@ public partial class MainWindow
         var exportAssets = assets;
         await Run(async () =>
         {
-            Status.Text = "Exporting minimap…";
+            Status.Text = LocalText.T("Exporting minimap…");
             await Task.Run(() => MinimapExporter.ExportAsync(document, exportAssets, picker.FileName));
-            Status.Text = $"Exported {Path.GetFileName(picker.FileName)} • {document.Width * 12} × {document.Height * 8} pixels";
+            Status.Text = LocalText.Format("Exported {0} • {1} × {2} pixels",Path.GetFileName(picker.FileName),document.Width * 12,document.Height * 8);
         });
     }
 }

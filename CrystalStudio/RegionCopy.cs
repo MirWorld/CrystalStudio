@@ -102,23 +102,23 @@ public sealed partial class MapViewport
     public void CutSelection() => CaptureSelection(true);
     private void CaptureSelection(bool cut)
     {
-        if (Selection is not Rect r) { Message?.Invoke("Select a region with M first"); return; }
-        if (!VisibleLayers.Any(v => v) && !CollisionVisible) { Message?.Invoke("Show at least one layer to copy"); return; }
+        if (Selection is not Rect r) { Message?.Invoke(LocalText.T("Select a region with M first")); return; }
+        if (!VisibleLayers.Any(v => v) && !CollisionVisible) { Message?.Invoke(LocalText.T("Show at least one layer to copy")); return; }
         copiedRegion = new(Document, (int)r.X, (int)r.Y, (int)r.Width, (int)r.Height, VisibleLayers[0], VisibleLayers[1], VisibleLayers[2], LowCollisionVisible, HighCollisionVisible);
         if (cut) { CancelPickup(); copiedRegion.CutSource(Document, History, InvalidateCell); }
-        CancelPaste(); Changed?.Invoke(); Message?.Invoke($"{(cut ? "Cut" : "Copied")} {(int)r.Width} × {(int)r.Height} cells from visible layers");
+        CancelPaste(); Changed?.Invoke(); Message?.Invoke(LocalText.Format("{0} {1} × {2} cells from visible layers",LocalText.T(cut ? "Cut" : "Copied"),(int)r.Width,(int)r.Height));
     }
     public void BeginPaste()
     {
-        if (copiedRegion == null) { Message?.Invoke("Copy a selected region first (Ctrl+C)"); return; }
-        CancelPickup(); Deselect(); PastingRegion = true; InvalidateVisual(); Message?.Invoke("Click to paste region · Escape to cancel");
+        if (copiedRegion == null) { Message?.Invoke(LocalText.T("Copy a selected region first (Ctrl+C)")); return; }
+        CancelPickup(); Deselect(); PastingRegion = true; InvalidateVisual(); Message?.Invoke(LocalText.T("Click to paste region · Escape to cancel"));
     }
     private void PlaceRegion()
     {
         if (copiedRegion == null) return;
         var (x, y) = copiedRegion.Anchor(hover.X, hover.Y);
-        if (!copiedRegion.Paste(Document, History, x, y, InvalidateCell)) { Message?.Invoke("Region extends outside the map"); return; }
-        Selection = Tool == EditorTool.Select ? new Rect(x, y, copiedRegion.Width, copiedRegion.Height) : null; CancelPaste(); Changed?.Invoke(); Message?.Invoke("Region pasted · Ctrl+V to paste again");
+        if (!copiedRegion.Paste(Document, History, x, y, InvalidateCell)) { Message?.Invoke(LocalText.T("Region extends outside the map")); return; }
+        Selection = Tool == EditorTool.Select ? new Rect(x, y, copiedRegion.Width, copiedRegion.Height) : null; CancelPaste(); Changed?.Invoke(); Message?.Invoke(LocalText.T("Region pasted · Ctrl+V to paste again"));
     }
     private void DrawRegionPreview(SceneContext dc)
     {

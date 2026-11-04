@@ -38,7 +38,7 @@ public partial class MainWindow
             LayerList.SelectedIndex = (int)MapLayer.Objects;
             ObjectsVisible.IsChecked = true;
             SetTool(EditorTool.Wall);
-            Status.Text = $"Wall · {dialog.SelectedFamily.DisplayName} · Click or drag to connect sections";
+            Status.Text = LocalText.Format("Wall · {0} · Click or drag to connect sections",dialog.SelectedFamily.DisplayName);
             Viewport.Focus();
         }
         finally { wallBrushWindow = null; }

@@ -69,17 +69,15 @@
 
 <SolidColorBrush x:Key="Panel" Color="#1C2028" /><SolidColorBrush x:Key="Muted" Color="#929CAB" /><SolidColorBrush x:Key="Accent" Color="#8498FF" /><SolidColorBrush x:Key="Line" Color="#303640" />
 <ResourceDictionary.MergedDictionaries><ResourceInclude Source="/EditorControls.axaml"/></ResourceDictionary.MergedDictionaries>
-<TreeDataTemplate x:Key="StampCategoryTemplate" ItemsSource="{Binding Children}">
-    <Grid Margin="0,3" ToolTip.Tip="{Binding Description}"><Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
-      <Image local:CategoryPreviewVisibility.Track="True" IsVisible="{Binding HasStamp}" Width="52" Height="38" Margin="0,0,7,0" Stretch="Uniform" Source="{Binding Bitmap}" RenderOptions.BitmapInterpolationMode="None">
-        </Image>
-      <StackPanel Grid.Column="1" VerticalAlignment="Center">
-        <TextBlock Text="{Binding Label}" FontSize="11" TextTrimming="CharacterEllipsis" />
-        <TextBlock Text="{Binding Detail}" IsVisible="{Binding HasStamp}" FontSize="10" Foreground="{DynamicResource Muted}" TextTrimming="CharacterEllipsis">
-          </TextBlock>
-      </StackPanel>
-    </Grid>
-  </TreeDataTemplate>
+<DataTemplate x:Key="StampCategoryCardTemplate">
+  <StackPanel ToolTip.ShowDelay="250">
+    <ToolTip.Tip><TextBlock Text="{Binding Description}" MaxWidth="360" TextWrapping="Wrap"/></ToolTip.Tip>
+    <Border Height="78" Background="{DynamicResource Theme151B24}" CornerRadius="4">
+      <Image local:CategoryPreviewVisibility.Track="True" Stretch="Uniform" Source="{Binding Bitmap}" Margin="4" RenderOptions.BitmapInterpolationMode="None"/>
+    </Border>
+    <TextBlock Text="{Binding ShortLabel}" TextTrimming="CharacterEllipsis" TextAlignment="Center" FontSize="10" Margin="1,5,1,1"/>
+  </StackPanel>
+</DataTemplate>
 </ResourceDictionary></Application.Resources>
 <Application.Styles><FluentTheme/>
 <Style Selector="Window"><Setter Property="Background" Value="{DynamicResource Theme14171D}"/><Setter Property="Foreground" Value="{DynamicResource ThemeE5E9F0}"/><Setter Property="FontFamily" Value="Segoe UI, Microsoft YaHei, sans-serif"/><Setter Property="FontSize" Value="12"/></Style>

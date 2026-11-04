@@ -85,17 +85,17 @@ public partial class SpecialBrushWindow : EditorWindow
         selectedPaths.Clear();
         foreach (string path in state.SelectedPaths ?? state.Variants.Select(t => t.Path).ToArray()) selectedPaths.Add(path);
         curated.Clear(); foreach (var source in state.List) curated.Add(source);
-        TreeList.ItemsSource = null; TypeList.ItemsSource = null;
+        TreeList.ItemsSource = null; TypeList.ItemsSource = null; TypeList.ItemTemplate = LocalText.ChoiceTemplate;
         SizeSlider.Value = Math.Clamp(state.Size | 1, 3, 31); DensitySlider.Value = Options.Density; SpacingSlider.Value = Options.Spacing;
         PaintSourceList.SelectedIndex = Options.UseCuratedList ? 1 : Options.RandomFromType ? 0 : 2;
         ListNameBox.Text = state.ListName; SearchBox.Text = state.Search;
         string plural = System.Globalization.CultureInfo.InvariantCulture.TextInfo.ToTitleCase(kind.Plural());
-        TypeLabel.Text = kind + " Type"; TypeList.SetTip(TypeLabel.Text);
-        BrowseLabel.Text = "Browse " + plural; CuratedLabel.Text = "My " + kind + " List";
-        SearchBox.Tag = "Search " + plural + "\u2026";
-        ((ComboBoxItem)PaintSourceList.Items[0]).Content = "Random " + plural + " from This Type";
-        ((ComboBoxItem)PaintSourceList.Items[1]).Content = CuratedLabel.Text;
-        ((ComboBoxItem)PaintSourceList.Items[2]).Content = "Selected " + plural;
+        TypeLabel.Text = string.Concat(LocalText.T(kind.ToString()), LocalText.T(" Type")); ToolTip.SetTip(TypeList, LocalText.Format("{0} Type", LocalText.T(kind.ToString())));
+        BrowseLabel.Text = string.Concat(LocalText.T("Browse "), LocalText.T(plural)); CuratedLabel.Text = string.Concat(string.Concat(LocalText.T("My "), LocalText.T(kind.ToString())), LocalText.T(" List"));
+        (SearchBox).Tag = LocalText.Format("Search {0}…", LocalText.T(plural));
+        (((ComboBoxItem)PaintSourceList.Items[0])).Content = string.Concat(string.Concat(LocalText.T("Random "), LocalText.T(plural)), LocalText.T(" from This Type"));
+        (((ComboBoxItem)PaintSourceList.Items[1])).Content = LocalText.Format("My {0} List", LocalText.T(kind.ToString()));
+        (((ComboBoxItem)PaintSourceList.Items[2])).Content = string.Concat(LocalText.T("Selected "), LocalText.T(plural));
         Avalonia.Automation.AutomationProperties.SetName(TreeList, kind + " Variants");
         Avalonia.Automation.AutomationProperties.SetName(CuratedList, "My Curated " + plural);
         Avalonia.Automation.AutomationProperties.SetName(TreePreviewImage, "Selected " + kind + " Preview");
@@ -104,11 +104,11 @@ public partial class SpecialBrushWindow : EditorWindow
         Avalonia.Automation.AutomationProperties.SetName(SizeSlider, kind + " Brush Size");
         Avalonia.Automation.AutomationProperties.SetName(DensitySlider, kind + " Density");
         Avalonia.Automation.AutomationProperties.SetName(SpacingSlider, kind + " Spacing");
-        TreeList.SetTip("Double-Click to Add a " + kind + ". Ctrl-Click to Select Several.");
-        AddTypeButton.SetTip("Add All " + plural + " of This Type");
-        RemoveTreesButton.SetTip("Remove Selected " + plural); ClearTreesButton.SetTip("Clear My " + kind + " List");
+        ToolTip.SetTip(TreeList, string.Concat(string.Concat(LocalText.T("Double-Click to Add a "), LocalText.T(kind.ToString())), LocalText.T(". Ctrl-Click to Select Several.")));
+        ToolTip.SetTip(AddTypeButton, string.Concat(string.Concat(LocalText.T("Add All "), LocalText.T(plural)), LocalText.T(" of This Type")));
+        ToolTip.SetTip(RemoveTreesButton, string.Concat(LocalText.T("Remove Selected "), LocalText.T(plural))); ToolTip.SetTip(ClearTreesButton, string.Concat(string.Concat(LocalText.T("Clear My "), LocalText.T(kind.ToString())), LocalText.T(" List")));
         ListStatusLabel.IsVisible = ErrorLabel.IsVisible = false;
-        ApplyButton.Content = "Use " + kind + " Brush";
+        ApplyButton.Content = string.Concat(string.Concat(LocalText.T("Use "), LocalText.T(kind.ToString())), LocalText.T(" Brush"));
         filtering = false; ready = true; ShowTreePreview(null); RefreshTypes(); UpdateOptionLabels();
     }
 
@@ -174,7 +174,7 @@ public partial class SpecialBrushWindow : EditorWindow
         TreeList.ItemsSource = filtered;
         foreach (var source in filtered.Where(s => selectedPaths.Contains(s.Path))) TreeList.SelectedItems.Add(source);
         if (selectedPaths.Count == 0 && filtered.Count > 0) { TreeList.SelectedItem = filtered[0]; selectedPaths.Add(filtered[0].Path); }
-        EmptyLabel.Text = sources.Count == 0 ? $"No {Kind.Plural()} available. Load a {Kind.Singular()} list." : $"No {Kind.Plural()} match this filter.";
+        EmptyLabel.Text = (sources.Count == 0 ? LocalText.Format("No {0} available. Load a {1} list.",LocalText.T(Kind.Plural()),LocalText.T(Kind.Singular())) : LocalText.Format("No {0} match this filter.",LocalText.T(Kind.Plural())));
         EmptyLabel.IsVisible = filtered.Count == 0 ? true : false;
         filtering = false; UpdateSelection(); ShowTreePreview(TreeList.SelectedItem as TreeBrushSource);
     }
@@ -197,7 +197,7 @@ public partial class SpecialBrushWindow : EditorWindow
     private void UpdateSelection()
     {
         int count = SourcesForBrush().Count();
-        SelectionLabel.Text = PaintSourceList.SelectedIndex == 1 ? $"{count} {Kind.Plural()} in {TreeListName}" : $"{count} {Kind.Plural()} to paint";
+        SelectionLabel.Text = (PaintSourceList.SelectedIndex == 1 ? LocalText.Format("{0} {1} in {2}",count,LocalText.T(Kind.Plural()),TreeListName) : LocalText.Format("{0} {1} to paint",count,LocalText.T(Kind.Plural())));
         ApplyButton.IsEnabled = !applying && assets != null && count > 0;
         AddTreesButton.IsEnabled = TreeList.SelectedItems.Count > 0;
         AddTypeButton.IsEnabled = SourcesForType().Any();
@@ -248,10 +248,10 @@ public partial class SpecialBrushWindow : EditorWindow
         if (previewSource != null) previewSource.Preview.PropertyChanged -= PreviewChanged;
         previewSource = source; previewCells = null;
         int version = ++previewVersion;
-        SelectedTreeName.Text = source?.Name ?? "Select a " + Kind;
-        SelectedTreeType.Text = source?.Type ?? "";
+        SelectedTreeName.Text = (source?.Name ?? string.Concat(LocalText.T("Select a "), LocalText.T(Kind.ToString())));
+        SelectedTreeType.Text = LocalText.T(source?.Type ?? "");
         TreePreviewImage.Source = null;
-        PreviewPlaceholder.Text = source == null ? "Select a " + Kind : "Loading Preview\u2026";
+        PreviewPlaceholder.Text = (source == null ? string.Concat(LocalText.T("Select a "), LocalText.T(Kind.ToString())) : LocalText.T("Loading Preview\u2026"));
         PreviewPlaceholder.IsVisible = true;
         if (source == null) return;
         source.Preview.PropertyChanged += PreviewChanged;
@@ -267,7 +267,7 @@ public partial class SpecialBrushWindow : EditorWindow
         {
             if (closed || version != previewVersion) return;
             UpdateTreePreview();
-            PreviewPlaceholder.Text = "Preview Unavailable";
+            PreviewPlaceholder.Text = LocalText.T("Preview Unavailable");
         }
     }
 
@@ -307,7 +307,7 @@ public partial class SpecialBrushWindow : EditorWindow
         }
         TreePreviewImage.Source = bitmap;
         PreviewPlaceholder.IsVisible = bitmap == null ? true : false;
-        if (bitmap == null && previewCells != null && !canRender) PreviewPlaceholder.Text = "Preview Unavailable";
+        if (bitmap == null && previewCells != null && !canRender) PreviewPlaceholder.Text = LocalText.T("Preview Unavailable");
     }
 
     private static BrushTree LoadTree(TreeBrushSource source, AssetStore? store = null) =>
@@ -316,7 +316,7 @@ public partial class SpecialBrushWindow : EditorWindow
     private void SetWorking(bool working, string? label = null)
     {
         applying = working; TreeSettings.IsEnabled = BrushTypeList.IsEnabled = !working;
-        ApplyButton.Content = label ?? "Use " + Kind + " Brush"; UpdateSelection();
+        ApplyButton.Content = (label ?? string.Concat(string.Concat(LocalText.T("Use "), LocalText.T(Kind.ToString())), LocalText.T(" Brush"))); UpdateSelection();
     }
 
     private async void SaveTreeListClick(object sender, RoutedEventArgs e)
@@ -334,7 +334,7 @@ public partial class SpecialBrushWindow : EditorWindow
                 var entries = trees.Select(s => TreeBrushList.Entry(s.Name, s.Type, LoadTree(s).Cells)).DistinctBy(s => s.Id).ToArray();
                 SpecialBrushList.Save(picker.FileName, Kind, name, entries); return entries.Length;
             });
-            ListStatusLabel.Text = $"Saved {name} \u00b7 {count} {Kind.Plural()}";
+            ListStatusLabel.Text = LocalText.Format("Saved {0} · {1} {2}",name,count,LocalText.T(Kind.Plural()));
             ListStatusLabel.IsVisible = true;
         }
         catch (Exception ex) { ShowError(ex.Message); }
@@ -352,7 +352,7 @@ public partial class SpecialBrushWindow : EditorWindow
             if (!sources.Any(s => string.Equals(s.Path, source.Path, StringComparison.OrdinalIgnoreCase))) sources.Add(source);
         }
         ListNameBox.Text = document.Name; PaintSourceList.SelectedIndex = 1; RefreshTypes();
-        ListStatusLabel.Text = $"Loaded {document.Name} \u00b7 {entries.Length} {Kind.Plural()}";
+        ListStatusLabel.Text = LocalText.Format("Loaded {0} · {1} {2}",document.Name,entries.Length,LocalText.T(Kind.Plural()));
         ListStatusLabel.IsVisible = true;
     }
 
@@ -371,11 +371,11 @@ public partial class SpecialBrushWindow : EditorWindow
     private void OptionsChanged(object sender, RangeBaseValueChangedEventArgs e) { if (ready) UpdateOptionLabels(); }
     private void UpdateOptionLabels()
     {
-        SizeLabel.Text = $"{BrushSize} \u00d7 {BrushSize} cells"; DensityLabel.Text = $"{DensitySlider.Value:0}%";
-        SpacingLabel.Text = $"{SpacingSlider.Value:0} cells";
+        SizeLabel.Text = LocalText.Format("{0} × {1} cells",BrushSize,BrushSize); DensityLabel.Text = ($"{DensitySlider.Value:0}%");
+        SpacingLabel.Text = LocalText.Format("{0:0} cells",SpacingSlider.Value);
     }
 
-    private void ShowError(string message) { ErrorLabel.Text = message; ErrorLabel.IsVisible = true; }
+    private void ShowError(string message) { ErrorLabel.Text = LocalText.T(message); ErrorLabel.IsVisible = true; }
     private async void ApplyClick(object sender, RoutedEventArgs e)
     {
         var selected = SourcesForBrush().ToArray();

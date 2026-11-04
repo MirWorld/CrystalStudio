@@ -24,7 +24,7 @@ public partial class MainWindow
             ObjectsVisible.IsChecked = true;
             BrushSize.Value = dialog.BrushSize;
             SetTool(EditorTool.SpecialBrush);
-            Status.Text = $"Special Brush · {dialog.Kind.BrushName()} · {dialog.Trees.Count} variant(s) · {dialog.Options.Density}% density · Click or drag to place";
+            Status.Text = LocalText.Format("Special Brush · {0} · {1} variant(s) · {2}% density · Click or drag to place",dialog.Kind.BrushName(),dialog.Trees.Count,dialog.Options.Density);
             if (dialog.UnavailableTrees > 0) Status.Text += $" · {dialog.UnavailableTrees} unavailable variants skipped";
             Viewport.Focus();
         }

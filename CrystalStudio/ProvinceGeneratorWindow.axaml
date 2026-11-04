@@ -1,47 +1,47 @@
-<local:EditorWindow xmlns="https://github.com/avaloniaui" xmlns:local="clr-namespace:CrystalStudio" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" x:Class="CrystalStudio.ProvinceGeneratorWindow" Title="Province Generator" Width="1100" Height="780" MinWidth="850" MinHeight="650" WindowStartupLocation="CenterOwner" ShowInTaskbar="False" Background="{DynamicResource Theme14171D}" Foreground="{DynamicResource ThemeE5E9F0}">
+<local:EditorWindow xmlns="https://github.com/avaloniaui" xmlns:local="clr-namespace:CrystalStudio" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" x:Class="CrystalStudio.ProvinceGeneratorWindow" Title="{local:Loc ProvinceGenerator_F8D5F7AB}" Width="1100" Height="780" MinWidth="850" MinHeight="650" WindowStartupLocation="CenterOwner" ShowInTaskbar="False" Background="{DynamicResource Theme14171D}" Foreground="{DynamicResource ThemeE5E9F0}">
     <Grid Margin="20">
         <Grid.ColumnDefinitions><ColumnDefinition Width="265" /><ColumnDefinition Width="20" /><ColumnDefinition /></Grid.ColumnDefinitions>
         <Grid.RowDefinitions><RowDefinition /><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
         <Grid><Grid.RowDefinitions><RowDefinition /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
         <ScrollViewer VerticalScrollBarVisibility="Auto"><StackPanel>
-            <TextBlock Text="Outdoor Province" FontSize="20" FontWeight="SemiBold" />
-            <TextBlock Text="Landscape Style" />
-            <ComboBox x:Name="StyleList" SelectionChanged="SettingsChanged" Margin="0,6,0,18" AutomationProperties.Name="Province Landscape Style" />
-            <TextBlock Text="Chance per Generated Map" FontWeight="SemiBold" Margin="0,0,0,12" />
-            <TextBlock><Run Text="Wider Border · " /><Run Text="{Binding ElementName=ForestSlider, Path=Value, StringFormat={}{0:0}%}" /></TextBlock>
-            <Slider x:Name="ForestSlider" Minimum="0" Maximum="100" TickFrequency="1" IsSnapToTickEnabled="True" Value="85" ValueChanged="SettingsChanged" Margin="0,4,0,12" AutomationProperties.Name="Wider Border Chance" ToolTip.Tip="Woodland in Bichon; Rocky Cover in Desert Styles" />
-            <TextBlock><Run Text="Cliff Border · " /><Run Text="{Binding ElementName=CliffSlider, Path=Value, StringFormat={}{0:0}%}" /></TextBlock>
-            <Slider x:Name="CliffSlider" Minimum="0" Maximum="100" TickFrequency="1" IsSnapToTickEnabled="True" Value="70" ValueChanged="SettingsChanged" Margin="0,4,0,12" AutomationProperties.Name="Cliff Border Chance" ToolTip.Tip="Cliffs Can Span One, Two, Three or All Four Sides, Joining Around Corners. Beaches and River Mouths Can Create Openings." />
-            <TextBlock><Run Text="Amount of doors · " /><Run Text="{Binding ElementName=DoorCountSlider, Path=Value, StringFormat={}{0:0}}" /></TextBlock>
-            <Slider x:Name="DoorCountSlider" Minimum="0" Maximum="32" Value="0" TickFrequency="1" IsSnapToTickEnabled="True" ValueChanged="SettingsChanged" Margin="0,4,0,6" AutomationProperties.Name="Amount of doors" />
+            <TextBlock Text="{local:Loc OutdoorProvince_EB80CC30}" FontSize="20" FontWeight="SemiBold" />
+            <TextBlock Text="{local:Loc LandscapeStyle_95397827}" />
+            <ComboBox x:Name="StyleList" SelectionChanged="SettingsChanged" Margin="0,6,0,18" AutomationProperties.Name="{local:Loc ProvinceLandscapeStyle_84104B72}" />
+            <TextBlock Text="{local:Loc ChanceperGeneratedMap_482493D3}" FontWeight="SemiBold" Margin="0,0,0,12" />
+            <TextBlock><Run Text="{local:Loc WiderBorder_538E1AA9}" /><Run Text="{Binding ElementName=ForestSlider, Path=Value, StringFormat={}{0:0}%}" /></TextBlock>
+            <Slider x:Name="ForestSlider" Minimum="0" Maximum="100" TickFrequency="1" IsSnapToTickEnabled="True" Value="85" ValueChanged="SettingsChanged" Margin="0,4,0,12" AutomationProperties.Name="{local:Loc WiderBorderChance_7AAAA257}" ToolTip.Tip="{local:Loc WoodlandinBichonRockyCoverinDesertStyles_3B279EE4}" />
+            <TextBlock><Run Text="{local:Loc CliffBorder_C96CCF14}" /><Run Text="{Binding ElementName=CliffSlider, Path=Value, StringFormat={}{0:0}%}" /></TextBlock>
+            <Slider x:Name="CliffSlider" Minimum="0" Maximum="100" TickFrequency="1" IsSnapToTickEnabled="True" Value="70" ValueChanged="SettingsChanged" Margin="0,4,0,12" AutomationProperties.Name="{local:Loc CliffBorderChance_0266F4BE}" ToolTip.Tip="{local:Loc CliffsCanSpanOneTwoThreeorAllFourSidesJoiningAroundCornersBeaches_0E08F56C}" />
+            <TextBlock><Run Text="{local:Loc Amountofdoors_7B539A2E}" /><Run Text="{Binding ElementName=DoorCountSlider, Path=Value, StringFormat={}{0:0}}" /></TextBlock>
+            <Slider x:Name="DoorCountSlider" Minimum="0" Maximum="32" Value="0" TickFrequency="1" IsSnapToTickEnabled="True" ValueChanged="SettingsChanged" Margin="0,4,0,6" AutomationProperties.Name="{local:Loc Amountofdoors_DC5C3D82}" />
             <TextBlock x:Name="DoorHint" TextWrapping="Wrap" Foreground="{DynamicResource Muted}" Margin="0,0,0,12" />
-            <TextBlock><Run Text="Beach · " /><Run Text="{Binding ElementName=BeachSlider, Path=Value, StringFormat={}{0:0}%}" /></TextBlock>
-            <Slider x:Name="BeachSlider" Minimum="0" Maximum="100" TickFrequency="1" IsSnapToTickEnabled="True" Value="35" ValueChanged="SettingsChanged" Margin="0,4,0,12" AutomationProperties.Name="Beach Chance" />
-            <TextBlock><Run Text="River · " /><Run Text="{Binding ElementName=RiverSlider, Path=Value, StringFormat={}{0:0}%}" /></TextBlock>
-            <Slider x:Name="RiverSlider" Minimum="0" Maximum="100" TickFrequency="1" IsSnapToTickEnabled="True" Value="55" ValueChanged="SettingsChanged" Margin="0,4,0,12" AutomationProperties.Name="River Chance" />
-            <TextBlock Text="Interior Vegetation" />
-            <Slider x:Name="VegetationSlider" Minimum="0" Maximum="100" TickFrequency="1" IsSnapToTickEnabled="True" Value="55" ValueChanged="SettingsChanged" Margin="0,4,0,18" AutomationProperties.Name="Interior Vegetation" />
-            <TextBlock><Run Text="Town Count · " /><Run Text="{Binding ElementName=TownCountSlider, Path=Value, StringFormat={}{0:0}}" /></TextBlock>
-            <Slider x:Name="TownCountSlider" Minimum="0" Maximum="8" TickFrequency="1" IsSnapToTickEnabled="True" Value="0" ValueChanged="SettingsChanged" Margin="0,4,0,12" AutomationProperties.Name="Town Count" ToolTip.Tip="Fit Towns to Dry Clearings and Connect Their Streets. Crowded Maps May Fit Fewer Towns." />
+            <TextBlock><Run Text="{local:Loc Beach_69FF7B88}" /><Run Text="{Binding ElementName=BeachSlider, Path=Value, StringFormat={}{0:0}%}" /></TextBlock>
+            <Slider x:Name="BeachSlider" Minimum="0" Maximum="100" TickFrequency="1" IsSnapToTickEnabled="True" Value="35" ValueChanged="SettingsChanged" Margin="0,4,0,12" AutomationProperties.Name="{local:Loc BeachChance_2F7DB4BE}" />
+            <TextBlock><Run Text="{local:Loc River_C9BB8AF8}" /><Run Text="{Binding ElementName=RiverSlider, Path=Value, StringFormat={}{0:0}%}" /></TextBlock>
+            <Slider x:Name="RiverSlider" Minimum="0" Maximum="100" TickFrequency="1" IsSnapToTickEnabled="True" Value="55" ValueChanged="SettingsChanged" Margin="0,4,0,12" AutomationProperties.Name="{local:Loc RiverChance_2F2A954A}" />
+            <TextBlock Text="{local:Loc InteriorVegetation_B15DE6A3}" />
+            <Slider x:Name="VegetationSlider" Minimum="0" Maximum="100" TickFrequency="1" IsSnapToTickEnabled="True" Value="55" ValueChanged="SettingsChanged" Margin="0,4,0,18" AutomationProperties.Name="{local:Loc InteriorVegetation_B15DE6A3}" />
+            <TextBlock><Run Text="{local:Loc TownCount_9041BBE0}" /><Run Text="{Binding ElementName=TownCountSlider, Path=Value, StringFormat={}{0:0}}" /></TextBlock>
+            <Slider x:Name="TownCountSlider" Minimum="0" Maximum="8" TickFrequency="1" IsSnapToTickEnabled="True" Value="0" ValueChanged="SettingsChanged" Margin="0,4,0,12" AutomationProperties.Name="{local:Loc TownCount_5495A825}" ToolTip.Tip="{local:Loc FitTownstoDryClearingsandConnectTheirStreetsCrowdedMapsMayFitFewe_F095EDB3}" />
         </StackPanel></ScrollViewer>
         <StackPanel Grid.Row="1" Margin="0,12,0,0">
-            <TextBlock Text="Seed" />
-            <DockPanel Margin="0,6,0,0"><Button DockPanel.Dock="Right" Content="Shuffle" Click="ShuffleClick" Margin="8,0,0,0" Padding="10,4" ToolTip.Tip="Randomize Only the Seed" /><TextBox x:Name="SeedBox" Text="1" TextChanged="SettingsChanged" AutomationProperties.Name="Province Seed" /></DockPanel>
+            <TextBlock Text="{local:Loc Seed_367EF06B}" />
+            <DockPanel Margin="0,6,0,0"><Button DockPanel.Dock="Right" Content="{local:Loc Shuffle_317CB3A7}" Click="ShuffleClick" Margin="8,0,0,0" Padding="10,4" ToolTip.Tip="{local:Loc RandomizeOnlytheSeed_B0D48D6E}" /><TextBox x:Name="SeedBox" Text="1" TextChanged="SettingsChanged" AutomationProperties.Name="{local:Loc ProvinceSeed_00DB2769}" /></DockPanel>
         </StackPanel></Grid>
         <Border Grid.Column="2" Background="{DynamicResource Theme252C38}" BorderBrush="{DynamicResource Line}" BorderThickness="1" CornerRadius="6" Padding="12">
             <Grid><Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition /></Grid.RowDefinitions>
-                <DockPanel><CheckBox x:Name="DetailToggle" DockPanel.Dock="Right" Content="Centre Detail" IsCheckedChanged="SettingsChanged" Foreground="{DynamicResource ThemeE5E9F0}" /><TextBlock Text="Province Preview" FontWeight="SemiBold" /></DockPanel>
+                <DockPanel><CheckBox x:Name="DetailToggle" DockPanel.Dock="Right" Content="{local:Loc CentreDetail_E3824490}" IsCheckedChanged="SettingsChanged" Foreground="{DynamicResource ThemeE5E9F0}" /><TextBlock Text="{local:Loc ProvincePreview_355E121E}" FontWeight="SemiBold" /></DockPanel>
                 <Image x:Name="PreviewImage" Grid.Row="1" Stretch="Uniform" Margin="0,12,0,0" RenderOptions.BitmapInterpolationMode="None" />
-                <TextBlock x:Name="PreviewHint" Grid.Row="1" Text="Loading Outdoor Artwork…" TextWrapping="Wrap" TextAlignment="Center" VerticalAlignment="Center" HorizontalAlignment="Center" Margin="24" Foreground="{DynamicResource Muted}" />
+                <TextBlock x:Name="PreviewHint" Grid.Row="1" Text="{local:Loc LoadingOutdoorArtwork_A16E8ED6}" TextWrapping="Wrap" TextAlignment="Center" VerticalAlignment="Center" HorizontalAlignment="Center" Margin="24" Foreground="{DynamicResource Muted}" />
             </Grid>
         </Border>
         <StackPanel Grid.Row="1" Grid.ColumnSpan="3" Margin="0,14,0,0">
             <TextBlock x:Name="FeedbackText" TextWrapping="Wrap" Foreground="{DynamicResource Muted}" Margin="0,6,0,0" />
         </StackPanel>
         <DockPanel Grid.Row="2" Grid.ColumnSpan="3" Margin="0,16,0,0" LastChildFill="False">
-            <Button x:Name="ApplyButton" DockPanel.Dock="Right" Content="Replace Map with Province" IsEnabled="False" Click="ApplyClick" Padding="18,7" />
-            <Button DockPanel.Dock="Right" Content="Cancel" IsCancel="True" Margin="0,0,8,0" Padding="18,7" />
-            <Button x:Name="RandomizeButton" DockPanel.Dock="Left" Content="Randomize" IsEnabled="False" Click="RandomizeClick" Padding="18,7" ToolTip.Tip="Randomize the Landscape Style, Feature Chances, Vegetation, Town Count and Seed" />
+            <Button x:Name="ApplyButton" DockPanel.Dock="Right" Content="{local:Loc ReplaceMapwithProvince_12F3C8B2}" IsEnabled="False" Click="ApplyClick" Padding="18,7" />
+            <Button DockPanel.Dock="Right" Content="{local:Loc Cancel_19766ED6}" IsCancel="True" Margin="0,0,8,0" Padding="18,7" />
+            <Button x:Name="RandomizeButton" DockPanel.Dock="Left" Content="{local:Loc Randomize_1F7483C8}" IsEnabled="False" Click="RandomizeClick" Padding="18,7" ToolTip.Tip="{local:Loc RandomizetheLandscapeStyleFeatureChancesVegetationTownCountandSee_147DEBAF}" />
         </DockPanel>
     </Grid>
 </local:EditorWindow>

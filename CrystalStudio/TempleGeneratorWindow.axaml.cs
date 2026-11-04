@@ -35,15 +35,13 @@ public partial class TempleGeneratorWindow : EditorWindow
         if (DoorCountSlider==null || TempleList.SelectedItem is not TempleDefinition temple) return;
         var family=walls.Families.Single(f=>f.Id==temple.WallId);
         DoorCountSlider.IsEnabled=GeneratorEntrances.SupportsDungeon(family);
-        DoorHint.Text=family.Id=="stone-temple" ? "Places spaced stair entrances on clear floor space. 0 = none."
-            : !family.SupportsDoors ? "This style has no matching wall entrance objects."
-            : "Total per dungeon. Random entrances stay apart and clear of corners. Small maps may fit fewer.";
+        DoorHint.Text = (family.Id=="stone-temple" ? LocalText.T("Places spaced stair entrances on clear floor space. 0 = none.") : (!family.SupportsDoors ? LocalText.T("This style has no matching wall entrance objects.") : LocalText.T("Total per dungeon. Random entrances stay apart and clear of corners. Small maps may fit fewer.")));
     }
     private void Schedule()
     {
         if (!ready || closed) return;
         revision++; timer.Stop(); pending?.Cancel(); Plan = null; ApplyButton.IsEnabled = false;
-        PreviewImage.Opacity = .4; PreviewHint.IsVisible = true; PreviewHint.Text = "Updating preview…";
+        PreviewImage.Opacity = .4; PreviewHint.IsVisible = true; PreviewHint.Text = LocalText.T("Updating preview…");
         timer.Start();
     }
     private void ShuffleClick(object sender, RoutedEventArgs e) => SeedBox.Text = Random.Shared.Next(int.MaxValue).ToString();
@@ -61,13 +59,13 @@ public partial class TempleGeneratorWindow : EditorWindow
     {
         timer.Stop();
         if (closed || TempleList.SelectedItem is not TempleDefinition temple) return;
-        if (!int.TryParse(SeedBox.Text, out int seed)) { PreviewHint.Text = FeedbackText.Text = "Enter a whole-number seed."; return; }
+        if (!int.TryParse(SeedBox.Text, out int seed)) { PreviewHint.Text = ((FeedbackText.Text = LocalText.T("Enter a whole-number seed."))); return; }
         int request = revision;
         var options = new TempleOptions(temple, seed, (int)RoomsSlider.Value, (int)SizeSlider.Value, WidthList.SelectedIndex + 1,
             (DungeonType)DungeonTypeList.SelectedItem, DoorCountSlider.IsEnabled ? (int)DoorCountSlider.Value : 0);
         bool detail = DetailToggle.IsChecked == true;
         var job = new CancellationTokenSource(); pending = job;
-        PreviewHint.Text = "Generating dungeon preview…";
+        PreviewHint.Text = LocalText.T("Generating dungeon preview…");
         try
         {
             await worker.WaitAsync(job.Token);
@@ -99,18 +97,12 @@ public partial class TempleGeneratorWindow : EditorWindow
             cached = Plan = plan; PreviewImage.Source = bitmap; PreviewImage.Opacity = 1;
             PreviewHint.IsVisible = false; ApplyButton.IsEnabled = true; RandomizeButton.IsEnabled = true;
             int count = plan.RoomCentres.Count - plan.SideRooms.Count;
-            FeedbackText.Text = (options.RoomSize == 0 ? $"Corridors Only · {count} connected junctions" :
-                options.Type == DungeonType.Cave ? $"Cave · {count} connected cavern pockets" : $"Temple · {plan.RoomCount} connected rooms") +
-                $" · {document.Width}×{document.Height} cells · Seed {seed}" +
-                (count < options.Rooms ? $". Layout limited to {count} to fit this map and native walls." : "") +
-                $" · Entrances {plan.Entrances.Count}/{options.DoorCount}" +
-                (plan.SideRooms.Count > 0 ? $" · {plan.SideRooms.Count} corridor side rooms" : "") +
-                (plan.Entrances.Count<options.DoorCount ? ". Fewer entrances fit with safe spacing." : "");
+            FeedbackText.Text = string.Concat(string.Concat(string.Concat(string.Concat(string.Concat(((options.RoomSize == 0 ? LocalText.Format("Corridors Only · {0} connected junctions",count) : (options.Type == DungeonType.Cave ? LocalText.Format("Cave · {0} connected cavern pockets",count) : LocalText.Format("Temple · {0} connected rooms",plan.RoomCount)))), LocalText.Format(" · {0}×{1} cells · Seed {2}",document.Width,document.Height,seed)), ((count < options.Rooms ? LocalText.Format(". Layout limited to {0} to fit this map and native walls.",count) : ("")))), LocalText.Format(" · Entrances {0}/{1}",plan.Entrances.Count,options.DoorCount)), ((plan.SideRooms.Count > 0 ? LocalText.Format(" · {0} corridor side rooms",plan.SideRooms.Count) : ("")))), ((plan.Entrances.Count<options.DoorCount ? LocalText.T(". Fewer entrances fit with safe spacing.") : (""))));
         }
         catch (OperationCanceledException) { }
         catch (Exception ex)
         {
-            if (!closed && request == revision) { Plan = null; ApplyButton.IsEnabled = false; PreviewImage.Source = null; PreviewHint.Text = "Preview unavailable"; FeedbackText.Text = ex.Message; }
+            if (!closed && request == revision) { Plan = null; ApplyButton.IsEnabled = false; PreviewImage.Source = null; PreviewHint.Text = LocalText.T("Preview unavailable"); FeedbackText.Text = (ex.Message); }
         }
         finally { if (ReferenceEquals(pending, job)) pending = null; job.Dispose(); }
     }

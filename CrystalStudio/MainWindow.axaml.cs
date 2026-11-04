@@ -16,11 +16,19 @@ public sealed class AssetChoice : INotifyPropertyChanged
 
     public string Label { get; init; } = "";
     public string Detail { get; init; } = "";
+    public string DisplayLabel => StampPath != null || Asset?.StampPath != null || Asset is not { Pattern: not TilePatternLayout.None } tile
+        ? Label : LocalText.Format("Set {0}{1}", tile.Index / AutoTileBrush.BlockSize(tile.Pattern), tile.Pattern == TilePatternLayout.Mir3 && tile.Index % 30 == 5 ? " B" : "");
+    public string DisplayDetail => Asset is { StampPath: null } tile && Detail.Length > 0
+        ? LocalText.Format("{0} · Lib {1}", LocalText.T(tile.Layer.ToString()), tile.Library) : LocalText.T(Detail);
+    public string DisplayDescription => Asset is { StampPath: null } tile
+        ? LocalText.Format("{0} {1} · {2} · Library {3}\n{4}", LocalText.T(tile.Pattern == TilePatternLayout.None ? "Sprite" : "Terrain set"), DisplayLabel, LocalText.T(tile.Layer.ToString()), tile.Library, tile.Source)
+            + (Description.EndsWith("Unavailable in the current library folder", StringComparison.Ordinal) ? "\n" + LocalText.T("Unavailable in the current library folder") : "")
+        : Description;
     public bool DetailVisible => Detail.Length == 0 ? false : true;
 
     private string description = "";
 
-    public string Description { get => description; set { description = value; PropertyChanged?.Invoke(this, new(nameof(Description))); } }
+    public string Description { get => description; set { description = value; PropertyChanged?.Invoke(this, new(nameof(Description))); PropertyChanged?.Invoke(this, new(nameof(DisplayDescription))); } }
 
     public string? StampPath { get; init; }
 
@@ -33,7 +41,7 @@ public sealed class AssetChoice : INotifyPropertyChanged
     private bool isFavourite;
     public bool IsFavourite { get => isFavourite; set { isFavourite = value; PropertyChanged?.Invoke(this, new(nameof(PinLabel))); PropertyChanged?.Invoke(this, new(nameof(PinHint))); } }
     public string PinLabel => IsFavourite ? "\u2605" : "\u2606";
-    public string PinHint => IsFavourite ? "Unpin from Favourites" : "Pin to Favourites";
+    public string PinHint => LocalText.T(IsFavourite ? "Unpin from Favourites" : "Pin to Favourites");
     public bool CanPin => Asset?.Valid == true;
 
     private RasterImage? bitmap;
@@ -72,7 +80,7 @@ public partial class MainWindow : EditorWindow
 
     private bool StampMode => Viewport.Tool == EditorTool.Stamp;
 
-    private int PageSize => SavedPalette || StampMode ? 24 : 96;
+    private int PageSize => CategoryPalette ? CategoryPageSize : SavedPalette || StampMode ? 24 : 96;
 
     private int filteredCount;
 
@@ -110,15 +118,16 @@ public partial class MainWindow : EditorWindow
         assetHistory = historyStore;
         recentMaps = recentMapStore ?? new RecentMapStore();
         InitializeComponent(); ThemeService.Initialize(); DarkModeToggle.IsChecked = ThemeService.ForceDark; initialized = true; AssetList.ItemsSource = choices;
+        InitializeLanguageMenu();
 
-        try { assetHistory.Load(); } catch (Exception ex) { Status.Text = $"Could not read saved assets: {ex.Message}"; }
+        try { assetHistory.Load(); } catch (Exception ex) { Status.Text = LocalText.Format("Could not read saved assets: {0}",ex.Message); }
 
         searchDelay.Tick += (_, _) => { searchDelay.Stop(); page = 0; BuildPage(); };
 
         Viewport.Hover += UpdateCellInspector;
         Viewport.Changed += () => UpdateCellInspector(Viewport.HoverCell.X, Viewport.HoverCell.Y);
 
-        Viewport.Changed += UpdateLabels; Viewport.Message += message => Status.Text = message; Viewport.Rendered += (ms, count) => { Performance.Text = $"Prepare {ms:F1} ms \u00b7 Batches {count:N0} \u00b7 Sprite cache {(assets?.Cached ?? 0) + (assets?.OverviewCached ?? 0):N0}"; LibraryStatus.SetTip(Performance.Text); };
+        Viewport.Changed += UpdateLabels; Viewport.Message += message => Status.Text = (message); Viewport.Rendered += (ms, count) => { Performance.Text = LocalText.Format("Prepare {0:F1} ms · Batches {1:N0} · Sprite cache {2:N0}",ms,count,(assets?.Cached ?? 0) + (assets?.OverviewCached ?? 0)); ToolTip.SetTip(LibraryStatus, (Performance.Text)); };
         Viewport.AssetUsed += RememberActiveAsset;
 
         refresh.Tick += (_, _) => { refresh.Stop(); if (Interlocked.Exchange(ref pendingRefresh, 0) == 0 || closed) return; Viewport.RefreshAssets(); RefreshThumbnails(); };
@@ -145,7 +154,7 @@ public partial class MainWindow : EditorWindow
 
                     try { await LoadLibraries(settings.LibraryFolder); }
 
-                    catch (Exception ex) { Status.Text = "Saved Library Folder Unavailable \u2014 Open Settings to Change It"; Status.SetTip(ex.Message); }
+                    catch (Exception ex) { Status.Text = LocalText.T("Saved Library Folder Unavailable \u2014 Open Settings to Change It"); ToolTip.SetTip(Status, (ex.Message)); }
 
                 }
 
@@ -183,36 +192,36 @@ public partial class MainWindow : EditorWindow
         inspectorCell = next;
         if (!Viewport.Document.Contains(x, y))
         {
-            Inspector.Text = "Outside map";
+            Inspector.Text = LocalText.T("Outside map");
             foreach (var row in inspectorRows) row.IsVisible = false;
             InspectorDetails.Tag = null;
-            Coordinates.Text = "\u2014, \u2014";
+            Coordinates.Text = ("\u2014, \u2014");
             return;
         }
-        Coordinates.Text = $"Cell {x:N0}, {y:N0}";
+        Coordinates.Text = LocalText.Format("Cell {0:N0}, {1:N0}",x,y);
         var c = Viewport.Document.Get(x, y);
         string ImageInfo(int library, int image)
         {
-            if (image == 0) return "None";
-            return $"Lib {library} \u00b7 Image {image} / Sprite {image - 1}";
+            if (image == 0) return LocalText.T("None");
+            return LocalText.Format("Lib {0} \u00b7 Image {1} / Sprite {2}", library, image, image - 1);
         }
         string LibraryInfo(int library) => assets?.Libraries.TryGetValue(library, out var atlas) == true
-            ? $"Library {library}: {atlas.Path}" : $"Library {library}: unavailable";
+            ? LocalText.Format("Library {0}: {1}", library, atlas.Path) : LocalText.Format("Library {0}: unavailable", library);
         var groups = new List<(string Title, string Detail, string Hint)>
         {
-            ("Collision", $"Low {((c.BackImage & 0x20000000) != 0 ? "blocked" : "clear")} \u00b7 High {((c.BackImage & 0x40000000) != 0 ? "blocked" : "clear")}", "Low and High Collision Flags"),
+            ("Collision", LocalText.Format("Low {0} \u00b7 High {1}", LocalText.T((c.BackImage & 0x20000000) != 0 ? "blocked" : "clear"), LocalText.T((c.BackImage & 0x40000000) != 0 ? "blocked" : "clear")), "Low and High Collision Flags"),
             ("Ground", ImageInfo(c.BackLibrary, c.BackImage & 0x1FFFFFFF), LibraryInfo(c.BackLibrary)),
-            ("Middle", $"{ImageInfo(c.MiddleLibrary, c.MiddleImage)}\nFrames {c.MiddleFrames} \u00b7 Tick {c.MiddleTick}", LibraryInfo(c.MiddleLibrary))
+            ("Middle", LocalText.Format("{0}\nFrames {1} \u00b7 Tick {2}", ImageInfo(c.MiddleLibrary, c.MiddleImage), c.MiddleFrames, c.MiddleTick), LibraryInfo(c.MiddleLibrary))
         };
-        if (c.ForegroundImages.Count == 0) groups.Add(("Objects", "None", "No Foreground Images"));
+        if (c.ForegroundImages.Count == 0) groups.Add(("Objects", LocalText.T("None"), "No Foreground Images"));
         for (int i = 0; i < c.ForegroundImages.Count; i++)
         {
             var f = c.ForegroundImages[i];
-            groups.Add(($"Object {i + 1}", $"{ImageInfo(f.Library, f.Image & 0x7FFF)}\nFrames {f.Frames} \u00b7 Tick {f.Tick} \u00b7 Flag {((f.Image & 0x8000) != 0 ? "on" : "off")}", LibraryInfo(f.Library)));
+            groups.Add((LocalText.Format("Object {0}", i + 1), LocalText.Format("{0}\nFrames {1} \u00b7 Tick {2} \u00b7 Flag {3}", ImageInfo(f.Library, f.Image & 0x7FFF), f.Frames, f.Tick, LocalText.T((f.Image & 0x8000) != 0 ? "on" : "off")), LibraryInfo(f.Library)));
         }
-        groups.Add(("Metadata", $"Light {c.Light} \u00b7 Door {c.Door} \u00b7 Offset {c.DoorOffset}", "Light Value, Door Index and Door Offset"));
-        groups.Add(("Tile Animation", $"Image {c.TileAnimation} \u00b7 Offset {c.TileOffset} \u00b7 Frames {c.TileFrames}", "Tile Animationation image, offset and frame count"));
-        Inspector.Text = $"Cell {x:N0}, {y:N0} \u00b7 {c.ForegroundImages.Count} {(c.ForegroundImages.Count == 1 ? "object" : "objects")}";
+        groups.Add(("Metadata", LocalText.Format("Light {0} \u00b7 Door {1} \u00b7 Offset {2}", c.Light, c.Door, c.DoorOffset), "Light Value, Door Index and Door Offset"));
+        groups.Add(("Tile Animation", LocalText.Format("Image {0} \u00b7 Offset {1} \u00b7 Frames {2}", c.TileAnimation, c.TileOffset, c.TileFrames), "Tile Animationation image, offset and frame count"));
+        Inspector.Text = LocalText.Format("Cell {0:N0}, {1:N0} · {2} {3}",x,y,c.ForegroundImages.Count,LocalText.T(c.ForegroundImages.Count == 1 ? "object" : "objects"));
         string key = string.Join("\n", groups);
         if (Equals(InspectorDetails.Tag, key)) return;
         InspectorDetails.Tag = key;
@@ -231,9 +240,9 @@ public partial class MainWindow : EditorWindow
             }
             var group = inspectorRows[i];
             var (title, detail, hint) = groups[i];
-            group.IsVisible = true; group.SetTip(hint);
-            ((TextBlock)group.Children[0]).Text = title;
-            ((TextBlock)group.Children[1]).Text = detail;
+            group.IsVisible = true; ToolTip.SetTip(group, LocalText.T(hint));
+            (((TextBlock)group.Children[0])).Text = LocalText.T(title);
+            (((TextBlock)group.Children[1])).Text = (detail);
         }
         for (int i = groups.Count; i < inspectorRows.Count; i++) inspectorRows[i].IsVisible = false;
     }
@@ -377,9 +386,9 @@ public partial class MainWindow : EditorWindow
 
         view.Items.Add(new Separator());
 
-        var reset = new MenuItem { Header = "Reset Panel Layout" };
+        var reset = new MenuItem { Header = LocalText.T("Reset Panel Layout")};
 
-        var lockLayout = new MenuItem { Header = "Lock Panel Layout", ToggleType = MenuItemToggleType.CheckBox };
+        var lockLayout = new MenuItem { Header = LocalText.T("Lock Panel Layout"), ToggleType = MenuItemToggleType.CheckBox };
         lockLayout.Click += (_, _) => docking.SetLayoutLocked(lockLayout.IsChecked);
         docking.LayoutLockChanged += (_, _) => { lockLayout.IsChecked = docking.IsLayoutLocked; reset.IsEnabled = !docking.IsLayoutLocked; };
         view.Items.Add(lockLayout);
@@ -390,9 +399,9 @@ public partial class MainWindow : EditorWindow
 
     }
 
-    private void UpdateLabels() { if (!initialized || Viewport == null) return; ZoomLabel.Content = $"{Viewport.Zoom:P0}"; SelectedLabel.Text = Viewport.Tool == EditorTool.TownStamp ? Viewport.Town?.Name ?? "Generate a Town" : Viewport.Tool == EditorTool.Wall ? Viewport.WallCatalogueError ?? $"Wall \u00b7 {Viewport.WallFamily?.DisplayName ?? "Choose type"} \u00b7 Drag to connect \u00b7 Shift to remove" : Viewport.Tool == EditorTool.SpecialBrush ? $"Special Brush \u00b7 {Viewport.SpecialBrushKind.BrushName()} \u00b7 {Viewport.Trees.Count} variant(s) \u00b7 {Viewport.TreeOptions.Density}% density" : Viewport.IsStampPickingTool ? Viewport.PickedStamp?.Name ?? (Viewport.Tool == EditorTool.Clone ? "Choose a placed stamp to clone" : "Choose a placed stamp to move") : StampMode ? selectedStampName ?? "Choose an object stamp" : Viewport.IsCollisionLayer ? $"{(Viewport.Layer == MapLayer.LowCollision ? "Low" : "High")} collision \u00b7 Paint to apply, erase to remove" : Viewport.SpriteIndex < 0 ? (PatternPalette ? "Select a terrain set to brush" : "Select a sprite to place") : PatternPalette ? $"Library {Viewport.Library} / Terrain set {Viewport.SpriteIndex / AutoTileBrush.BlockSize(AutoTileBrush.Layout(Viewport.Library, Viewport.Layer))}" : $"Library {Viewport.Library} / Sprite {Viewport.SpriteIndex}"; UpdateWorkspace(); }
+    private void UpdateLabels() { if (!initialized || Viewport == null) return; ZoomLabel.Content = ($"{Viewport.Zoom:P0}"); SelectedLabel.Text = (Viewport.Tool == EditorTool.TownStamp ? (Viewport.Town?.Name ?? LocalText.T("Generate a Town")) : (Viewport.Tool == EditorTool.Wall ? (Viewport.WallCatalogueError ?? LocalText.Format("Wall · {0} · Drag to connect · Shift to remove", LocalText.T(Viewport.WallFamily?.DisplayName ?? "Choose type"))) : (Viewport.Tool == EditorTool.SpecialBrush ? LocalText.Format("Special Brush · {0} · {1} variant(s) · {2}% density",LocalText.T(Viewport.SpecialBrushKind.BrushName()),Viewport.Trees.Count,Viewport.TreeOptions.Density) : (Viewport.IsStampPickingTool ? (Viewport.PickedStamp?.Name ?? ((Viewport.Tool == EditorTool.Clone ? LocalText.T("Choose a placed stamp to clone") : LocalText.T("Choose a placed stamp to move")))) : (StampMode ? (selectedStampName ?? LocalText.T("Choose an object stamp")) : (Viewport.IsCollisionLayer ? LocalText.Format("{0} collision · Paint to apply, erase to remove",LocalText.T(Viewport.Layer == MapLayer.LowCollision ? "Low" : "High")) : (Viewport.SpriteIndex < 0 ? ((PatternPalette ? LocalText.T("Select a terrain set to brush") : LocalText.T("Select a sprite to place"))) : (PatternPalette ? LocalText.Format("Library {0} / Terrain set {1}",Viewport.Library,Viewport.SpriteIndex / AutoTileBrush.BlockSize(AutoTileBrush.Layout(Viewport.Library, Viewport.Layer))) : LocalText.Format("Library {0} / Sprite {1}",Viewport.Library,Viewport.SpriteIndex))))))))); UpdateWorkspace(); }
 
-    private async Task Run(Func<Task> action) { if (busy) return; busy = true; UpdateLabels(); try { await action(); } catch (Exception ex) { MessageBox.Show(this, ex.Message, "Crystal Studio", MessageBoxButton.OK, MessageBoxImage.Warning); Status.Text = "Operation failed"; } finally { busy = false; UpdateLabels(); } }
+    private async Task Run(Func<Task> action) { if (busy) return; busy = true; UpdateLabels(); try { await action(); } catch (Exception ex) { MessageBox.Show(this, ex.Message, "Crystal Studio", MessageBoxButton.OK, MessageBoxImage.Warning); Status.Text = LocalText.T("Operation failed"); } finally { busy = false; UpdateLabels(); } }
 
     private bool ConfirmDiscard() { if (!Viewport.History.Dirty && activeMap?.CategoryDirty != true) return true; var answer = MessageBox.Show(this, "Save your changes before continuing?", activeMap?.IsStamp == true ? "Unsaved stamp" : "Unsaved map", MessageBoxButton.YesNoCancel, MessageBoxImage.Question); if (answer == MessageBoxResult.Cancel) return false; if (answer == MessageBoxResult.Yes) return SaveMap(); return true; }
 
@@ -414,29 +423,29 @@ public partial class MainWindow : EditorWindow
 
         if (busy) return;
 
-        var dialog = new EditorWindow { Title = "New Map", Width = 400, SizeToContent = SizeToContent.Height, Owner = this, WindowStartupLocation = WindowStartupLocation.CenterOwner, CanResize = false };
+        var dialog = new EditorWindow { Title = LocalText.T("New Map"), Width = 400, SizeToContent = SizeToContent.Height, Owner = this, WindowStartupLocation = WindowStartupLocation.CenterOwner, CanResize = false };
 
         var panel = new StackPanel { Margin = new(24) };
-        panel.Children.Add(new TextBlock { Text = "Create a New Crystal Map", FontSize = 18, Margin = new(0, 0, 0, 12) });
+        panel.Children.Add(new TextBlock { Text = LocalText.T("Create a New Crystal Map"), FontSize = 18, Margin = new(0, 0, 0, 12) });
         TextBox width = new TextBox { Text = "256" }, height = new TextBox { Text = "256" };
-        panel.Children.Add(new TextBlock { Text = "Quick sizes (width \u00d7 height)", Margin = new(0, 0, 0, 4) });
+        panel.Children.Add(new TextBlock { Text = LocalText.T("Quick sizes (width \u00d7 height)"), Margin = new(0, 0, 0, 4) });
         var presets = new WrapPanel { Margin = new(0, 0, 0, 12) };
         foreach (var (w, h) in new[] { (800, 600), (400, 800), (1000, 1000) })
         {
-            var preset = new Button { Content = $"{w} \u00d7 {h}", Padding = new Thickness(10, 7, 10, 7) };
+            var preset = new Button { Content = ($"{w} \u00d7 {h}"), Padding = new Thickness(10, 7, 10, 7) };
             preset.Click += (_, _) => { width.Text = w.ToString(); height.Text = h.ToString(); };
             presets.Children.Add(preset);
         }
         panel.Children.Add(presets);
-        panel.Children.Add(new TextBlock { Text = "Width in Cells (16\u20134096)" });
+        panel.Children.Add(new TextBlock { Text = LocalText.T("Width in Cells (16\u20134096)")});
         panel.Children.Add(width);
-        panel.Children.Add(new TextBlock { Text = "Height in Cells (16\u20134096)" });
+        panel.Children.Add(new TextBlock { Text = LocalText.T("Height in Cells (16\u20134096)")});
         panel.Children.Add(height);
-        var create = new Button { Content = "Create Map" };
+        var create = new Button { Content = LocalText.T("Create Map")};
         panel.Children.Add(create);
         dialog.Content = panel;
 
-        create.Click += (_, _) => { if (!int.TryParse(width.Text, out int w) || !int.TryParse(height.Text, out int h) || w < 16 || h < 16 || w > 4096 || h > 4096) { MessageBox.Show(dialog, "Enter dimensions between 16 and 4096."); return; } AddMapTab(new(w, h)); Status.Text = "New map created"; dialog.DialogResult = true; }; dialog.ShowDialog();
+        create.Click += (_, _) => { if (!int.TryParse(width.Text, out int w) || !int.TryParse(height.Text, out int h) || w < 16 || h < 16 || w > 4096 || h > 4096) { MessageBox.Show(dialog, "Enter dimensions between 16 and 4096."); return; } AddMapTab(new(w, h)); Status.Text = LocalText.T("New map created"); dialog.DialogResult = true; }; dialog.ShowDialog();
 
     }
 
@@ -447,11 +456,11 @@ public partial class MainWindow : EditorWindow
         path = Path.GetFullPath(path);
         var existing = mapTabs.Items.Cast<TabItem>().FirstOrDefault(t => string.Equals(((OpenMapTab)t.Tag).Path, path, StringComparison.OrdinalIgnoreCase));
         if (existing != null) { mapTabs.SelectedItem = existing; RememberMap(path); return; }
-        Status.Text = "Reading map\u2026";
+        Status.Text = LocalText.T("Reading map\u2026");
         var d = await Task.Run(() => MapDocument.Load(path));
         AddMapTab(d, path);
         RememberMap(path);
-        Status.Text = d.MetadataWarning ?? $"Map loaded \u00b7 {d.PlacedStamps.Count:N0} remembered stamps";
+        Status.Text = (d.MetadataWarning ?? LocalText.Format("Map loaded · {0:N0} remembered stamps", d.PlacedStamps.Count));
     }
 
     private void IdentifyStampsClick(object s, RoutedEventArgs e)
@@ -462,7 +471,7 @@ public partial class MainWindow : EditorWindow
 
         var dialog = new StampScanWindow(Viewport.Document, StampCatalog.FindFolder()) { Owner = this };
 
-        if (dialog.ShowDialog() != true || dialog.Result is not StampScanResult result) { Status.Text = "Object identification cancelled \u00b7 Map unchanged"; return; }
+        if (dialog.ShowDialog() != true || dialog.Result is not StampScanResult result) { Status.Text = LocalText.T("Object identification cancelled \u00b7 Map unchanged"); return; }
 
         int count = Viewport.Document.RememberIdentifiedStamps(result, Viewport.History);
 
@@ -470,7 +479,7 @@ public partial class MainWindow : EditorWindow
 
         if (count > 0) SetTool(EditorTool.Pickup);
 
-        Status.Text = count > 0 ? $"Identified {count:N0} objects \u00b7 {result.MatchedForegroundImages:N0}/{result.ForegroundImages:N0} foreground sprites matched \u00b7 Save map to keep metadata" : $"No new complete matches \u00b7 {result.Files:N0} files checked \u00b7 {result.SkippedFiles:N0} unreadable files";
+        Status.Text = (count > 0 ? LocalText.Format("Identified {0:N0} objects · {1:N0}/{2:N0} foreground sprites matched · Save map to keep metadata",count,result.MatchedForegroundImages,result.ForegroundImages) : LocalText.Format("No new complete matches · {0:N0} files checked · {1:N0} unreadable files",result.Files,result.SkippedFiles));
 
     }
 
@@ -489,7 +498,7 @@ public partial class MainWindow : EditorWindow
         if (activeMap?.IsStamp == true) return SaveStampEditor(saveAs);
         string? target = saveAs ? null : mapPath; if (target == null) { var picker = new SaveFileDialog { Filter = "Crystal map (*.map)|*.map", FileName = mapPath == null ? "Untitled.map" : Path.GetFileName(mapPath), InitialDirectory = mapPath == null ? "" : Path.GetDirectoryName(mapPath), DefaultExt = ".map", AddExtension = true, OverwritePrompt = true }; if (picker.ShowDialog(this) != true) return false; target = picker.FileName; }
 
-        try { Viewport.Document.Save(target); mapPath = target; RememberMap(target); Viewport.History.Saved(); UpdateLabels(); UpdateMapTabLabels(); Status.Text = $"Saved {Path.GetFileName(target)}"; return true; } catch (Exception ex) { MessageBox.Show(this, ex.Message, "Save failed"); return false; }
+        try { Viewport.Document.Save(target); mapPath = target; RememberMap(target); Viewport.History.Saved(); UpdateLabels(); UpdateMapTabLabels(); Status.Text = LocalText.Format("Saved {0}",Path.GetFileName(target)); return true; } catch (Exception ex) { MessageBox.Show(this, ex.Message, "Save failed"); return false; }
 
     }
 
@@ -505,7 +514,7 @@ public partial class MainWindow : EditorWindow
 
             var next = await Task.Run(() => AssetStore.Load(root));
 
-            var updated = new LibrarySettings(Path.GetFullPath(root));
+            var updated = settingsStore.Load() with { LibraryFolder = Path.GetFullPath(root) };
 
             try { await Task.Run(() => settingsStore.Save(updated)); }
 
@@ -523,12 +532,13 @@ public partial class MainWindow : EditorWindow
         { Owner = this };
 
         dialog.ShowDialog();
+        UpdateLanguageChecks();
 
         if (assets == null && string.IsNullOrWhiteSpace(settings.LibraryFolder))
 
         {
 
-            Status.Text = "Library setup deferred";
+            Status.Text = LocalText.T("Library setup deferred");
 
         }
 
@@ -538,7 +548,7 @@ public partial class MainWindow : EditorWindow
 
     {
 
-        Status.Text = "Loading saved Crystal libraries\u2026";
+        Status.Text = LocalText.T("Loading saved Crystal libraries\u2026");
         var next = await Task.Run(() => AssetStore.Load(root));
         try { await InitializeWallsAsync(); }
         catch { next.Dispose(); throw; }
@@ -556,7 +566,7 @@ public partial class MainWindow : EditorWindow
     private void AssetError(string message)
     {
         if (closed || EditorLifetime.IsExiting) return;
-        Dispatcher.UIThread.Post(() => { if (!closed) Status.Text = $"Asset error: {message}"; });
+        Dispatcher.UIThread.Post(() => { if (!closed) Status.Text = LocalText.Format("Asset error: {0}",message); });
     }
 
     private void InstallLibraries(AssetStore next)
@@ -565,25 +575,25 @@ public partial class MainWindow : EditorWindow
 
         assets?.Dispose(); assets = next; next.Updated += AssetsUpdated; next.Error += AssetError; Viewport.Assets = next; Viewport.Town = null; Viewport.RefreshAssets();
 
-        LibraryList.ItemsSource = next.Libraries.OrderBy(k => k.Key).Select(k => new LibraryChoice(k.Key, $"{k.Key:D3}   {Path.GetFileNameWithoutExtension(k.Value.Path)}")).ToArray(); LibraryList.SelectedIndex = 0; _ = DiscoverStampsAsync(); Status.Text = $"{next.Libraries.Count} libraries indexed";
+        LibraryList.ItemsSource = next.Libraries.OrderBy(k => k.Key).Select(k => new LibraryChoice(k.Key, $"{k.Key:D3}   {Path.GetFileNameWithoutExtension(k.Value.Path)}")).ToArray(); LibraryList.SelectedIndex = 0; _ = DiscoverStampsAsync(); Status.Text = LocalText.Format("{0} libraries indexed",next.Libraries.Count);
 
     }
 
-    private async void StampClick(object s, RoutedEventArgs e) { var picker = new OpenFileDialog { Filter = "Crystal object (*.X)|*.X" }; if (picker.ShowDialog(this) != true) return; await Run(async () => { Viewport.Stamp = await Task.Run(() => CellCodec.LoadStamp(picker.FileName)); selectedStampPath = picker.FileName; selectedStampName = Path.GetFileNameWithoutExtension(picker.FileName); Viewport.StampName = selectedStampName; selectedStampPreview = assets == null ? null : StampPreview.Create(Viewport.Stamp, assets); SetTool(EditorTool.Stamp); RememberActiveAsset(); Viewport.InvalidateVisual(); Status.Text = $"Stamp: {Path.GetFileName(picker.FileName)} • {Viewport.Stamp.Count} cells"; }); }
+    private async void StampClick(object s, RoutedEventArgs e) { var picker = new OpenFileDialog { Filter = "Crystal object (*.X)|*.X" }; if (picker.ShowDialog(this) != true) return; await Run(async () => { Viewport.Stamp = await Task.Run(() => CellCodec.LoadStamp(picker.FileName)); selectedStampPath = picker.FileName; selectedStampName = Path.GetFileNameWithoutExtension(picker.FileName); Viewport.StampName = selectedStampName; selectedStampPreview = assets == null ? null : StampPreview.Create(Viewport.Stamp, assets); SetTool(EditorTool.Stamp); RememberActiveAsset(); Viewport.InvalidateVisual(); Status.Text = LocalText.Format("Stamp: {0} • {1} cells",Path.GetFileName(picker.FileName),Viewport.Stamp.Count); }); }
 
     private void ExportClick(object s, RoutedEventArgs e)
 
     {
 
-        if (Viewport.Selection is not Rect r) { Status.Text = "Use Select (M) to mark the object area first"; return; }
+        if (Viewport.Selection is not Rect r) { Status.Text = LocalText.T("Use Select (M) to mark the object area first"); return; }
 
         var picker = new SaveFileDialog { Filter = "Crystal object (*.X)|*.X", FileName = "Object.X" }; if (picker.ShowDialog(this) != true) return;
 
-        try { List<StampCell> cells = []; for (int y = (int)r.Y; y < r.Bottom; y++) for (int x = (int)r.X; x < r.Right; x++) { var c = Viewport.Document.Get(x, y); if (!c.Empty) cells.Add(new(x - (int)r.X - (int)r.Width / 2, y - (int)r.Y - (int)r.Height / 2, c)); } CellCodec.SaveStamp(picker.FileName, cells); Status.Text = $"Exported {cells.Count} object cells"; } catch (Exception ex) { MessageBox.Show(this, ex.Message, "Export failed"); }
+        try { List<StampCell> cells = []; for (int y = (int)r.Y; y < r.Bottom; y++) for (int x = (int)r.X; x < r.Right; x++) { var c = Viewport.Document.Get(x, y); if (!c.Empty) cells.Add(new(x - (int)r.X - (int)r.Width / 2, y - (int)r.Y - (int)r.Height / 2, c)); } CellCodec.SaveStamp(picker.FileName, cells); Status.Text = LocalText.Format("Exported {0} object cells",cells.Count); } catch (Exception ex) { MessageBox.Show(this, ex.Message, "Export failed"); }
 
     }
 
-    private void SetTool(EditorTool tool) { if (tool == EditorTool.Wall) { Viewport.Layer = MapLayer.Objects; LayerList.SelectedIndex = (int)MapLayer.Objects; Status.Text = "Draw connected wall sections \u00b7 Shift or Remove deletes and reconnects"; } if (tool == EditorTool.Pickup) Status.Text = "Click a placed stamp to pick it up"; else if (tool == EditorTool.Clone) Status.Text = "Click a placed stamp to clone it"; bool changingBrowser = StampMode != (tool == EditorTool.Stamp); Viewport.Tool = tool; if (changingBrowser) { searchDelay.Stop(); AssetSearch.Clear(); } page = 0; BuildPage(); BrushSize.IsEnabled = tool != EditorTool.Pencil; UpdateLabels(); Viewport.InvalidateVisual(); }
+    private void SetTool(EditorTool tool) { if (tool == EditorTool.Wall) { Viewport.Layer = MapLayer.Objects; LayerList.SelectedIndex = (int)MapLayer.Objects; Status.Text = LocalText.T("Draw connected wall sections \u00b7 Shift or Remove deletes and reconnects"); } if (tool == EditorTool.Pickup) Status.Text = LocalText.T("Click a placed stamp to pick it up"); else if (tool == EditorTool.Clone) Status.Text = LocalText.T("Click a placed stamp to clone it"); bool changingBrowser = StampMode != (tool == EditorTool.Stamp); Viewport.Tool = tool; if (changingBrowser) { searchDelay.Stop(); AssetSearch.Clear(); } page = 0; BuildPage(); BrushSize.IsEnabled = tool != EditorTool.Pencil; UpdateLabels(); Viewport.InvalidateVisual(); }
 
     private void ToolClick(object s, RoutedEventArgs e) => SetTool(Enum.Parse<EditorTool>((string)((Control)s).Tag));
 
@@ -596,7 +606,7 @@ public partial class MainWindow : EditorWindow
         SelectLibraryForLayer(); BuildPage(); UpdateLabels(); Viewport.InvalidateVisual();
     }
 
-    private void BrushChanged(object s, RangeBaseValueChangedEventArgs e) { if (Viewport != null) { Viewport.BrushSize = (int)e.NewValue; if (BrushSizeLabel != null) BrushSizeLabel.Text = $"{Viewport.BrushSize}\u00d7{Viewport.BrushSize}"; Viewport.InvalidateVisual(); UpdateWorkspace(); } }
+    private void BrushChanged(object s, RangeBaseValueChangedEventArgs e) { if (Viewport != null) { Viewport.BrushSize = (int)e.NewValue; if (BrushSizeLabel != null) BrushSizeLabel.Text = ($"{Viewport.BrushSize}\u00d7{Viewport.BrushSize}"); Viewport.InvalidateVisual(); UpdateWorkspace(); } }
 
     private void ViewChanged(object s, RoutedEventArgs e)
     {
@@ -626,7 +636,7 @@ public partial class MainWindow : EditorWindow
 
     private void RedoClick(object s, RoutedEventArgs e) => Viewport.Redo();
 
-    private void FillClick(object s, RoutedEventArgs e) { if (Viewport.Selection == null) { Status.Text = "Select an area (M), choose a sprite, then fill"; return; } Viewport.FillSelection(); }
+    private void FillClick(object s, RoutedEventArgs e) { if (Viewport.Selection == null) { Status.Text = LocalText.T("Select an area (M), choose a sprite, then fill"); return; } Viewport.FillSelection(); }
 
     private void InitializeCellMenu()
 
@@ -634,17 +644,17 @@ public partial class MainWindow : EditorWindow
 
         var menu = new ContextMenu();
 
-        var cellProperties = new MenuItem { Header = "Cell Properties\u2026" };
+        var cellProperties = new MenuItem { Header = LocalText.T("Cell Properties\u2026")};
 
-        var selectionProperties = new MenuItem { Header = "Selection Properties\u2026" };
+        var selectionProperties = new MenuItem { Header = LocalText.T("Selection Properties\u2026")};
 
         menu.Items.Add(cellProperties); menu.Items.Add(selectionProperties);
 
-        var copy = new MenuItem { Header = "Copy Visible Layers", InputGesture = KeyGesture.Parse("Ctrl+C") };
+        var copy = new MenuItem { Header = LocalText.T("Copy Visible Layers"), InputGesture = KeyGesture.Parse("Ctrl+C") };
 
-        var cut = new MenuItem { Header = "Cut Visible Layers", InputGesture = KeyGesture.Parse("Ctrl+X") };
+        var cut = new MenuItem { Header = LocalText.T("Cut Visible Layers"), InputGesture = KeyGesture.Parse("Ctrl+X") };
 
-        var paste = new MenuItem { Header = "Paste Region\u2026", InputGesture = KeyGesture.Parse("Ctrl+V") };
+        var paste = new MenuItem { Header = LocalText.T("Paste Region\u2026"), InputGesture = KeyGesture.Parse("Ctrl+V") };
 
         menu.Items.Add(new Separator()); menu.Items.Add(copy); menu.Items.Add(cut); menu.Items.Add(paste);
 
@@ -685,13 +695,13 @@ public partial class MainWindow : EditorWindow
 
         var c = Viewport.Document.Get(point.X, point.Y);
 
-        var dialog = new EditorWindow { Title = "Cell Properties", Width = 340, SizeToContent = SizeToContent.Height, Owner = this, WindowStartupLocation = WindowStartupLocation.CenterOwner, CanResize = false }; var panel = new StackPanel { Margin = new(24) }; dialog.Content = panel;
+        var dialog = new EditorWindow { Title = LocalText.T("Cell Properties"), Width = 340, SizeToContent = SizeToContent.Height, Owner = this, WindowStartupLocation = WindowStartupLocation.CenterOwner, CanResize = false }; var panel = new StackPanel { Margin = new(24) }; dialog.Content = panel;
 
-        panel.Children.Add(new TextBlock { Text = area.Width == 1 && area.Height == 1 ? $"Cell {point.X}, {point.Y}" : "Apply to Selected Cells", FontSize = 18, Margin = new(0, 0, 0, 14) });
+        panel.Children.Add(new TextBlock { Text = (area.Width == 1 && area.Height == 1 ? LocalText.Format("Cell {0}, {1}",point.X,point.Y) : LocalText.T("Apply to Selected Cells")), FontSize = 18, Margin = new(0, 0, 0, 14) });
 
-        TextBox Field(string label, string value) { panel.Children.Add(new TextBlock { Text = label }); var box = new TextBox { Text = value }; panel.Children.Add(box); return box; }
+        TextBox Field(string label, string value) { panel.Children.Add(new TextBlock { Text = LocalText.T(label)}); var box = new TextBox { Text = value }; panel.Children.Add(box); return box; }
 
-        var light = Field("Light (0\u2013255)", c.Light.ToString()); var door = Field("Door Index (0\u2013255)", c.Door.ToString()); var offset = Field("Door Offset (0\u2013255)", c.DoorOffset.ToString()); var apply = new Button { Content = "Apply Properties" }; panel.Children.Add(apply);
+        var light = Field("Light (0\u2013255)", c.Light.ToString()); var door = Field("Door Index (0\u2013255)", c.Door.ToString()); var offset = Field("Door Offset (0\u2013255)", c.DoorOffset.ToString()); var apply = new Button { Content = LocalText.T("Apply Properties")}; panel.Children.Add(apply);
 
         apply.Click += (_, _) => { if (!byte.TryParse(light.Text, out var l) || !byte.TryParse(door.Text, out var d) || !byte.TryParse(offset.Text, out var o)) { MessageBox.Show(dialog, "One or more values are outside the supported range."); return; } Viewport.ApplyMetadata(l, d, o, area); dialog.DialogResult = true; }; dialog.ShowDialog();
 
@@ -719,9 +729,9 @@ public partial class MainWindow : EditorWindow
 
     private void SearchChanged(object s, TextChangedEventArgs e) { page = 0; if (initialized) { searchDelay.Stop(); searchDelay.Start(); } }
 
-    private void PreviousPage(object s, RoutedEventArgs e) { page = Math.Max(0, page - 1); BuildPage(); }
+    private void PreviousPage(object s, RoutedEventArgs e) { if (CategoryPalette) { ChangeCategoryPage(-1); return; } page = Math.Max(0, page - 1); BuildPage(); }
 
-    private void NextPage(object s, RoutedEventArgs e) { if ((page + 1) * PageSize < filteredCount) { page++; BuildPage(); } }
+    private void NextPage(object s, RoutedEventArgs e) { if (CategoryPalette) { ChangeCategoryPage(1); return; } if ((page + 1) * PageSize < filteredCount) { page++; BuildPage(); } }
 
     private bool PatternPalette => Viewport.Tool == EditorTool.Brush && AutoTileBrush.Layout(Viewport.Library, Viewport.Layer) != TilePatternLayout.None;
 
@@ -742,7 +752,7 @@ public partial class MainWindow : EditorWindow
     private void BuildPage()
     {
         if (Viewport.Tool is EditorTool.Wall or EditorTool.TownStamp) { pageVersion++; choices.Clear(); filteredCount = 0; UpdateWorkspace(); return; }
-        if (CategoryPalette) { BuildCategoryTree(); return; }
+        if (CategoryPalette) { BuildCategoryBrowser(); return; }
         if (Viewport.IsCollisionLayer && !StampMode && !SavedPalette)
         { pageVersion++; choices.Clear(); filteredCount = 0; UpdateWorkspace(); return; }
         if (SavedPalette) { BuildSavedPage(); return; }
@@ -754,7 +764,7 @@ public partial class MainWindow : EditorWindow
         foreach (int i in indices.Skip(page * PageSize).Take(PageSize))
             choices.Add(TileChoice(AssetReference.Tile(lib!.Path, Viewport.Library, i, Viewport.Layer,
                 PatternPalette ? AutoTileBrush.Layout(Viewport.Library, Viewport.Layer) : TilePatternLayout.None)));
-        PageLabel.Text = indices.Count == 0 ? "No Matching Assets" : $"Page {page + 1} of {Math.Max(1, (indices.Count + PageSize - 1) / PageSize)}";
+        PageLabel.Text = (indices.Count == 0 ? LocalText.T("No Matching Assets") : LocalText.Format("Page {0} of {1}",page + 1,Math.Max(1, (indices.Count + PageSize - 1) / PageSize)));
         UpdateWorkspace();
     }
 
@@ -779,7 +789,7 @@ public partial class MainWindow : EditorWindow
     private void AssetChanged(object s, SelectionChangedEventArgs e)
     {
         if (AssetList.SelectedItem is not AssetChoice a) return;
-        if (a.StampPath != null) { if (a.StampCells != null) SelectStamp(a); else Status.Text = a.LoadError ?? "Loading stamp\u2026"; return; }
+        if (a.StampPath != null) { if (a.StampCells != null) SelectStamp(a); else Status.Text = (a.LoadError ?? LocalText.T("Loading stamp\u2026")); return; }
         if (SavedPalette) { RestoreTile(a); return; }
         Viewport.SpriteIndex = a.Index;
         if (Viewport.Tool != EditorTool.Pencil && Viewport.Tool != EditorTool.Brush && Viewport.Tool != EditorTool.Bucket) SetTool(EditorTool.Pencil);
@@ -845,7 +855,7 @@ public partial class MainWindow : EditorWindow
             return;
         }
 
-        if (CategoryPalette && categoryTree?.IsKeyboardFocusWithin == true && e.Key is Key.Left or Key.Right or Key.Up or Key.Down) return;
+        if (CategoryPalette && CategoryTabs.IsKeyboardFocusWithin && e.Key is Key.Left or Key.Right or Key.Up or Key.Down) return;
         if (e.Key is Key.Left or Key.Right && FocusManager?.GetFocusedElement() is not ComboBox && !LibraryList.IsDropDownOpen) { MovePaletteSelection(e.Key == Key.Left ? -1 : 1); e.Handled = true; return; }
 
         EditorTool? tool = e.Key switch { Key.B => EditorTool.Brush, Key.P => EditorTool.Pencil, Key.F => EditorTool.Bucket, Key.E => EditorTool.Eraser, Key.M => EditorTool.Select, Key.O => EditorTool.Stamp, Key.V => EditorTool.Pickup, Key.K => EditorTool.Clone, _ => null }; if (tool.HasValue) { SetTool(tool.Value); e.Handled = true; }
@@ -881,20 +891,20 @@ public partial class MainWindow : EditorWindow
         PickupActions.IsVisible = Viewport.IsStampPickingTool ? true : false;
 
         TownControls.IsVisible = Viewport.Tool == EditorTool.TownStamp ? true : false;
-        TownBrushLabel.Text = Viewport.Town == null ? "Choose a Town" : $"{Viewport.Town.Family.Name} \u00b7 {Viewport.Town.Options.Size}\u00d7{Viewport.Town.Options.Size}";
+        TownBrushLabel.Text = (Viewport.Town == null ? LocalText.T("Choose a Town") : ($"{Viewport.Town.Family.Name} \u00b7 {Viewport.Town.Options.Size}\u00d7{Viewport.Town.Options.Size}"));
         TownSettingsButton.IsEnabled = TownStampMenuButton.IsEnabled = !busy;
         WallControls.IsVisible = Viewport.Tool == EditorTool.Wall ? true : false;
         WallSettingsButton.IsEnabled = WallEraseToggle.IsEnabled = !busy;
-        WallBrushLabel.Text = Viewport.WallFamily?.DisplayName ?? "Choose Type";
+        WallBrushLabel.Text = (Viewport.WallFamily?.DisplayName ?? LocalText.T("Choose Type"));
         SizeControls.IsVisible = Viewport.IsStampPickingTool || Viewport.Tool is EditorTool.Wall or EditorTool.TownStamp ? false : true;
         SpecialBrushSettingsButton.IsVisible = Viewport.Tool == EditorTool.SpecialBrush ? true : false;
 
         DeleteStampButton.IsVisible = Viewport.Tool == EditorTool.Clone ? false : true;
         DeleteStampButton.IsEnabled = CancelPickupButton.IsEnabled = !busy && Viewport.PickedStampId != null;
-        CancelPickupButton.SetTip(Viewport.Tool == EditorTool.Clone ? "Cancel Clone \u00b7 Escape" : "Cancel Pickup \u00b7 Escape");
+        ToolTip.SetTip(CancelPickupButton, (Viewport.Tool == EditorTool.Clone ? LocalText.T("Cancel Clone \u00b7 Escape") : LocalText.T("Cancel Pickup \u00b7 Escape")));
 
-        SaveButton.Header = activeMap?.IsStamp == true ? "_Save Stamp" : "_Save Map";
-        Title = $"{(mapPath == null ? "Untitled" : Path.GetFileName(mapPath))}{(Viewport.History.Dirty || activeMap?.CategoryDirty == true ? " *" : "")} • {Viewport.Document.Width} \u00d7 {Viewport.Document.Height} cells \u2014 Crystal Studio";
+        SaveButton.Header = (activeMap?.IsStamp == true ? LocalText.T("_Save Stamp") : LocalText.T("_Save Map"));
+        this.Title = LocalText.Format("{0}{1} • {2} × {3} cells — Crystal Studio",(mapPath == null ? LocalText.T("Untitled") : Path.GetFileName(mapPath)),(Viewport.History.Dirty || activeMap?.CategoryDirty == true ? " *" : ""),Viewport.Document.Width,Viewport.Document.Height);
 
         GenerateProvinceButton.IsEnabled = GenerateTempleButton.IsEnabled = GenerateTerrainButton.IsEnabled = IdentifyButton.IsEnabled = NewButton.IsEnabled = NewStampButton.IsEnabled = OpenButton.IsEnabled = OpenRecentButton.IsEnabled = ImportButton.IsEnabled = SaveButton.IsEnabled = SaveAsButton.IsEnabled = !busy;
 
@@ -919,76 +929,75 @@ public partial class MainWindow : EditorWindow
 
         BrushSize.IsEnabled = !busy && Viewport.Tool is EditorTool.Brush or EditorTool.Eraser or EditorTool.SpecialBrush;
 
-        BrushSizeLabel.Text = Viewport.Tool == EditorTool.Bucket ? "Fill" : Viewport.Tool == EditorTool.Pencil ? "1\u00d71" : $"{Viewport.BrushSize}\u00d7{Viewport.BrushSize}";
+        BrushSizeLabel.Text = (Viewport.Tool == EditorTool.Bucket ? LocalText.T("Fill") : (Viewport.Tool == EditorTool.Pencil ? ("1\u00d71") : ($"{Viewport.BrushSize}\u00d7{Viewport.BrushSize}")));
 
         Viewport.Cursor = Viewport.Tool == EditorTool.TownStamp || Viewport.Tool == EditorTool.Wall || Viewport.Tool == EditorTool.Select || Viewport.Tool == EditorTool.Brush || Viewport.Tool == EditorTool.SpecialBrush || Viewport.Tool == EditorTool.Pencil || Viewport.Tool == EditorTool.Bucket ? EditorCursors.Cross : EditorCursors.Arrow;
 
-        SelectedPreviewCaption.Text = Viewport.IsStampPickingTool ? "Placed Stamp" : "Active Asset";
+        SelectedPreviewCaption.Text = (Viewport.IsStampPickingTool ? LocalText.T("Placed Stamp") : LocalText.T("Active Asset"));
 
-        AssetTitle.Text = Viewport.Tool == EditorTool.TownStamp ? "Town Stamp" : Viewport.Tool == EditorTool.Wall ? "Wall Brush" : SavedPalette ? FavouritesPalette ? "Favourites" : "Recently Used" : StampMode ? "Object Stamps" : PatternPalette ? "Terrain Patterns" : "Tile & Object Library";
+        AssetTitle.Text = (Viewport.Tool == EditorTool.TownStamp ? LocalText.T("Town Stamp") : (Viewport.Tool == EditorTool.Wall ? LocalText.T("Wall Brush") : (SavedPalette ? (FavouritesPalette ? LocalText.T("Favourites") : LocalText.T("Recently Used")) : (StampMode ? LocalText.T("Object Stamps") : (PatternPalette ? LocalText.T("Terrain Patterns") : LocalText.T("Tile & Object Library"))))));
 
-        AssetCount.Text = $"{filteredCount:N0} {(SavedPalette ? "assets" : StampMode ? "stamps" : PatternPalette ? "sets" : "sprites")}";
+        AssetCount.Text = ($"{filteredCount:N0} {(SavedPalette ? "assets" : StampMode ? "stamps" : PatternPalette ? "sets" : "sprites")}");
 
         PreviousButton.IsEnabled = !busy && page > 0;
 
         NextButton.IsEnabled = !busy && (page + 1) * PageSize < filteredCount;
 
-        if (assets == null && !StampMode && !SavedPalette) PageLabel.Text = "No Library Loaded";
+        if (assets == null && !StampMode && !SavedPalette) PageLabel.Text = LocalText.T("No Library Loaded");
 
         LibraryList.IsVisible = StampMode || SavedPalette || Viewport.IsCollisionLayer ? false : true;
 
         StampFolderHint.IsVisible = StampMode && !SavedPalette ? true : false;
 
-        StampFolderLabel.Text = stampFolder ?? "Objects Folder Not Found"; StampFolderLabel.SetTip(stampFolder);
+        StampFolderLabel.Text = (stampFolder ?? LocalText.T("Objects Folder Not Found")); ToolTip.SetTip(StampFolderLabel, (stampFolder));
 
-        AssetSearch.Tag = SavedPalette ? "Search Saved Assets\u2026" : StampMode ? "Search Stamps by Name\u2026" : "Search Pattern or Sprite ID\u2026";
-        AssetSearch.SetTip(SavedPalette ? "Search Names, Layers, Libraries or IDs" : StampMode ? "Search Stamps by Name" : "Filter Assets by Numeric ID");
+        (AssetSearch).Tag = LocalText.T(SavedPalette ? "Search Saved Assets\u2026" : StampMode ? "Search Stamps by Name\u2026" : "Search Pattern or Sprite ID\u2026");
+        ToolTip.SetTip(AssetSearch, (SavedPalette ? LocalText.T("Search Names, Layers, Libraries or IDs") : (StampMode ? LocalText.T("Search Stamps by Name") : LocalText.T("Filter Assets by Numeric ID"))));
         EmptyAction.IsVisible = true;
 
         AssetEmpty.IsVisible = choices.Count == 0 ? true : false;
         var activeAsset = ActiveAssetReference();
         SelectedPinButton.IsEnabled = !busy && activeAsset != null;
-        SelectedPinButton.Content = activeAsset != null && assetHistory.IsFavourite(activeAsset) ? "\u2605 Unpin" : "\u2606 Pin to Favourites";
+        SelectedPinButton.Content = (activeAsset != null && assetHistory.IsFavourite(activeAsset) ? LocalText.T("\u2605 Unpin") : LocalText.T("\u2606 Pin to Favourites"));
 
         if (Viewport.Tool == EditorTool.TownStamp)
         {
-            PageLabel.Text = "Town Settings";
-            EmptyTitle.Text = Viewport.Town?.Family.Name ?? "Choose a Town";
-            EmptyDescription.Text = "Click a clear area to place the complete town.\nTown settings changes the type, size and seed.";
+            PageLabel.Text = LocalText.T("Town Settings");
+            EmptyTitle.Text = (Viewport.Town?.Family.Name ?? LocalText.T("Choose a Town"));
+            EmptyDescription.Text = LocalText.T("Click a clear area to place the complete town.\nTown settings changes the type, size and seed.");
             EmptyAction.IsVisible = false;
         }
         else if (Viewport.Tool == EditorTool.Wall)
         {
-            PageLabel.Text = "Wall Settings \u00b7 H";
-            EmptyTitle.Text = Viewport.WallFamily?.Name ?? "Wall Catalogue Unavailable";
-            EmptyDescription.Text = Viewport.WallCatalogueError ?? (Viewport.WallFamily?.DrawInterior == true ? "Draw the room interior; walls surround the open floor." : "Draw the solid wall area; walls surround its edges.") + "\nShift or Remove deletes sections and reconnects neighbours.";
+            PageLabel.Text = LocalText.T("Wall Settings \u00b7 H");
+            EmptyTitle.Text = (Viewport.WallFamily?.Name ?? LocalText.T("Wall Catalogue Unavailable"));
+            EmptyDescription.Text = (Viewport.WallCatalogueError ?? string.Concat(((Viewport.WallFamily?.DrawInterior == true ? LocalText.T("Draw the room interior; walls surround the open floor.") : LocalText.T("Draw the solid wall area; walls surround its edges."))), LocalText.T("\nShift or Remove deletes sections and reconnects neighbours.")));
             EmptyAction.IsVisible = false;
         }
         else if (Viewport.IsCollisionLayer && !StampMode && !SavedPalette)
         {
-            PageLabel.Text = "No Asset Needed";
-            EmptyTitle.Text = Viewport.Layer == MapLayer.LowCollision ? "Low Collisions" : "High Collisions";
-            EmptyDescription.Text = "Paint to apply. Fill (F) floods connected clear cells.\nUse Eraser or selection Delete to remove.";
+            PageLabel.Text = LocalText.T("No Asset Needed");
+            EmptyTitle.Text = (Viewport.Layer == MapLayer.LowCollision ? LocalText.T("Low Collisions") : LocalText.T("High Collisions"));
+            EmptyDescription.Text = LocalText.T("Paint to apply. Fill (F) floods connected clear cells.\nUse Eraser or selection Delete to remove.");
             EmptyAction.IsVisible = false;
         }
         else if (SavedPalette)
         {
             bool searching = !string.IsNullOrWhiteSpace(AssetSearch.Text);
-            EmptyTitle.Text = searching ? "No Matching Assets" : FavouritesPalette ? "Pin Your Favourite Assets" : "No Recent Assets Yet";
-            EmptyDescription.Text = searching ? "Try another name, layer or ID." : FavouritesPalette ?
-                "Click the star on a terrain tile or stamp\nto keep it here." : "Assets you select or paint with appear here,\nwith the most recent first.";
-            EmptyAction.Content = "Clear Search";
+            EmptyTitle.Text = (searching ? LocalText.T("No Matching Assets") : (FavouritesPalette ? LocalText.T("Pin Your Favourite Assets") : LocalText.T("No Recent Assets Yet")));
+            EmptyDescription.Text = (searching ? LocalText.T("Try another name, layer or ID.") : (FavouritesPalette ? LocalText.T("Click the star on a terrain tile or stamp\nto keep it here.") : LocalText.T("Assets you select or paint with appear here,\nwith the most recent first.")));
+            EmptyAction.Content = LocalText.T("Clear Search");
             EmptyAction.IsVisible = searching ? true : false;
         }
         else if (StampMode)
 
         {
 
-            EmptyTitle.Text = stampIndexLoading ? "Finding Object Stamps\u2026" : stampFolder == null ? "Objects Folder Not Found" : "No Matching Stamps";
+            EmptyTitle.Text = (stampIndexLoading ? LocalText.T("Finding Object Stamps\u2026") : (stampFolder == null ? LocalText.T("Objects Folder Not Found") : LocalText.T("No Matching Stamps")));
 
-            EmptyDescription.Text = stampFolder == null ? "Place your .X files in the Objects folder at the editor root, or import a stamp." : "Try another name or import a .X stamp.";
+            EmptyDescription.Text = (stampFolder == null ? LocalText.T("Place your .X files in the Objects folder at the editor root, or import a stamp.") : LocalText.T("Try another name or import a .X stamp."));
 
-            EmptyAction.Content = string.IsNullOrWhiteSpace(AssetSearch.Text) ? "Import .X Stamp" : "Clear Search";
+            EmptyAction.Content = (string.IsNullOrWhiteSpace(AssetSearch.Text) ? LocalText.T("Import .X Stamp") : LocalText.T("Clear Search"));
 
         }
 
@@ -996,11 +1005,11 @@ public partial class MainWindow : EditorWindow
 
         {
 
-            EmptyTitle.Text = "Your Assets Live Here";
+            EmptyTitle.Text = LocalText.T("Your Assets Live Here");
 
-            EmptyDescription.Text = "Choose your Crystal library folder once.\nIt will load automatically next time.";
+            EmptyDescription.Text = LocalText.T("Choose your Crystal library folder once.\nIt will load automatically next time.");
 
-            EmptyAction.Content = "Set Library Folder";
+            EmptyAction.Content = LocalText.T("Set Library Folder");
 
         }
 
@@ -1008,7 +1017,7 @@ public partial class MainWindow : EditorWindow
 
         {
 
-            EmptyTitle.Text = "No Matching Assets"; EmptyDescription.Text = "Try a different pattern or sprite ID."; EmptyAction.Content = "Clear Search";
+            EmptyTitle.Text = LocalText.T("No Matching Assets"); EmptyDescription.Text = LocalText.T("Try a different pattern or sprite ID."); EmptyAction.Content = LocalText.T("Clear Search");
 
         }
 
@@ -1016,15 +1025,15 @@ public partial class MainWindow : EditorWindow
 
         {
 
-            EmptyTitle.Text = "No Patterns in This Library"; EmptyDescription.Text = "Switch to Pencil to browse individual tiles."; EmptyAction.Content = "Browse Individual Tiles";
+            EmptyTitle.Text = LocalText.T("No Patterns in This Library"); EmptyDescription.Text = LocalText.T("Switch to Pencil to browse individual tiles."); EmptyAction.Content = LocalText.T("Browse Individual Tiles");
 
         }
 
-        LibraryStatus.Text = assets == null ? "Libraries not loaded" : $"{assets.Libraries.Count} {(assets.Libraries.Count == 1 ? "library" : "libraries")} ready";
+        LibraryStatus.Text = (assets == null ? LocalText.T("Libraries not loaded") : LocalText.Format("{0} {1} ready",assets.Libraries.Count,LocalText.T(assets.Libraries.Count == 1 ? "library" : "libraries")));
 
         LibraryDot.Fill = new ImmutableSolidColorBrush(assets == null ? Color.FromRgb(209, 173, 119) : Color.FromRgb(134, 189, 165));
 
-        if (categoryTree != null) UpdateCategoryWorkspace();
+        if (categoryGrouping != null) UpdateCategoryWorkspace();
         AdjustEmptyLayout();
 
         SelectedPreview.Source = ActivePreview();
@@ -1081,11 +1090,11 @@ public partial class MainWindow : EditorWindow
 
     {
 
-        var dialog = new EditorWindow { Title = "InputState Shortcuts", Width = 460, Height = 680, Owner = this, CanResize = false, WindowStartupLocation = WindowStartupLocation.CenterOwner };
+        var dialog = new EditorWindow { Title = LocalText.T("InputState Shortcuts"), Width = 460, Height = 680, Owner = this, CanResize = false, WindowStartupLocation = WindowStartupLocation.CenterOwner };
 
         var panel = new StackPanel { Margin = new(28) }; dialog.Content = panel;
 
-        panel.Children.Add(new TextBlock { Text = "Work Faster", FontSize = 22, FontWeight = FontWeight.SemiBold, Margin = new(0, 0, 0, 18) });
+        panel.Children.Add(new TextBlock { Text = LocalText.T("Work Faster"), FontSize = 22, FontWeight = FontWeight.SemiBold, Margin = new(0, 0, 0, 18) });
 
         foreach (var (action, key) in new[] { ("Brush / Pencil / Special Brush", "B / P / T"), ("Wall / Remove Wall Sections", "H / Shift + Drag"), ("Fill Tiles / Smtiles / Collisions", "F"), ("Eraser / Select", "E / M"), ("Stamp / Pickup / Clone", "O / V / K"), ("Move / Clone Picked Stamp", "Click"), ("Delete Picked Stamp (Pickup)", "Delete"), ("Cancel Pickup / Clone", "Escape"), ("Pan Canvas", "WASD / Space + Drag / Middle Drag"), ("Zoom", "Mouse Wheel"), ("Brush Size", "[ / ]"), ("Previous / Next Palette Item", "Left / Right"), ("Grid / Both Collision Overlays", "G / C"), ("New / Open Map", "Ctrl+N / Ctrl+O"), ("Save Map", "Ctrl+S"), ("Undo / Redo", "Ctrl+Z / Ctrl+Shift+Z"), ("Copy Visible Layers / Paste Region", "Ctrl+C / Ctrl+V"), ("Cut Visible Layers", "Ctrl+X"), ("Erase Selection", "Delete") })
 
@@ -1093,11 +1102,11 @@ public partial class MainWindow : EditorWindow
 
             var row = new DockPanel { Margin = new(0, 0, 0, 14) };
 
-            var shortcut = new TextBlock { Text = key, Foreground = new ImmutableSolidColorBrush(Color.FromRgb(168, 183, 246)) }; DockPanel.SetDock(shortcut, Dock.Right); row.Children.Add(shortcut); row.Children.Add(new TextBlock { Text = action }); panel.Children.Add(row);
+            var shortcut = new TextBlock { Text = LocalText.T(key), Foreground = new ImmutableSolidColorBrush(Color.FromRgb(168, 183, 246)) }; DockPanel.SetDock(shortcut, Dock.Right); row.Children.Add(shortcut); row.Children.Add(new TextBlock { Text = LocalText.T(action)}); panel.Children.Add(row);
 
         }
 
-        var close = new Button { Content = "Done", IsCancel = true, HorizontalAlignment = HorizontalAlignment.Right, Padding = new(22, 7, 22, 7) }; panel.Children.Add(close); dialog.ShowDialog();
+        var close = new Button { Content = LocalText.T("Done"), IsCancel = true, HorizontalAlignment = HorizontalAlignment.Right, Padding = new(22, 7, 22, 7) }; panel.Children.Add(close); dialog.ShowDialog();
 
     }
 

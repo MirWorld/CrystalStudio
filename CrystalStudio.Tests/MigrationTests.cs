@@ -2,6 +2,7 @@ using System.IO.Compression;
 using System.Reflection;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Primitives;
 using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
 using Avalonia.Input;
@@ -24,7 +25,7 @@ public static class TestApplication
         Directory.CreateDirectory(Root);
         Environment.SetEnvironmentVariable("CRYSTALSTUDIO_PROFILE", Path.Combine(Root, "profile"));
         Fixture.CreateLibraries(Path.Combine(Root, "Data"));
-        new SettingsStore().Save(new LibrarySettings(Path.Combine(Root, "Data")));
+        new SettingsStore().Save(new LibrarySettings(Path.Combine(Root, "Data"), "en-US"));
         return AppBuilder.Configure<App>().UseSkia().UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false });
     }
 }
@@ -76,29 +77,350 @@ public sealed class MigrationTests
     }
 
     [AvaloniaFact]
-    public async Task CategoryGroupsStayCompactAndExpandNativeChildItems()
+    public async Task CategoriesUseVerticalTabsAndGridCardsWithCompleteTooltips()
     {
-        var root = new StampCategoryNode { Label = "Group", Populated = true };
-        root.Children.Add(new StampCategoryNode { Label = "Child", Populated = true });
-        var tree = new TreeView
-        {
-            ItemsSource = new[] { root },
-            ItemTemplate = (Avalonia.Markup.Xaml.Templates.TreeDataTemplate)Application.Current!.FindResource("StampCategoryTemplate")!,
-            ItemContainerTheme = (Avalonia.Styling.ControlTheme)Application.Current.FindResource("StampCategoryItem")!
-        };
-        var window = new Window { Width = 300, Height = 240, Content = tree }; window.Show();
+        var window = await ShowCategoryWindow();
         try
         {
-            await Task.Delay(40); Dispatcher.UIThread.RunJobs();
-            var container = Assert.IsType<TreeViewItem>(tree.ContainerFromIndex(0));
-            Assert.InRange(container.Bounds.Height, 18, 28);
-            container.IsExpanded = true;
-            await Task.Delay(40); Dispatcher.UIThread.RunJobs();
-            Assert.IsType<TreeViewItem>(container.ContainerFromIndex(0));
-            Assert.Contains(tree.GetVisualDescendants().OfType<TextBlock>(), text => text.Text == "Child");
-            Assert.True(container.GetVisualDescendants().OfType<Avalonia.Controls.Primitives.ToggleButton>().First().IsChecked);
+            var tabs = window.FindControl<TabControl>("CategoryTabs")!;
+            Assert.Equal(Dock.Left, tabs.TabStripPlacement);
+            var firstTab = Assert.IsType<TabItem>(tabs.ContainerFromIndex(0));
+            var secondTab = Assert.IsType<TabItem>(tabs.ContainerFromIndex(1));
+            Assert.Equal(firstTab.Bounds.X, secondTab.Bounds.X);
+            Assert.True(secondTab.Bounds.Y > firstTab.Bounds.Y);
+            Assert.DoesNotContain(tabs.GetVisualDescendants(), v => v is TreeView);
+            var list = CategoryList(tabs);
+            var first = Assert.IsType<ListBoxItem>(list.ContainerFromIndex(0));
+            var second = Assert.IsType<ListBoxItem>(list.ContainerFromIndex(1));
+            Assert.Equal(first.Bounds.Y, second.Bounds.Y);
+            Assert.True(second.Bounds.X > first.Bounds.X);
+            var node = Assert.IsType<StampCategoryNode>(list.Items[0]);
+            Assert.Equal("Market stall", node.ShortLabel);
+            Assert.Equal("Market stall", Assert.IsType<StampCategoryNode>(list.Items[1]).ShortLabel);
+            var content = first.GetVisualDescendants().OfType<StackPanel>().Single(p => ToolTip.GetTip(p) is TextBlock);
+            var tip = Assert.IsType<TextBlock>(ToolTip.GetTip(content));
+            ToolTip.SetIsOpen(content, true);
+            await PumpUntil(() => !string.IsNullOrEmpty(tip.Text));
+            Assert.Contains(node.Label, tip.Text);
+            Assert.Contains(node.Detail, tip.Text);
+            Assert.Contains(node.Stamp!.File, tip.Text);
+            ToolTip.SetIsOpen(content, false);
+            var caption = content.Children.OfType<TextBlock>().Single();
+            var image = content.GetVisualDescendants().OfType<Image>().Single();
+            Assert.Equal(node.ShortLabel, caption.Text);
+            Assert.Equal(TextTrimming.CharacterEllipsis, caption.TextTrimming);
+            Assert.True(caption.TranslatePoint(default, content)!.Value.Y >= image.TranslatePoint(default, content)!.Value.Y + image.Bounds.Height);
+            list.SelectedIndex = 0;
+            await PumpUntil(() => window.FindControl<MapViewport>("Viewport")!.Stamp != null);
+            list = CategoryList(tabs);
+            first = Assert.IsType<ListBoxItem>(list.ContainerFromIndex(0));
+            Assert.True(first.Focus(), $"The category card must accept keyboard focus. Focusable={first.Focusable}, Visible={first.IsEffectivelyVisible}, Enabled={first.IsEffectivelyEnabled}, Root={first.GetVisualRoot()}, Bounds={first.Bounds}");
+            window.KeyPressQwerty(PhysicalKey.ArrowRight, RawInputModifiers.None); window.KeyReleaseQwerty(PhysicalKey.ArrowRight, RawInputModifiers.None);
+            Assert.Equal(1, list.SelectedIndex);
+            Assert.False(window.FindControl<MapViewport>("Viewport")!.History.Dirty);
         }
         finally { window.Close(); }
+    }
+
+    [AvaloniaFact]
+    public async Task CategorySwitchesRememberPagesAndSelectionWhileSearchAndGroupingRemainAvailable()
+    {
+        var window = await ShowCategoryWindow();
+        try
+        {
+            var tabs = window.FindControl<TabControl>("CategoryTabs")!;
+            var trees = tabs.Items.OfType<StampCategoryGroup>().Single(g => g.Name == "Tree");
+            tabs.SelectedItem = trees;
+            await PumpUntil(() => CategoryList(tabs).Items.Count == 24);
+            window.FindControl<Button>("NextButton")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            await PumpUntil(() => trees.Page == 1 && trees.Items.Count == 24);
+            var list = CategoryList(tabs); list.SelectedIndex = 2;
+            string selected = ((StampCategoryNode)list.SelectedItem!).Stamp!.File;
+            await PumpUntil(() => window.FindControl<MapViewport>("Viewport")!.StampName == ((StampCategoryNode)list.SelectedItem!).Label);
+            var scroll = list.GetVisualDescendants().OfType<ScrollViewer>().First();
+            scroll.Offset = new Vector(0, 160);
+            await PumpUntil(() => trees.ScrollOffset.Y > 0);
+            double savedOffset = trees.ScrollOffset.Y;
+            tabs.SelectedIndex = 0;
+            await PumpUntil(() => tabs.SelectedItem is StampCategoryGroup { Name: "Building" } && CategoryList(tabs).Items.Count == 2);
+            tabs.SelectedItem = trees;
+            await PumpUntil(() => CategoryList(tabs).SelectedItem is StampCategoryNode node && node.Stamp!.File == selected);
+            Assert.Equal(1, trees.Page);
+            Assert.Equal(savedOffset, CategoryList(tabs).GetVisualDescendants().OfType<ScrollViewer>().First().Offset.Y);
+            Assert.Equal("Page 2 of 3", window.FindControl<TextBlock>("PageLabel")!.Text);
+            Assert.All(tabs.Items.OfType<StampCategoryGroup>().Where(g => !ReferenceEquals(g, trees)), g => Assert.Empty(g.Items));
+            var search = window.FindControl<TextBox>("AssetSearch")!;
+            search.Text = "missing-category-stamp";
+            await PumpUntil(() => tabs.Items.Count == 0);
+            Assert.True(window.FindControl<StackPanel>("AssetEmpty")!.IsVisible);
+            search.Clear();
+            await PumpUntil(() => tabs.Items.Count == 3);
+            var grouping = (ComboBox)typeof(MainWindow).GetField("categoryGrouping", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(window)!;
+            grouping.SelectedItem = "Environment";
+            await PumpUntil(() => tabs.Items.OfType<StampCategoryGroup>().Any(g => g.Name == "Outdoor"));
+            Assert.Single(tabs.Items);
+            Assert.False(window.FindControl<MapViewport>("Viewport")!.History.Dirty);
+        }
+        finally { window.Close(); }
+    }
+
+    [AvaloniaFact]
+    public async Task LanguageMenuSavesPreferenceWithoutChangingCurrentWindowsOrEditingState()
+    {
+        var store = new SettingsStore(); var saved = store.Load();
+        store.Save(saved with { Language = "en-US" }); LocalText.Initialize(store);
+        var window = await ShowCategoryWindow();
+        var settings = new SettingsWindow(saved.LibraryFolder, _ => Task.CompletedTask) { Owner = window };
+        settings.Show();
+        var viewport = window.FindControl<MapViewport>("Viewport")!;
+        var document = viewport.Document; var history = viewport.History;
+        history.Record(document, 2, 2); document.Set(2, 2, new Cell { BackImage = 1 }); history.Commit();
+        try
+        {
+            var languages = window.FindControl<MenuItem>("ViewMenu")!.Items.OfType<MenuItem>().Single(item => item.Name == "LanguageMenu");
+            var chinese = languages.Items.OfType<MenuItem>().Single(item => item.Name == "ChineseLanguage");
+            chinese.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent)); Dispatcher.UIThread.RunJobs();
+            Assert.Equal("zh-CN", store.Load().Language); Assert.True(chinese.IsChecked);
+            Assert.Equal(saved.LibraryFolder, store.Load().LibraryFolder);
+            Assert.Equal("en-US", LocalText.Language);
+            Assert.Equal("Active Asset", window.FindControl<TextBlock>("SelectedPreviewCaption")!.Text);
+            Assert.Equal("Crystal Studio Settings", settings.Title);
+            Assert.Equal("Language saved. Restart Crystal Studio to apply.", window.FindControl<TextBlock>("Status")!.Text);
+            Assert.Same(document, viewport.Document); Assert.Same(history, viewport.History);
+            Assert.True(history.Dirty); Assert.True(history.CanUndo); Assert.Equal(1, document.Get(2, 2).BackImage);
+            Assert.Equal(Key.S, window.FindControl<MenuItem>("SaveButton")!.InputGesture!.Key);
+            Assert.Equal(KeyModifiers.Control, window.FindControl<MenuItem>("SaveButton")!.InputGesture!.KeyModifiers);
+            history.Undo(document); Assert.Equal(0, document.Get(2, 2).BackImage);
+        }
+        finally { history.Saved(); settings.Close(); window.Close(); store.Save(saved); LocalText.Initialize(store); }
+    }
+
+    [AvaloniaFact]
+    public async Task ChineseStartupSupportsCategorySearchAndPendingPreferenceKeepsSelectionAndPage()
+    {
+        var store = new SettingsStore(); var saved = store.Load();
+        store.Save(saved with { Language = "zh-CN" }); LocalText.Initialize(store);
+        var window = await ShowCategoryWindow();
+        try
+        {
+            Assert.Equal("当前资源", window.FindControl<TextBlock>("SelectedPreviewCaption")!.Text);
+            Assert.StartsWith("未命名", window.Title);
+            typeof(MainWindow).GetMethod("UpdateCellInspector", BindingFlags.NonPublic | BindingFlags.Instance)!.Invoke(window, [2, 2]);
+            Assert.Contains("物体", window.FindControl<TextBlock>("Inspector")!.Text);
+            var tabs = window.FindControl<TabControl>("CategoryTabs")!;
+            var trees = tabs.Items.OfType<StampCategoryGroup>().Single(group => group.Name == "Tree");
+            tabs.SelectedItem = trees;
+            window.FindControl<Button>("NextButton")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            await PumpUntil(() => trees.Page == 1);
+            var list = CategoryList(tabs); list.SelectedIndex = 2;
+            await PumpUntil(() => window.FindControl<MapViewport>("Viewport")!.Stamp != null);
+            var selected = list.SelectedItem; var items = trees.Items.ToArray();
+            var scroll = list.GetVisualDescendants().OfType<ScrollViewer>().First(); scroll.Offset = new Vector(0, 160);
+            await PumpUntil(() => trees.ScrollOffset.Y > 0); double offset = scroll.Offset.Y;
+            LocalText.SaveLanguage("en-US", store); Dispatcher.UIThread.RunJobs();
+            Assert.Equal("zh-CN", LocalText.Language);
+            Assert.Equal("第 2 页，共 3 页", window.FindControl<TextBlock>("PageLabel")!.Text);
+            Assert.Same(trees, tabs.SelectedItem); Assert.Same(selected, list.SelectedItem);
+            Assert.Equal(items, trees.Items); Assert.Equal(offset, scroll.Offset.Y);
+            Assert.Contains(tabs.GetVisualDescendants().OfType<TextBlock>(), text => text.Text == "树木");
+            Assert.Equal("Tree", trees.Name);
+            var node = (StampCategoryNode)selected!;
+            Assert.Equal("Palm tree", node.ShortLabel);
+            Assert.Contains(node.Label, node.Description); Assert.Contains(node.Stamp!.File, node.Description);
+            Assert.Contains("树木", node.Description);
+            var search = window.FindControl<TextBox>("AssetSearch")!; search.Text = "树木";
+            await PumpUntil(() => tabs.Items.Count == 1 && tabs.SelectedItem is StampCategoryGroup { Name: "Tree" });
+            Assert.Equal(54, ((StampCategoryGroup)tabs.SelectedItem!).Members.Count);
+            search.Clear(); await PumpUntil(() => tabs.Items.Count == 3);
+            Assert.False(window.FindControl<MapViewport>("Viewport")!.History.Dirty);
+        }
+        finally { window.Close(); store.Save(saved); LocalText.Initialize(store); }
+    }
+
+    [AvaloniaFact]
+    public async Task SettingsSavesLanguageWithoutApplyingLibrariesAndNewWindowsUseItAfterStartup()
+    {
+        var store = new SettingsStore(); var saved = store.Load(); bool librariesApplied = false;
+        store.Save(saved with { Language = "en-US" }); LocalText.Initialize(store);
+        var window = new SettingsWindow(saved.LibraryFolder, _ => { librariesApplied = true; return Task.CompletedTask; }, true);
+        window.Show();
+        try
+        {
+            await PumpUntil(() => window.GetVisualDescendants().OfType<ComboBox>().Any(combo => combo.Name == "LanguageSelector"));
+            var selector = window.GetVisualDescendants().OfType<ComboBox>().Single(combo => combo.Name == "LanguageSelector");
+            selector.SelectedIndex = 0;
+            Assert.Equal("zh-CN", store.Load().Language); Assert.Equal("en-US", LocalText.Language);
+            Assert.Equal("Welcome to Crystal Studio", window.Title);
+            Assert.False(librariesApplied); Assert.Equal(saved.LibraryFolder, store.Load().LibraryFolder);
+            Assert.Contains(window.GetVisualDescendants().OfType<TextBlock>(), text => text.Text == "Language saved. Restart Crystal Studio to apply.");
+            window.Close(); LocalText.Initialize(store);
+            window = new SettingsWindow(saved.LibraryFolder, _ => Task.CompletedTask, true); window.Show();
+            await PumpUntil(() => window.GetVisualDescendants().OfType<ComboBox>().Any(combo => combo.Name == "LanguageSelector"));
+            Assert.Equal("欢迎使用 Crystal Studio", window.Title);
+            selector = window.GetVisualDescendants().OfType<ComboBox>().Single(combo => combo.Name == "LanguageSelector");
+            Assert.Equal(0, selector.SelectedIndex);
+            Assert.Equal("资源面板", LocalText.T("Palette"));
+            Assert.Equal("Custom resource 物体", LocalText.T("Custom resource 物体"));
+            Assert.Equal("船只", LocalText.T("Boat"));
+            selector.SelectedIndex = 1;
+            Assert.Equal("en-US", store.Load().Language); Assert.Equal("zh-CN", LocalText.Language);
+            Assert.Equal("欢迎使用 Crystal Studio", window.Title);
+            window.Close(); LocalText.Initialize(store);
+            window = new SettingsWindow(saved.LibraryFolder, _ => Task.CompletedTask, true); window.Show();
+            Assert.Equal("Welcome to Crystal Studio", window.Title);
+            Assert.Equal(saved.LibraryFolder, store.Load().LibraryFolder);
+            Assert.Throws<ArgumentException>(() => LocalText.SaveLanguage("fr-FR", store));
+        }
+        finally { window.Close(); store.Save(saved); LocalText.Initialize(store); }
+    }
+
+    [AvaloniaFact]
+    public async Task ChineseCategoryChoicesKeepCanonicalValuesForSaving()
+    {
+        var store = new SettingsStore(); var saved = store.Load();
+        store.Save(saved with { Language = "zh-CN" }); LocalText.Initialize(store);
+        var picker = new StampCategoryPicker(["Boat", "Outdoor"], ["Boat"]);
+        var window = new EditorWindow { Content = picker }; window.Show();
+        try
+        {
+            await PumpUntil(() => picker.GetVisualDescendants().OfType<ToggleButton>().Any(button => button.Content?.ToString()?.Contains("船只", StringComparison.Ordinal) == true));
+            Assert.Equal(new[] { "Boat" }, picker.SelectedValues);
+            var checks = (List<CheckBox>)typeof(StampCategoryPicker).GetField("choices", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(picker)!;
+            Assert.Equal("船只", checks[0].Content);
+            checks[1].IsChecked = true;
+            Assert.Equal(new[] { "Boat", "Outdoor" }, picker.SelectedValues);
+            LocalText.SaveLanguage("en-US", store); Dispatcher.UIThread.RunJobs();
+            Assert.Equal("船只", checks[0].Content); Assert.Equal(new[] { "Boat", "Outdoor" }, picker.SelectedValues);
+        }
+        finally { window.Close(); store.Save(saved); LocalText.Initialize(store); }
+    }
+
+    [AvaloniaFact]
+    public async Task GeneratorWindowsUseStartupLanguageAndRetainCanonicalChoices()
+    {
+        var store = new SettingsStore(); var saved = store.Load();
+        using var assets = AssetStore.Load(Path.Combine(TestApplication.Root, "Data"));
+        var document = new MapDocument(256, 256); var terrain = TerrainCatalogue.Load(); var walls = WallCatalogue.Read(WallCatalogue.ResolvePath());
+        try
+        {
+            foreach (string language in new[] { "zh-CN", "en-US" })
+            {
+                store.Save(saved with { Language = language }); LocalText.Initialize(store);
+                var windows = new (EditorWindow Window, string English, string Chinese)[]
+                {
+                    (new WallBrushWindow(walls.Families, assets), "Wall Brush", "墙体笔刷"),
+                    (new SpecialBrushWindow(assets, new TreeBrushOptions(), 3, []), "Special Brush", "特殊笔刷"),
+                    (new TownStampWindow(assets, TownCatalogue.Load()), "Generate Town", "生成城镇"),
+                    (new TerrainGeneratorWindow(document, assets, terrain), "Generate Terrain", "生成地形"),
+                    (new ProvinceGeneratorWindow(document, assets, walls), "Province Generator", "省域生成器"),
+                    (new TempleGeneratorWindow(document, assets, walls, terrain), "Generate Dungeon", "生成地牢")
+                };
+                try
+                {
+                    foreach (var pair in windows) pair.Window.Show();
+                    await PumpUntil(() => windows.All(pair => pair.Window.GetVisualDescendants().OfType<ComboBox>().Any()));
+                    foreach (var pair in windows) Assert.Equal(language == "zh-CN" ? pair.Chinese : pair.English, pair.Window.Title);
+                    var selected = windows.SelectMany(pair => pair.Window.GetVisualDescendants().OfType<ComboBox>()).ToDictionary(combo => combo, combo => combo.SelectedItem);
+                    Assert.NotEmpty(selected);
+                    LocalText.SaveLanguage(language == "zh-CN" ? "en-US" : "zh-CN", store); Dispatcher.UIThread.RunJobs();
+                    foreach (var pair in windows) Assert.Equal(language == "zh-CN" ? pair.Chinese : pair.English, pair.Window.Title);
+                    Assert.All(selected, pair => Assert.Equal(pair.Value, pair.Key.SelectedItem));
+                }
+                finally { foreach (var pair in windows) pair.Window.Close(); }
+            }
+        }
+        finally { store.Save(saved); LocalText.Initialize(store); }
+    }
+
+    [Fact]
+    public void BilingualResourcesHaveCompleteMatchingFormatArguments()
+    {
+        Assert.NotEmpty(LocalText.Resources);
+        foreach (var pair in LocalText.Resources)
+        {
+            Assert.False(string.IsNullOrWhiteSpace(pair.Value.English), pair.Key);
+            Assert.False(string.IsNullOrWhiteSpace(pair.Value.Chinese), pair.Key);
+            var english = System.Text.CompositeFormat.Parse(pair.Value.English);
+            var chinese = System.Text.CompositeFormat.Parse(pair.Value.Chinese);
+            Assert.True(english.MinimumArgumentCount == chinese.MinimumArgumentCount, pair.Key);
+            static string[] Indices(string value) => System.Text.RegularExpressions.Regex.Matches(value, @"(?<!\{)\{(\d+)(?:[, :][^}]*)?\}(?!\})").Select(match => match.Groups[1].Value).Distinct().Order().ToArray();
+            Assert.Equal(Indices(pair.Value.English), Indices(pair.Value.Chinese));
+            var arguments = Enumerable.Range(0, english.MinimumArgumentCount).Select(index => (object)index).ToArray();
+            _ = string.Format(System.Globalization.CultureInfo.InvariantCulture, english, arguments);
+            _ = string.Format(System.Globalization.CultureInfo.InvariantCulture, chinese, arguments);
+        }
+    }
+
+    [AvaloniaFact]
+    public async Task CategoryPreviewsLoadVisibleCardsOnlyAndCancelWhenHidden()
+    {
+        var started = new System.Collections.Concurrent.ConcurrentDictionary<int, byte>();
+        var cancelled = new System.Collections.Concurrent.ConcurrentDictionary<int, byte>();
+        var nodes = Enumerable.Range(0, 24).Select(index => new StampCategoryNode
+        {
+            Label = "Preview " + index, LoadWhenVisible = true,
+            LivePreviewLoader = async token =>
+            {
+                started.TryAdd(index, 0);
+                try { await Task.Delay(Timeout.Infinite, token); return null; }
+                finally { cancelled.TryAdd(index, 0); }
+            }
+        }).ToArray();
+        var list = new ListBox
+        {
+            ItemsSource = nodes,
+            ItemsPanel = new Avalonia.Controls.Templates.FuncTemplate<Panel?>(() => new ResponsivePanel { ItemMinWidth = 100 }),
+            ItemTemplate = (Avalonia.Controls.Templates.IDataTemplate)Application.Current!.FindResource("StampCategoryCardTemplate")!,
+            ItemContainerTheme = (Avalonia.Styling.ControlTheme)Application.Current!.FindResource("CategoryCard")!
+        };
+        ScrollViewer.SetHorizontalScrollBarVisibility(list, Avalonia.Controls.Primitives.ScrollBarVisibility.Disabled);
+        var window = new Window { Width = 240, Height = 150, Content = list }; window.Show();
+        try
+        {
+            await PumpUntil(() => started.Count == 2);
+            Assert.All(started.Keys, index => Assert.InRange(index, 0, 3));
+            var scroll = list.GetVisualDescendants().OfType<ScrollViewer>().First();
+            scroll.Offset = new Vector(0, 800);
+            await PumpUntil(() => started.Keys.Any(index => index >= 12));
+            Assert.True(cancelled.ContainsKey(0));
+            Assert.InRange(started.Count, 3, 6);
+            window.Content = null;
+            await PumpUntil(() => cancelled.Count == started.Count);
+        }
+        finally { window.Close(); }
+    }
+
+    private static ListBox CategoryList(TabControl tabs) => tabs.GetVisualDescendants().OfType<ListBox>().Single(l => l.Name == "CategoryItems");
+
+    private static async Task PumpUntil(Func<bool> condition)
+    {
+        for (int i = 0; i < 150 && !condition(); i++) { await Task.Delay(20); Dispatcher.UIThread.RunJobs(); }
+        Assert.True(condition(), "The expected category UI state did not become available.");
+        await Task.Delay(30); Dispatcher.UIThread.RunJobs();
+    }
+
+    private static async Task<MainWindow> ShowCategoryWindow()
+    {
+        string root = Path.Combine(TestApplication.Root, "categories-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        var stamps = new List<CategorizedStamp>();
+        for (int i = 0; i < 57; i++)
+        {
+            string file = $"test_{i:00000}.X", type = i < 2 ? "Building" : i < 56 ? "Tree" : "Wall", name = i < 2 ? "Market stall" : "Palm tree";
+            CellCodec.SaveStamp(Path.Combine(root, file), [new StampCell(0, 0, new Cell { Foreground = new Front(2, 1) })]);
+            string separator = i == 0 ? " \u2014 " : " - ";
+            stamps.Add(new CategorizedStamp(file, file, $"{name}{separator}test_{i:00000}", type, name, ["Province"], ["BichonProvince"], ["Outdoor"], [], null, "unknown", null, false, "unreviewed"));
+        }
+        var window = new MainWindow(new AssetHistoryStore(Path.Combine(root, "assets.json")), new RecentMapStore(Path.Combine(root, "recent.json")));
+        window.Show();
+        await PumpUntil(() => window.FindControl<MapViewport>("Viewport")!.Assets != null &&
+            !(bool)typeof(MainWindow).GetField("stampIndexLoading", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(window)! &&
+            !(bool)typeof(MainWindow).GetField("busy", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(window)!);
+        typeof(MainWindow).GetField("categoryIndex", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(window, new StampCategoryIndex(1, root, root, stamps));
+        typeof(MainWindow).GetField("categoriesAttempted", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(window, true);
+        window.GetVisualDescendants().OfType<TabControl>().Single(t => t.Items.Count == 4).SelectedIndex = 3;
+        await PumpUntil(() => window.FindControl<TabControl>("CategoryTabs")!.GetVisualDescendants().OfType<ListBox>().Any(l => l.Items.Count > 0));
+        return window;
     }
 
     [AvaloniaFact]

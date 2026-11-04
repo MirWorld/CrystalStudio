@@ -5,7 +5,7 @@ public partial class MainWindow
     private async void TownStampClick(object sender, RoutedEventArgs e)
     {
         if (busy) return;
-        if (assets == null) { Status.Text = "Load game libraries in Settings before generating a town."; UpdateWorkspace(); return; }
+        if (assets == null) { Status.Text = LocalText.T("Load game libraries in Settings before generating a town."); UpdateWorkspace(); return; }
         await Run(async () =>
         {
             var catalogue = await Task.Run(() => TownCatalogue.Load());
@@ -15,7 +15,7 @@ public partial class MainWindow
             Viewport.Town = dialog.Plan;
             Viewport.Layer = MapLayer.Objects; LayerList.SelectedIndex = (int)MapLayer.Objects;
             SetTool(EditorTool.TownStamp);
-            Status.Text = $"{dialog.Plan.Name} \u00b7 Click to place \u00b7 Town Settings to shuffle";
+            Status.Text = LocalText.Format("{0} · Click to place · Town Settings to shuffle",dialog.Plan.Name);
         });
     }
 }
