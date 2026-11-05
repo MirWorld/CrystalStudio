@@ -27,9 +27,14 @@ public partial class MainWindow
         mapFileStatus.SetResource(TextBlock.ForegroundProperty, "Muted");
         mapFileList.SetValue(ScrollViewer.HorizontalScrollBarVisibilityProperty, ScrollBarVisibility.Disabled);
         mapFileList.SetValue(ScrollViewer.VerticalScrollBarVisibilityProperty, ScrollBarVisibility.Auto);
+        mapFileList.ItemContainerTheme = new ControlTheme(typeof(ListBoxItem))
+        {
+            BasedOn = (ControlTheme)this.FindResource("LayerRow"),
+            Setters = { new Setter(Layoutable.HeightProperty, 22.0), new Setter(Layoutable.MinHeightProperty, 22.0) }
+        };
         mapFileList.ItemTemplate = new Avalonia.Controls.Templates.FuncDataTemplate<MapFileEntry>((entry, _) =>
         {
-            var label = new TextBlock { Text = entry?.RelativePath, FontSize = 11, Margin = new Thickness(3), TextTrimming = TextTrimming.CharacterEllipsis };
+            var label = new TextBlock { Text = entry?.RelativePath, FontSize = 11, Margin = new Thickness(3, 0), TextTrimming = TextTrimming.CharacterEllipsis };
             label.SetTip(entry?.FilePath);
             return label;
         });

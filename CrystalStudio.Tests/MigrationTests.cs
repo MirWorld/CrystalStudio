@@ -60,6 +60,73 @@ internal static class Fixture
 public sealed class MigrationTests
 {
     [AvaloniaFact]
+    public async Task GridRendersOverMapArtworkWhenZoomedToFitScale()
+    {
+        ThemeService.Initialize();
+        ThemeService.ApplyPalette(false, Color.FromRgb(132, 152, 255));
+        using var assets = AssetStore.Load(Path.Combine(TestApplication.Root, "Data"));
+        var viewport = new MapViewport { Assets = assets };
+        var document = new MapDocument(128, 128);
+        for (int y = 0; y < document.Height; y++)
+            for (int x = 0; x < document.Width; x++)
+                document.Set(x, y, new Cell { BackLibrary = 0, BackImage = 1 });
+        viewport.SetDocument(document);
+        var window = new Window { Width = 800, Height = 600, Content = viewport };
+        window.Show();
+        try
+        {
+            await PumpUntil(() => viewport.Bounds.Width > 0 && viewport.Bounds.Height > 0);
+            int builds = viewport.MapSceneBuilds;
+            viewport.SetZoom(.3);
+            await PumpUntil(() => viewport.MapSceneBuilds > builds);
+            await PumpUntil(() => assets.Get(0, 0) != null);
+            viewport.RefreshAssets();
+            await Task.Delay(60); Dispatcher.UIThread.RunJobs();
+            Assert.True(viewport.GridVisible);
+            var origin = (Point)typeof(MapViewport).GetField("origin", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(viewport)!;
+            using var frame = window.CaptureRenderedFrame()!;
+            using var stream = new MemoryStream(); frame.Save(stream); stream.Position = 0;
+            using var image = RasterImage.Load(stream);
+            int pixelWidth = image.PixelWidth;
+            byte[] pixels = Fixture.Pixels(image);
+            int xLine = (int)Math.Round(origin.X + 48 * viewport.Zoom);
+            int ySample = (int)Math.Round(origin.Y + 16 * viewport.Zoom);
+            int line = (ySample * pixelWidth + xLine) * 4;
+            int artwork = (ySample * pixelWidth + xLine + 3) * 4;
+            Assert.True((pixels[line], pixels[line + 1], pixels[line + 2]) !=
+                (pixels[artwork], pixels[artwork + 1], pixels[artwork + 2]),
+                $"Zoom={viewport.Zoom}, origin={origin}, sample=({xLine},{ySample}), frame={pixelWidth}x{image.PixelHeight}, asset={assets.Libraries.Count}, cell={document.Get(0, 0).BackImage}");
+        }
+        finally { window.Close(); }
+    }
+
+    [AvaloniaFact]
+    public async Task HelpWindowRemainsOpenWithoutBlockingItsOwner()
+    {
+        var owner = new MainWindow(new AssetHistoryStore(Path.Combine(TestApplication.Root, "help-assets.json")),
+            new RecentMapStore(Path.Combine(TestApplication.Root, "help-recent.json")));
+        owner.Show();
+        try
+        {
+            await Task.Delay(50);
+            Dispatcher.UIThread.RunJobs();
+            var openHelp = typeof(MainWindow).GetMethod("ShortcutsClick", BindingFlags.NonPublic | BindingFlags.Instance)!;
+            var helpField = typeof(MainWindow).GetField("shortcutsWindow", BindingFlags.NonPublic | BindingFlags.Instance)!;
+            openHelp.Invoke(owner, [owner, new RoutedEventArgs()]);
+            var help = Assert.IsType<EditorWindow>(helpField.GetValue(owner));
+            Assert.True(help.IsVisible);
+            Assert.True(owner.IsEnabled);
+
+            openHelp.Invoke(owner, [owner, new RoutedEventArgs()]);
+            Assert.Same(help, helpField.GetValue(owner));
+
+            help.Close();
+            Assert.Null(helpField.GetValue(owner));
+        }
+        finally { owner.Close(); }
+    }
+
+    [AvaloniaFact]
     public async Task CompactSliderKeepsKeyboardAndPointerValueChanges()
     {
         var slider = new Slider { Minimum = 3, Maximum = 31, Value = 3, TickFrequency = 2, IsSnapToTickEnabled = true, Width = 100, HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Left, VerticalAlignment = Avalonia.Layout.VerticalAlignment.Top };
@@ -329,7 +396,11 @@ public sealed class MigrationTests
                 try
                 {
                     foreach (var pair in windows) pair.Window.Show();
-                    await PumpUntil(() => windows.All(pair => pair.Window.GetVisualDescendants().OfType<ComboBox>().Any()));
+                    // Terrain choices load asynchronously. Capture the selection only
+                    // after loading, so completion is not mistaken for a language change.
+                    await PumpUntil(() => windows.All(pair => pair.Window.GetVisualDescendants().OfType<ComboBox>().Any()) &&
+                        windows.Select(pair => pair.Window).OfType<TerrainGeneratorWindow>()
+                            .All(window => window.FindControl<ComboBox>("BiomeList")?.SelectedItem != null));
                     foreach (var pair in windows) Assert.Equal(language == "zh-CN" ? pair.Chinese : pair.English, pair.Window.Title);
                     var selected = windows.SelectMany(pair => pair.Window.GetVisualDescendants().OfType<ComboBox>()).ToDictionary(combo => combo, combo => combo.SelectedItem);
                     Assert.NotEmpty(selected);

@@ -88,6 +88,7 @@ public partial class MainWindow : EditorWindow
 
     private bool busy;
     private bool closed;
+    private EditorWindow? shortcutsWindow;
 
     private bool initialized;
 
@@ -876,7 +877,7 @@ public partial class MainWindow : EditorWindow
 
         if (e.Key == Key.F1) { ShortcutsClick(s, e); e.Handled = true; }
 
-        if (e.Key == Key.G) { GridToggle.IsChecked = GridToggle.IsChecked != true; e.Handled = true; }
+        if (e.Key == Key.G) { GridToggle.IsChecked = GridToggle.IsChecked != true; ViewChanged(s, e); e.Handled = true; }
 
         if (e.Key == Key.C) { bool show = !Viewport.CollisionVisible; LowCollisionVisible.IsChecked = show; HighCollisionVisible.IsChecked = show; e.Handled = true; }
 
@@ -1102,7 +1103,12 @@ public partial class MainWindow : EditorWindow
 
     {
 
+        if (shortcutsWindow is { IsVisible: true }) { shortcutsWindow.Activate(); return; }
+
         var dialog = new EditorWindow { Title = LocalText.T("InputState Shortcuts"), Width = 460, Height = 680, Owner = this, CanResize = false, WindowStartupLocation = WindowStartupLocation.CenterOwner };
+
+        shortcutsWindow = dialog;
+        dialog.Closed += (_, _) => { if (ReferenceEquals(shortcutsWindow, dialog)) shortcutsWindow = null; };
 
         var panel = new StackPanel { Margin = new(28) }; dialog.Content = panel;
 
@@ -1118,7 +1124,7 @@ public partial class MainWindow : EditorWindow
 
         }
 
-        var close = new Button { Content = LocalText.T("Done"), IsCancel = true, HorizontalAlignment = HorizontalAlignment.Right, Padding = new(22, 7, 22, 7) }; panel.Children.Add(close); dialog.ShowDialog();
+        var close = new Button { Content = LocalText.T("Done"), IsCancel = true, HorizontalAlignment = HorizontalAlignment.Right, Padding = new(22, 7, 22, 7) }; panel.Children.Add(close); dialog.Show();
 
     }
 

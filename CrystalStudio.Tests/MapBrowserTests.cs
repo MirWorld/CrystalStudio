@@ -11,6 +11,124 @@ namespace CrystalStudio.Tests;
 
 public sealed class MapBrowserTests
 {
+    [AvaloniaFact]
+    public async Task BulkCloseConfirmsEachDirtyMapAndStopsOnCancel()
+    {
+        var window = new MainWindow(new AssetHistoryStore(Path.Combine(TestApplication.Root, "tab-close-assets.json")),
+            new RecentMapStore(Path.Combine(TestApplication.Root, "tab-close-recent.json")));
+        window.Show();
+        var viewport = window.FindControl<MapViewport>("Viewport")!;
+        try
+        {
+            await Pump();
+            await Until(() => viewport.Assets != null && window.FindControl<MenuItem>("SaveButton")!.IsEnabled);
+            var add = typeof(MainWindow).GetMethod("AddMapTab", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!;
+            var tabs = window.GetVisualDescendants().OfType<TabControl>().Single(control => control.Name == "MapTabs");
+            for (int i = 0; i < 3; i++)
+            {
+                add.Invoke(window, [new MapDocument(16, 16), null]);
+                if (i == 2) continue;
+                viewport.History.Record(viewport.Document, 0, 0);
+                viewport.Document.Set(0, 0, new Cell { MiddleImage = 1 });
+                viewport.History.Commit();
+            }
+            var cancelled = Assert.IsType<TabItem>(tabs.Items[2]);
+            var untouched = Assert.IsType<TabItem>(tabs.Items[3]);
+            int confirmations = 0;
+            using var dialogs = Window.WindowOpenedEvent.AddClassHandler<Window>((dialog, _) =>
+            {
+                if (dialog.Title != LocalText.T("Unsaved map")) return;
+                string answer = confirmations++ == 0 ? "No" : "Cancel";
+                Dispatcher.UIThread.Post(() => dialog.GetVisualDescendants().OfType<Button>()
+                    .Single(button => Equals(button.Content, LocalText.T(answer)))
+                    .RaiseEvent(new RoutedEventArgs(Button.ClickEvent)));
+            });
+            Assert.IsType<TabItem>(tabs.Items[0]).ContextMenu!.Items.OfType<MenuItem>()
+                .Single(item => Equals(item.Header, LocalText.T("Close All")))
+                .RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+            Assert.Equal(2, confirmations);
+            Assert.Equal(new[] { cancelled, untouched }, tabs.Items.Cast<TabItem>().ToArray());
+            Assert.Same(cancelled, tabs.SelectedItem);
+            Assert.True(viewport.History.Dirty);
+            viewport.Undo();
+        }
+        finally { viewport.History.Saved(); window.Close(); }
+    }
+
+    [AvaloniaFact]
+    public async Task MapTabsSupportRelativeCloseCommandsAndDragReordering()
+    {
+        var window = new MainWindow(new AssetHistoryStore(Path.Combine(TestApplication.Root, "tab-actions-assets.json")),
+            new RecentMapStore(Path.Combine(TestApplication.Root, "tab-actions-recent.json")));
+        window.Show();
+        try
+        {
+            var viewport = window.FindControl<MapViewport>("Viewport")!;
+            await Pump();
+            await Until(() => viewport.Assets != null && window.FindControl<MenuItem>("SaveButton")!.IsEnabled);
+            var add = typeof(MainWindow).GetMethod("AddMapTab", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!;
+            for (int i = 0; i < 3; i++) add.Invoke(window, [new MapDocument(16, 16), null]);
+            var tabs = window.GetVisualDescendants().OfType<TabControl>()
+                .Single(control => control.Items.OfType<TabItem>().Any() && control.Items.OfType<TabItem>().All(tab => tab.Tag != null));
+            Assert.Equal(4, tabs.Items.Count);
+            var relative = Assert.IsType<TabItem>(tabs.ContainerFromIndex(1));
+            var context = Assert.IsType<ContextMenu>(relative.ContextMenu);
+            Assert.Contains(context.Items.OfType<MenuItem>(), item => Equals(item.Header, LocalText.T("Close All")));
+            Assert.Contains(context.Items.OfType<MenuItem>(), item => Equals(item.Header, LocalText.T("Close Tabs to Left")));
+            Assert.Contains(context.Items.OfType<MenuItem>(), item => Equals(item.Header, LocalText.T("Close Tabs to Right")));
+            Assert.Contains(context.Items.OfType<MenuItem>(), item => Equals(item.Header, LocalText.T("Close Other Tabs")));
+            context.Items.OfType<MenuItem>().Single(item => Equals(item.Header, LocalText.T("Close Tabs to Right")))
+                .RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+            Assert.Equal(2, tabs.Items.Count);
+
+            add.Invoke(window, [new MapDocument(16, 16), null]);
+            add.Invoke(window, [new MapDocument(16, 16), null]);
+            await Pump();
+            var originalOrder = tabs.Items.Cast<TabItem>().ToArray();
+            var first = Assert.IsType<TabItem>(tabs.ContainerFromIndex(0));
+            var last = Assert.IsType<TabItem>(tabs.ContainerFromIndex(tabs.Items.Count - 1));
+            tabs.SelectedItem = first;
+            viewport.SetZoom(.3);
+            var document = viewport.Document;
+            var history = viewport.History;
+            history.Record(document, 0, 0);
+            document.Set(0, 0, new Cell { MiddleImage = 1 });
+            history.Commit();
+            var start = first.TranslatePoint(new Point(first.Bounds.Width / 2, first.Bounds.Height / 2), window)!.Value;
+            var end = last.TranslatePoint(new Point(last.Bounds.Width * .9, last.Bounds.Height / 2), window)!.Value;
+            Assert.True(first.Bounds.Width > 0 && last.Bounds.Width > 0, $"Tab bounds: {first.Bounds}, {last.Bounds}; parent: {tabs.Bounds}");
+            window.MouseMove(start);
+            window.MouseDown(start, MouseButton.Left);
+            await Pump();
+            window.MouseMove(end, RawInputModifiers.LeftMouseButton);
+            await Pump();
+            window.MouseUp(end, MouseButton.Left);
+            await Pump();
+            var reordered = tabs.Items.Cast<TabItem>().ToArray();
+            Assert.NotEqual(originalOrder, reordered);
+            Assert.Equal(originalOrder[0], reordered[^1]);
+            Assert.Same(first, tabs.SelectedItem);
+            Assert.Same(document, viewport.Document);
+            Assert.Same(history, viewport.History);
+            Assert.Equal(.3, viewport.Zoom);
+            Assert.True(history.Dirty);
+            viewport.Undo();
+
+            void Close(TabItem tab, string action) => tab.ContextMenu!.Items.OfType<MenuItem>()
+                .Single(item => Equals(item.Header, LocalText.T(action))).RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+            var anchor = Assert.IsType<TabItem>(tabs.Items[2]);
+            Close(anchor, "Close Tabs to Left");
+            Assert.Equal(2, tabs.Items.Count);
+            Assert.Same(anchor, tabs.Items[0]);
+            Close(anchor, "Close Other Tabs");
+            Assert.Same(anchor, Assert.Single(tabs.Items));
+            Close(anchor, "Close All");
+            Assert.NotSame(anchor, Assert.Single(tabs.Items));
+            Assert.False(viewport.History.Dirty);
+        }
+        finally { window.Close(); }
+    }
+
     [Fact]
     public void GameRootLoadsDataAndIndexesNestedMapFilesWithoutParsingThem()
     {
@@ -107,6 +225,8 @@ public sealed class MapBrowserTests
             var list = window.GetVisualDescendants().OfType<ListBox>().Single(control => control.Name == "MapFileList");
             var save = window.FindControl<MenuItem>("SaveButton")!;
             await Until(() => list.Items.Count == 2 && save.IsEnabled);
+            var mapRow = Assert.IsType<ListBoxItem>(list.ContainerFromIndex(0));
+            Assert.InRange(mapRow.Bounds.Height, 18, 24);
             Assert.Equal(root, settings.Load().LibraryFolder);
             var viewport = window.FindControl<MapViewport>("Viewport")!;
             Assert.True(list.TranslatePoint(default, window)!.Value.X < viewport.TranslatePoint(default, window)!.Value.X);
@@ -115,6 +235,10 @@ public sealed class MapBrowserTests
             await Until(() => window.Title!.StartsWith("01.map", StringComparison.Ordinal) && save.IsEnabled);
             Assert.Equal(32, viewport.Document.Width);
             Assert.Equal(1, viewport.Document.Get(0, 0).BackImage);
+            Assert.True(viewport.Zoom < 1, "Opening a map should fit it to the available viewport.");
+            var originalSize = Assert.IsType<Button>(window.FindControl<Button>("OriginalSizeButton"));
+            originalSize.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            Assert.Equal(1, viewport.Zoom);
             viewport.History.Record(viewport.Document, 2, 2);
             viewport.Document.Set(2, 2, new Cell { MiddleLibrary = 1, MiddleImage = 1 });
             viewport.History.Commit();
@@ -129,6 +253,7 @@ public sealed class MapBrowserTests
             Assert.Equal(3, documentTabs.Items.Count);
             Assert.True(viewport.History.Dirty);
             Assert.Equal(1, viewport.Document.Get(2, 2).MiddleImage);
+            Assert.Equal(1, viewport.Zoom);
             Assert.Equal(0, MapDocument.Load(Path.Combine(maps, "01.map")).Get(2, 2).MiddleImage);
             viewport.Undo();
 

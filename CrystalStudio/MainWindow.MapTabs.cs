@@ -7,10 +7,11 @@ public partial class MainWindow
         public MapEditorState State = state;
         public string? Path = path;
         public string Name = name;
+        public bool FitOnFirstDisplay = true;
         public TextBlock Label = new(); public bool IsStamp; public int StampOriginX, StampOriginY; public CategorizedStamp? Category; public bool CategoryDirty;
     }
 
-    private readonly TabControl mapTabs = new();
+    private readonly TabControl mapTabs = new() { Name = "MapTabs" };
     private OpenMapTab? activeMap;
     private bool switchingMap;
     private int untitledNumber;
@@ -24,7 +25,8 @@ public partial class MainWindow
         // Only the headers belong to the tab control. All maps share one renderer below it.
         mapTabs.ItemsPanel = new FuncTemplate<Panel?>(() => new StackPanel { Orientation = Orientation.Horizontal });
         mapTabs.Template = new FuncControlTemplate<TabControl>((control, scope) =>
-            new ItemsPresenter { Name = "PART_ItemsPresenter", ItemsPanel = control.ItemsPanel });
+            new ScrollViewer { HorizontalScrollBarVisibility = ScrollBarVisibility.Auto, VerticalScrollBarVisibility = ScrollBarVisibility.Disabled,
+                Content = new ItemsPresenter { Name = "PART_ItemsPresenter", ItemsPanel = control.ItemsPanel } });
         mapTabs.SetResource(TemplatedControl.BackgroundProperty, "Theme1C2028");
         mapTabs.ItemContainerTheme = (Style)this.FindResource("PaletteTabItem");
         mapTabs.SelectionChanged += (_, e) =>
@@ -33,6 +35,8 @@ public partial class MainWindow
             SwitchMap((OpenMapTab)tab.Tag);
         };
         canvas.Children.Add(mapTabs);
+        InitializeMapTabDragging();
+        Viewport.SizeChanged += (_, _) => FitNewMap();
         AddMapTab(Viewport.Document); InitializeStampEditing(canvas);
         Viewport.Changed += UpdateMapTabLabels;
     }
@@ -47,6 +51,7 @@ public partial class MainWindow
         var close = new Button { Content = ("\u00d7"), Padding = new Thickness(4, 0, 4, 0), Background = Brushes.Transparent, BorderThickness = new Thickness(0) };
         ToolTip.SetTip(close, LocalText.T("Close Map")); close.Theme = (Style)this.FindResource("QuietButton");
         var tab = new TabItem { Header = header, Tag = map };
+        tab.ContextMenu = CreateMapTabMenu(tab);
         close.Click += (_, e) => { e.Handled = true; CloseMapTab(tab); };
         header.Children.Add(close);
         mapTabs.Items.Add(tab);
@@ -63,6 +68,7 @@ public partial class MainWindow
             if (activeMap != null) activeMap.State = Viewport.CaptureEditorState();
             activeMap = map; stampProperties.IsVisible = map.IsStamp ? true : false;
             Viewport.RestoreEditorState(map.State);
+            FitNewMap();
             inspectorCell = null;
             UpdateCellInspector(-1, -1);
             Coordinates.Text = ("- , -");
@@ -73,11 +79,18 @@ public partial class MainWindow
         UpdateMapTabLabels();
     }
 
-    private void CloseMapTab(TabItem tab)
+    private void FitNewMap()
     {
-        if (busy) return;
+        if (activeMap is not { FitOnFirstDisplay: true } map || Viewport.Bounds.Width <= 0 || Viewport.Bounds.Height <= 0) return;
+        map.FitOnFirstDisplay = false;
+        Viewport.Fit();
+    }
+
+    private bool CloseMapTab(TabItem tab)
+    {
+        if (busy || !mapTabs.Items.Contains(tab)) return false;
         mapTabs.SelectedItem = tab;
-        if (!ConfirmDiscard()) return;
+        if (!ConfirmDiscard()) return false;
         switchingMap = true;
         try { activeMap = null; mapTabs.Items.Remove(tab); }
         finally { switchingMap = false; }
@@ -87,6 +100,7 @@ public partial class MainWindow
             if (mapTabs.SelectedItem is not TabItem) mapTabs.SelectedIndex = 0;
             SwitchMap((OpenMapTab)((TabItem)mapTabs.SelectedItem).Tag);
         }
+        return true;
     }
 
     private void UpdateMapTabLabels()

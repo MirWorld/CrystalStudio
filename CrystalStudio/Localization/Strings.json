@@ -1,4 +1,24 @@
 {
+  "OriginalSize_20261105": {
+    "English": "Original Size",
+    "Chinese": "原始大小"
+  },
+  "CloseAllTabs_20261105": {
+    "English": "Close All",
+    "Chinese": "关闭全部"
+  },
+  "CloseRightTabs_20261105": {
+    "English": "Close Tabs to Right",
+    "Chinese": "关闭右侧"
+  },
+  "CloseLeftTabs_20261105": {
+    "English": "Close Tabs to Left",
+    "Chinese": "关闭左侧"
+  },
+  "CloseOtherTabs_20261105": {
+    "English": "Close Other Tabs",
+    "Chinese": "关闭其他"
+  },
   "AssetFormat_Sanxiu_20261105": {
     "English": "Asset format",
     "Chinese": "素材格式"

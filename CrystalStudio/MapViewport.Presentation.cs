@@ -48,10 +48,17 @@ public sealed partial class MapViewport
                 if (light) dc.DrawRectangle(lightMarker, null, new(x * 48, y * 32, door ? 24 : 48, 32));
                 if (door) dc.DrawRectangle(doorMarker, null, new(x * 48 + (light ? 24 : 0), y * 32, light ? 24 : 48, 32));
             }
-        if (GridVisible && Zoom >= .4)
+        if (GridVisible)
         {
-            for (int x = x0; x <= x1; x++) dc.DrawLine(grid, new(x * 48, y0 * 32), new(x * 48, y1 * 32));
-            for (int y = y0; y <= y1; y++) dc.DrawLine(grid, new(x0 * 48, y * 32), new(x1 * 48, y * 32));
+            // Keep grid lines visible above artwork at every zoom. Group cells
+            // at overview scales so lines stay at least eight pixels apart.
+            int step = 1;
+            while (step * 32 * Zoom < 8) step *= 2;
+            var pen = new ScenePen(ThemeService.Brush("CanvasGrid"), 1 / Zoom);
+            for (int x = (x0 + step - 1) / step * step; x <= x1; x += step)
+                dc.DrawLine(pen, new(x * 48, y0 * 32), new(x * 48, y1 * 32));
+            for (int y = (y0 + step - 1) / step * step; y <= y1; y += step)
+                dc.DrawLine(pen, new(x0 * 48, y * 32), new(x1 * 48, y * 32));
         }
         dc.Pop(); dc.Pop(); dc.Pop();
     }

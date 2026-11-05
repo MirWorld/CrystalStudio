@@ -135,7 +135,6 @@ public sealed partial class MapViewport : SceneControl
     private readonly Dictionary<(int, int), SceneGroup> frontRows = [];
     private static Brush canvas => ThemeService.Brush("CanvasBackground");
     private static Brush paper => ThemeService.Brush("CanvasPaper");
-    private static ScenePen grid => new(ThemeService.Brush("CanvasGrid"),0.6);
     private static ScenePen cursor => new(ThemeService.Brush("Accent"),1.5);
     public MapViewport() { InitializeScene(); Focusable = true; ClipToBounds = true; RenderOptions.SetBitmapInterpolationMode(this, Avalonia.Media.Imaging.BitmapInterpolationMode.None); animationTimer.Tick += (_, _) => AdvanceAnimation(); Loaded += (_, _) => { animationTimer.Start(); sceneDirty = true; InvalidateVisual(); }; Unloaded += (_, _) => { PauseOverview(); animationTimer.Stop(); NavigationCancelled?.Invoke(); if (dragging) End(); }; }
     public void SetDocument(MapDocument d, bool preserveZoom = false) { NavigationCancelled?.Invoke(); if (dragging) End(); ResetOverview(); ResetPresentation(); ResetDetailScene(); ResetPickupHints(); ResetStampDrawing(); CancelPickup(); CancelPaste(); CancelWallDraft(); Document = d; History = new(); Selection = null; brushPreviewKey = null; chunks.Clear(); frontRows.Clear(); origin = new(60, 70); Zoom = preserveZoom ? LimitZoom(Zoom) : 1; WarmOverview(); InvalidateVisual(); Changed?.Invoke(); }
