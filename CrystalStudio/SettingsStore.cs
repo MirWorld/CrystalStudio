@@ -16,7 +16,7 @@ public sealed class SettingsStore
     }
     public LibrarySettings Load()
     {
-        if (File.Exists(FilePath)) return Read(FilePath);
+        if (File.Exists(FilePath)) return Normalize(Read(FilePath));
         return new();
     }
     private static LibrarySettings Read(string path)
@@ -25,5 +25,8 @@ public sealed class SettingsStore
         return StudioJson.Deserialize<LibrarySettings>(stream)
             ?? throw new InvalidDataException("Settings are empty. Open Settings to configure your library folder.");
     }
-    public void Save(LibrarySettings settings) => AtomicFile.WriteJson(FilePath, settings);
+    private static LibrarySettings Normalize(LibrarySettings settings) => string.IsNullOrWhiteSpace(settings.LibraryFolder)
+        ? settings : settings with { LibraryFolder = DataPaths.GetClientRoot(settings.LibraryFolder) };
+
+    public void Save(LibrarySettings settings) => AtomicFile.WriteJson(FilePath, Normalize(settings));
 }

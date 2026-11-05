@@ -5,6 +5,19 @@ namespace CrystalStudio;
 /// <summary>Resolves editor content and normalizes client folder paths for catalogue tooling.</summary>
 public static class DataPaths
 {
+    /// <summary>Converts legacy Data selections to the owning client root; standalone libraries remain valid.</summary>
+    public static string GetClientRoot(string folder)
+    {
+        string full = Path.TrimEndingDirectorySeparator(Path.GetFullPath(folder));
+        for (var directory = new DirectoryInfo(full); directory != null; directory = directory.Parent)
+            if (directory.Name.Equals("Data", StringComparison.OrdinalIgnoreCase) && directory.Parent is { } parent)
+                return parent.FullName;
+        var selected = new DirectoryInfo(full);
+        if (selected.Name.Equals("Map", StringComparison.OrdinalIgnoreCase) && selected.Parent is { } client &&
+            Directory.Exists(Path.Combine(client.FullName, "Data"))) return client.FullName;
+        return full;
+    }
+
     public static string GetRoot(string folder)
     {
         string full = ResolveLibraryFolder(folder);

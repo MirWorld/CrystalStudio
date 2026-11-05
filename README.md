@@ -49,18 +49,20 @@ GUI 支持简体中文和 English。通过 **View → Language (restart required
 
 解决方案为根目录的 `CrystalStudio.sln`，包含编辑器和测试项目。Debug、Release 主程序分别输出到 `Build/Debug/CrystalStudio.exe`、`Build/Release/CrystalStudio.exe`；测试程序位于各自的 `Tests` 子目录。此前的 GUI、语言重启、地图保存和性能验证记录见 [VALIDATION.md](VALIDATION.md)。
 
-Game artwork is not included. You will need your game client's **Data** folder
-containing Crystal `.lib` files.
+Game artwork is not included. Select the game client root containing **Data**
+(Crystal `.lib` libraries) and **Map** (`.map` files).
 
-选择包含 `Data` 和 `Map` 的游戏根目录后，左侧「地图列表」自动列出 Map 及子目录中的 `.map` 文件。单击打开，重复点击切回已有标签并保留未保存内容；支持搜索和刷新。新增界面随现有语言设置显示中英文。 拖动侧栏与画布之间的竖线调整宽度，拖动面板之间的横线调整高度；拖标题可换位置或拖出成为浮动窗口。布局自动保存。若已锁定布局，请先在「视图」中取消「锁定面板布局」。
+设置中选择客户端根目录，例如 `D:\App\LomcnClient`。素材从 `Data` 或 `Data\Map` 加载，地图从同级 `Map` 读取；旧 Data 配置会转换为根目录显示，保存设置时也使用根目录。独立的平铺素材目录继续支持。
+
+左侧「工具 / 地图」页签分别显示现有工具、工具选项、图层、单元格检查器，以及 Map 及子目录中的 `.map` 列表。地图页顶部支持按文件名过滤，忽略大小写，并提供刷新和完整路径提示。单击打开，重复点击切回已有标签并保留未保存内容；素材无法读取时仍可浏览地图。界面随现有语言设置显示中英文。拖动侧栏与画布之间的竖线调整宽度，拖动工具面板之间的横线调整高度；拖标题可改变位置或成为浮动窗口，已有布局会保留。若已锁定布局，请先在「视图」中取消「锁定面板布局」。
 
 生成器不再要求外部素材像素指纹与原始素材一致，允许替换图片。仍检查素材能否读取、图片编号、必要尺寸和模板结构；内置目录及地图编辑元数据的完整性校验保留。
 
 ## Getting Started
 
 1. Start the editor using the command above, or run `CrystalStudio.exe` from a published release.
-2. Open **Edit > Settings** and select your game client folder containing **Data** and **Map**. Libraries load from Data; existing Data and library folder selections remain supported.
-3. Click a `.map` file in the left **Maps** panel to open it. The list includes subfolders and supports search and refresh. **File > Open Map** and **File > New Map** remain available.
+2. Open **Edit > Settings** and select your game client root containing **Data** and **Map**. Libraries load from Data; legacy Data settings display and save as the client root. Standalone library folders remain supported.
+3. Select the left **Maps** tab and click a `.map` file to open it. The list includes subfolders and supports filename search and refresh. The **Tools** tab contains tools, tool options, layers and the cell inspector. **File > Open Map** and **File > New Map** remain available.
 4. Choose a tool and an asset, then edit the map.
 5. Save with **Ctrl+S**.
 

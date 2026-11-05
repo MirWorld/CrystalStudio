@@ -119,3 +119,19 @@ Release 自动测试通过 22 项，失败 0 项，跳过 0 项。测试覆盖�
 - `native-map-*.png`、`native-categories-*.png`、`native-settings-*.png`：地图、分类及设置截图。
 - `smoke/`、`smoke-runtime.log`、`native-data/passed.txt`：辅助原生数据验证源码及结果。
 - `native-stderr.log`：最初反射序列化启动失败的诊断记录，最终程序已通过重新验证。
+
+## 客户端根目录与左侧页签（2026-11-05）
+
+先验证更新后的 `1d9ad24`：Release 解决方案编译成功，原有 67 项测试全部通过。该版本已经提供根目录素材加载、地图索引、搜索、刷新和可拖动面板，因此本次复用这些实现。左侧增加「工具 / 地图」页签，默认工具页保留工具、工具选项、图层及单元格检查器。控件实例在切换时保留，侧栏宽度、面板高度、停靠、浮动、布局保存和锁定行为继续有效。已有自定义面板位置会继续恢复；可以通过「重置面板布局」使用默认位置。
+
+设置读取时将旧 `Data`、`Data\Map` 及其素材子目录转换为客户端根目录，保存时也使用根目录，JSON 字段 `LibraryFolder` 保持兼容。独立素材目录继续支持。根目录下 `Data` 用于素材，同级 `Map` 用于地图；地图搜索只匹配文件名，忽略大小写。素材加载失败时仍显示地图索引，列表中的键盘操作不会触发画布工具快捷键。
+
+修改后 **71 项测试全部通过，失败 0、跳过 0**。新增验证覆盖旧设置路径转换及语言/素材格式保留、三修根目录素材优先级、素材缺失时浏览地图，以及页签中的宽度调整、分隔条、面板停靠和布局锁定。已有地图交互测试补充验证四组工具所属页、按文件名过滤、控件实例及工具状态保持，并继续验证切换已打开地图时保留未保存内容及避免重复标签。
+
+实际执行 `AotBuild.win-x64.bat -SkipTests -OutputDirectory ...\aot-root-tabs\win-x64`；此前已完成完整测试，所以本次发布跳过重复测试。由于开始发布时旧程序仍在运行，因此使用独立目录 `../Build/CrystalStudioAvalonia/aot-root-tabs/win-x64/CrystalStudio.exe`。程序为 AMD64 原生 PE，CLR 目录 RVA 为 0，大小为 61,736,448 字节，包含 9,170 个 `.X` 文件。
+
+原生程序分别以中英文使用 `D:\App\LomcnClient`，实际列出 **1,624 张地图**；中文验证从旧 `Data` 配置开始，英文验证直接使用根目录。两种语言均检查工具页四个面板、地图页、无匹配过滤、大写 `0.MAP` 过滤、激活已打开的 `0.map`、设置显示根目录及保存根目录、返回工具页，并正常退出。源地图及原用户 settings、recent-maps、assets 配置文件的 SHA-256 均保持一致。
+
+原有 **48 条 IL2026、1 条 MicroCom IL3053** 以及 nullable、AVLN3001 提示仍存在。真实客户端中部分图片仍有既有的 `Unexpected sprite pixel length` 错误，本次没有修改资源文件或图片解码逻辑。
+
+证据位于仓库根目录 `_codex_artifacts/crystalstudio-root-tabs`：`baseline-build.log`、`baseline-tests.log`、`final-tests.log`、`aot-publish.log`、`published-evidence.json`、`native-verification.json`、`verify-native.ps1`，以及中英文工具页、过滤列表、设置和切换后界面的截图与 UI Automation 记录。

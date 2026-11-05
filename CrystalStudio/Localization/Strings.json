@@ -3580,8 +3580,8 @@
     "Chinese": "目录索引中的提取来源记录无效。"
   },
   "MapBrowser_0": {
-    "English": "Search map files…",
-    "Chinese": "搜索地图文件…"
+    "English": "Search map filenames…",
+    "Chinese": "按文件名搜索地图…"
   },
   "MapBrowser_1": {
     "English": "Folder settings…",
@@ -3625,7 +3625,7 @@
   },
   "MapBrowser_11": {
     "English": "Maps",
-    "Chinese": "地图列表"
+    "Chinese": "地图"
   },
   "MapBrowser_12": {
     "English": "{0:N0} maps",
@@ -3636,12 +3636,12 @@
     "Chinese": "匹配 {0:N0} / {1:N0} 张地图"
   },
   "MapBrowser_14": {
-    "English": "Game folder (Data and Map)",
-    "Chinese": "游戏目录（包含 Data 和 Map）"
+    "English": "Client root folder (Data and Map)",
+    "Chinese": "客户端根目录（包含 Data 和 Map）"
   },
   "MapBrowser_15": {
-    "English": "Load libraries from Data and list .map files from Map. Existing Data and library folder selections are also supported.",
-    "Chinese": "从 Data 加载素材，在左侧列出 Map 中的 .map 文件。也支持原有的 Data 或素材目录选择。"
+    "English": "Libraries load from Data; maps are listed from Map. Legacy Data selections are converted to the client root.",
+    "Chinese": "从 Data 加载素材，在地图页列出 Map 中的 .map 文件。原有 Data 配置会转换为客户端根目录。"
   },
   "MapBrowser_16": {
     "English": "{0} is missing readable SE or SW house images. Check the library files and image indices.",

@@ -5,7 +5,7 @@ namespace CrystalStudio;
 public partial class MainWindow
 {
     private readonly ListBox mapFileList = new() { Name = "MapFileList", BorderThickness = new Thickness(0), Background = Brushes.Transparent };
-    private readonly TextBox mapFileSearch = new() { Name = "MapFileSearch", Watermark = LocalText.T("Search map files…"), Height = 28, Padding = new Thickness(6, 3), Margin = new Thickness(0) };
+    private readonly TextBox mapFileSearch = new() { Name = "MapFileSearch", Watermark = LocalText.T("Search map filenames…"), Height = 28, Padding = new Thickness(6, 3), Margin = new Thickness(0) };
     private readonly Button mapFolderButton = new() { Name = "MapFolderButton", Content = LocalText.T("Folder settings…"), FontSize = 11, Padding = new Thickness(7, 4), Margin = new Thickness(0) };
     private readonly Button mapRefreshButton = new() { Name = "MapRefreshButton", Content = LocalText.T("Refresh"), FontSize = 11, Padding = new Thickness(7, 4), Margin = new Thickness(5, 0, 0, 0) };
     private readonly TextBlock mapFolderLabel = new() { Text = LocalText.T("No game folder selected"), FontSize = 10, TextTrimming = TextTrimming.CharacterEllipsis, Margin = new Thickness(0, 5, 0, 6) };
@@ -103,7 +103,7 @@ public partial class MainWindow
     {
         string query = mapFileSearch.Text?.Trim() ?? "";
         string? selected = (mapFileList.SelectedItem as MapFileEntry)?.FilePath;
-        var filtered = mapFileEntries.Where(entry => entry.RelativePath.Contains(query, StringComparison.OrdinalIgnoreCase)).ToArray();
+        var filtered = mapFileEntries.Where(entry => Path.GetFileName(entry.FilePath).Contains(query, StringComparison.OrdinalIgnoreCase)).ToArray();
         mapFileList.ItemsSource = filtered;
         mapFileList.SelectedItem = filtered.FirstOrDefault(entry => string.Equals(entry.FilePath, selected, StringComparison.OrdinalIgnoreCase));
         mapFileStatus.Text = mapFileEntries.Count == 0 ? LocalText.T("No .map files in the Map folder.") :

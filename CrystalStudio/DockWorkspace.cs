@@ -8,6 +8,9 @@ public sealed class DockWorkspace : Grid
     private readonly EditorWindow owner;
     private readonly EventHandler<KeyEventArgs> shortcuts;
     private readonly Dictionary<Dock, Grid> zones = [];
+    private TabControl? leftTabs;
+    private readonly Grid leftTools = new();
+    private readonly Grid leftMaps = new();
     private readonly List<Pane> panes = [];
     private readonly string layoutPath = Path.Combine(EditorPaths.ProfileDirectory, "workspace.json");
     private static Brush Surface => ThemeService.Brush("Theme1C2028");
@@ -78,6 +81,17 @@ public sealed class DockWorkspace : Grid
         owner.Closing += (_, e) => { if (e.Cancel) return; Save(); shuttingDown = true; };
         owner.Closed += (_, _) => { foreach (var p in panes) p.EditorWindow?.Close(); };
     }
+
+    /// <summary>Shares the left dock between editing panels and the map browser without recreating controls.</summary>
+    public void EnableLeftTabs()
+    {
+        if (leftTabs != null) return;
+        leftTabs = new TabControl { Name = "LeftSidebarTabs", SelectedIndex = 0, Margin = new(0, 0, 7, 0) };
+        leftTabs.Items.Add(new TabItem { Name = "LeftToolsTab", Header = LocalText.T("Tools"), Content = leftTools });
+        leftTabs.Items.Add(new TabItem { Name = "LeftMapsTab", Header = LocalText.T("Maps"), Content = leftMaps });
+        Rebuild();
+    }
+
     public void Add(string title, Control content, Dock side, double size)
     {
         var p = new Pane(title, content, side, size); panes.Add(p); p.Frame.SetResource(Border.BackgroundProperty, "Theme1C2028");
@@ -146,6 +160,7 @@ public sealed class DockWorkspace : Grid
             dockSizes[side] = Math.Max(dockSizes[side], p.Title == "Palette" ? 230 : p.Title == "Cell Inspector" ? 160 : 112);
         int index = before is null ? -1 : panes.IndexOf(before);
         if (index < 0) panes.Add(p); else panes.Insert(index, p);
+        if (side == Dock.Left && leftTabs != null) leftTabs.SelectedIndex = p.Title == "Maps" ? 1 : 0;
         Rebuild(); Save();
     }
     private void Float(Pane p, LayoutEntry? saved = null)
@@ -187,38 +202,61 @@ public sealed class DockWorkspace : Grid
                 p.LockedPosition = IsLayoutLocked ? p.LockedPosition ?? window.Position : null;
             }
         }
-        foreach (var zone in zones.Values) zone.Children.Clear();
+        leftTools.Children.Clear(); leftMaps.Children.Clear();
+        foreach (var zone in zones.Values)
+            foreach (var child in zone.Children.Where(child => !ReferenceEquals(child, leftTabs)).ToArray())
+                zone.Children.Remove(child);
         foreach (var (side, zone) in zones)
         {
-            zone.Children.Clear(); zone.RowDefinitions.Clear(); zone.ColumnDefinitions.Clear();
+            zone.RowDefinitions.Clear(); zone.ColumnDefinitions.Clear();
             var items = panes.Where(p => p.Visible && p.EditorWindow is null && p.Side == side).ToArray();
             bool vertical = side is Dock.Left or Dock.Right;
-            zone.Width = vertical && items.Length > 0 ? dockSizes[side] : double.NaN;
+            bool tabbed = side == Dock.Left && leftTabs != null;
+            zone.Width = vertical && (items.Length > 0 || tabbed) ? dockSizes[side] : double.NaN;
             zone.Height = !vertical && items.Length > 0 ? dockSizes[side] : double.NaN;
-            if (items.Length == 0) { zone.Width = 0; zone.Height = 0; continue; }
-            for (int i = 0; i < items.Length; i++)
+            if (items.Length == 0 && !tabbed) { zone.Width = 0; zone.Height = 0; continue; }
+            if (tabbed)
             {
-                var p = items[i]; int index = i * 2;
-                if (vertical) zone.RowDefinitions.Add(new() { Height = new(p.Size, GridUnitType.Star), MinHeight = p.Title == "Tool Options" ? 65 : p.Title == "Palette" ? 120 : 85 });
-                else zone.ColumnDefinitions.Add(new() { Width = new(p.Size, GridUnitType.Star), MinWidth = 100 });
-                SetRow(p.Frame, vertical ? index : 0); SetColumn(p.Frame, vertical ? 0 : index); zone.Children.Add(p.Frame);
-                if (i == items.Length - 1) continue;
-                if (vertical) zone.RowDefinitions.Add(new() { Height = new(5) }); else zone.ColumnDefinitions.Add(new() { Width = new(5) });
-                var split = new GridSplitter { Background = Surface, HorizontalAlignment = HorizontalAlignment.Stretch, VerticalAlignment = VerticalAlignment.Stretch, ResizeDirection = vertical ? GridResizeDirection.Rows : GridResizeDirection.Columns, ResizeBehavior = GridResizeBehavior.PreviousAndNext };
-                split.SetResource(BackgroundProperty, "Theme1C2028");
-                split.IsEnabled = !IsLayoutLocked; split.IsHitTestVisible = !IsLayoutLocked;
-                SetRow(split, vertical ? index + 1 : 0); SetColumn(split, vertical ? 0 : index + 1); zone.Children.Add(split);
-                split.DragCompleted += (_, _) => { for (int j = 0; j < items.Length; j++) items[j].Size = vertical ? zone.RowDefinitions[j * 2].Height.Value : zone.ColumnDefinitions[j * 2].Width.Value; Save(); };
+                PopulateZone(leftTools, side, items.Where(p => p.Title != "Maps").ToArray());
+                PopulateZone(leftMaps, side, items.Where(p => p.Title == "Maps").ToArray());
+                if (leftTabs!.Parent == null) zone.Children.Add(leftTabs);
             }
-            // Resize the whole dock without restricting the canvas to a fixed sidebar width.
-            var grip = new Thumb { Name = "DockResize" + side, Width = vertical ? 7 : double.NaN, Height = vertical ? double.NaN : 7, Background = Brushes.Transparent, Cursor = vertical ? EditorCursors.SizeWE : EditorCursors.SizeNS, Template = ResizeGripTemplate(vertical), HorizontalAlignment = vertical ? (side == Dock.Left ? HorizontalAlignment.Right : HorizontalAlignment.Left) : HorizontalAlignment.Stretch, VerticalAlignment = vertical ? VerticalAlignment.Stretch : (side == Dock.Top ? VerticalAlignment.Bottom : VerticalAlignment.Top) };
-            ToolTip.SetTip(grip, LocalText.T(vertical ? "Drag to resize sidebar width" : "Drag to resize panel height"));
-            grip.DragCompleted += (_, _) => Save();
-            // Dock size is adjusted directly so automatic outer grid dimensions remain valid.
-            grip.IsEnabled = !IsLayoutLocked; grip.IsHitTestVisible = !IsLayoutLocked;
-            grip.DragDelta += (_, e) => { if (IsLayoutLocked) return; if (vertical) zone.Width = Math.Clamp(zone.Bounds.Width + (side == Dock.Left ? e.Vector.X : -e.Vector.X), 90, Math.Max(90, Bounds.Width * 0.45)); else zone.Height = Math.Clamp(zone.Bounds.Height + (side == Dock.Top ? e.Vector.Y : -e.Vector.Y), 50, Math.Max(50, Bounds.Height * 0.4)); dockSizes[side] = vertical ? zone.Width : zone.Height; e.Handled = true; };
-            SetRowSpan(grip, Math.Max(1, zone.RowDefinitions.Count)); SetColumnSpan(grip, Math.Max(1, zone.ColumnDefinitions.Count)); zone.Children.Add(grip);
+            else PopulateZone(zone, side, items);
+            AddResizeGrip(zone, side);
         }
+    }
+
+    private void PopulateZone(Grid zone, Dock side, Pane[] items)
+    {
+        zone.RowDefinitions.Clear(); zone.ColumnDefinitions.Clear();
+        bool vertical = side is Dock.Left or Dock.Right;
+        for (int i = 0; i < items.Length; i++)
+        {
+            var p = items[i]; int index = i * 2;
+            if (vertical) zone.RowDefinitions.Add(new() { Height = new(p.Size, GridUnitType.Star), MinHeight = p.Title == "Tool Options" ? 65 : p.Title == "Palette" ? 120 : 85 });
+            else zone.ColumnDefinitions.Add(new() { Width = new(p.Size, GridUnitType.Star), MinWidth = 100 });
+            SetRow(p.Frame, vertical ? index : 0); SetColumn(p.Frame, vertical ? 0 : index); zone.Children.Add(p.Frame);
+            if (i == items.Length - 1) continue;
+            if (vertical) zone.RowDefinitions.Add(new() { Height = new(5) }); else zone.ColumnDefinitions.Add(new() { Width = new(5) });
+            var split = new GridSplitter { Background = Surface, HorizontalAlignment = HorizontalAlignment.Stretch, VerticalAlignment = VerticalAlignment.Stretch, ResizeDirection = vertical ? GridResizeDirection.Rows : GridResizeDirection.Columns, ResizeBehavior = GridResizeBehavior.PreviousAndNext };
+            split.SetResource(BackgroundProperty, "Theme1C2028");
+            split.IsEnabled = !IsLayoutLocked; split.IsHitTestVisible = !IsLayoutLocked;
+            SetRow(split, vertical ? index + 1 : 0); SetColumn(split, vertical ? 0 : index + 1); zone.Children.Add(split);
+            split.DragCompleted += (_, _) => { for (int j = 0; j < items.Length; j++) items[j].Size = vertical ? zone.RowDefinitions[j * 2].Height.Value : zone.ColumnDefinitions[j * 2].Width.Value; Save(); };
+        }
+    }
+
+    private void AddResizeGrip(Grid zone, Dock side)
+    {
+        bool vertical = side is Dock.Left or Dock.Right;
+        // Resize the whole dock without restricting the canvas to a fixed sidebar width.
+        var grip = new Thumb { Name = "DockResize" + side, Width = vertical ? 7 : double.NaN, Height = vertical ? double.NaN : 7, Background = Brushes.Transparent, Cursor = vertical ? EditorCursors.SizeWE : EditorCursors.SizeNS, Template = ResizeGripTemplate(vertical), HorizontalAlignment = vertical ? (side == Dock.Left ? HorizontalAlignment.Right : HorizontalAlignment.Left) : HorizontalAlignment.Stretch, VerticalAlignment = vertical ? VerticalAlignment.Stretch : (side == Dock.Top ? VerticalAlignment.Bottom : VerticalAlignment.Top) };
+        ToolTip.SetTip(grip, LocalText.T(vertical ? "Drag to resize sidebar width" : "Drag to resize panel height"));
+        grip.DragCompleted += (_, _) => Save();
+        // Dock size is adjusted directly so automatic outer grid dimensions remain valid.
+        grip.IsEnabled = !IsLayoutLocked; grip.IsHitTestVisible = !IsLayoutLocked;
+        grip.DragDelta += (_, e) => { if (IsLayoutLocked) return; if (vertical) zone.Width = Math.Clamp(zone.Bounds.Width + (side == Dock.Left ? e.Vector.X : -e.Vector.X), 90, Math.Max(90, Bounds.Width * 0.45)); else zone.Height = Math.Clamp(zone.Bounds.Height + (side == Dock.Top ? e.Vector.Y : -e.Vector.Y), 50, Math.Max(50, Bounds.Height * 0.4)); dockSizes[side] = vertical ? zone.Width : zone.Height; e.Handled = true; };
+        SetRowSpan(grip, Math.Max(1, zone.RowDefinitions.Count)); SetColumnSpan(grip, Math.Max(1, zone.ColumnDefinitions.Count)); zone.Children.Add(grip);
     }
     public void Reset()
     {
@@ -297,7 +335,7 @@ public sealed class DockWorkspace : Grid
             var origin = zone.TranslatePoint(new Point(), this) ?? default;
             if (!new Rect(origin, new Size(zone.Bounds.Width, zone.Bounds.Height)).Contains(at)) continue;
             bool vertical = side is Dock.Left or Dock.Right;
-            foreach (var p in panes.Where(p => p.Visible && p.EditorWindow is null && p.Side == side))
+            foreach (var p in panes.Where(p => p.Visible && p.EditorWindow is null && p.Side == side && p.Frame.GetVisualRoot() != null))
             {
                 var pos = p.Frame.TranslatePoint(new Point(), this) ?? default;
                 if ((vertical ? at.Y : at.X) < (vertical ? pos.Y + p.Frame.Bounds.Height / 2 : pos.X + p.Frame.Bounds.Width / 2)) return (side, p);

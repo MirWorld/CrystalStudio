@@ -21,13 +21,13 @@ public sealed class SettingsWindow : EditorWindow
         var restartHint = new TextBlock { Name = "LanguageRestartHint", Text = LocalText.T("Language changes take effect after restarting Crystal Studio."), TextWrapping = TextWrapping.Wrap, Margin = new(0, 5, 0, 14) };
         panel.Children.Add(restartHint);
         panel.Children.Add(new TextBlock { Text = (firstSetup ? LocalText.T("Choose Your Libraries Once") : LocalText.T("Library Location")), FontSize = 21, Margin = new(0, 0, 0, 12) });
-        panel.Children.Add(new TextBlock { Text = LocalText.T("Game folder (Data and Map)"), Margin = new(0, 0, 0, 5) });
+        panel.Children.Add(new TextBlock { Text = LocalText.T("Client root folder (Data and Map)"), Margin = new(0, 0, 0, 5) });
         var folderRow = new DockPanel();
         var browse = new Button { Content = LocalText.T("Browse\u2026")};
         DockPanel.SetDock(browse, Dock.Right); folderRow.Children.Add(browse);
-        var folder = new TextBox { Text = currentFolder ?? "", IsReadOnly = true, VerticalContentAlignment = VerticalAlignment.Center };
+        var folder = new TextBox { Name = "ClientRootFolder", Text = string.IsNullOrWhiteSpace(currentFolder) ? "" : DataPaths.GetClientRoot(currentFolder), IsReadOnly = true, VerticalContentAlignment = VerticalAlignment.Center };
         folderRow.Children.Add(folder); panel.Children.Add(folderRow);
-        panel.Children.Add(new TextBlock { Text = LocalText.T("Load libraries from Data and list .map files from Map. Existing Data and library folder selections are also supported."), TextWrapping = TextWrapping.Wrap, Margin = new(0, 5, 0, 5) });
+        panel.Children.Add(new TextBlock { Text = LocalText.T("Libraries load from Data; maps are listed from Map. Legacy Data selections are converted to the client root."), TextWrapping = TextWrapping.Wrap, Margin = new(0, 5, 0, 5) });
         panel.Children.Add(new TextBlock { Text = LocalText.T("Asset format"), Margin = new(0, 14, 0, 5) });
         var defaultFormat = new RadioButton { Name = "DefaultAssetFormat", GroupName = "AssetSourceFormat",
             Content = LocalText.T("Default (Crystal libraries)"), IsChecked = currentFormat != AssetSourceFormat.Sanxiu };
@@ -61,7 +61,7 @@ public sealed class SettingsWindow : EditorWindow
         {
             var picker = new OpenFolderDialog { Title = LocalText.T("Select a game folder containing Data and Map") };
             if (!string.IsNullOrWhiteSpace(folder.Text) && System.IO.Directory.Exists(folder.Text)) picker.InitialDirectory = folder.Text;
-            if (picker.ShowDialog(this) == true) { folder.Text = picker.FolderName; save.IsEnabled = true; }
+            if (picker.ShowDialog(this) == true) { folder.Text = DataPaths.GetClientRoot(picker.FolderName); save.IsEnabled = true; }
         };
         save.Click += async (_, _) =>
         {

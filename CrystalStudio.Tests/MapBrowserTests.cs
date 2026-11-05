@@ -30,11 +30,30 @@ public sealed class MapBrowserTests
         Assert.Equal(maps, DataPaths.FindMapFolder(root));
         Assert.Equal(maps, DataPaths.FindMapFolder(Path.Combine(root, "Data")));
         Assert.Equal(maps, DataPaths.FindMapFolder(Path.Combine(root, "Data", "Map")));
+        foreach (string legacy in new[] { root, Path.Combine(root, "Data"), Path.Combine(root, "Data", "Map"),
+            Path.Combine(root, "Data", "Map", "WemadeMir2"), maps })
+            Assert.Equal(root, DataPaths.GetClientRoot(legacy));
         var entries = MapFileCatalog.Read(maps);
         Assert.Equal(3, entries.Count);
         Assert.Contains(entries, entry => entry.RelativePath == Path.Combine("nested", "0.MAP"));
         Assert.Contains(entries, entry => entry.RelativePath == "unreadable.map");
         Assert.All(entries, entry => Assert.True(Path.IsPathFullyQualified(entry.FilePath)));
+    }
+
+    [Fact]
+    public void LegacySettingsDisplayAndSaveClientRootWhileKeepingLanguageAndFormat()
+    {
+        string root = NewRoot(), path = Path.Combine(root, "settings.json");
+        string legacy = Path.Combine(root, "Data", "Map");
+        File.WriteAllText(path, System.Text.Json.JsonSerializer.Serialize(new LibrarySettings(legacy, "zh-CN", AssetSourceFormat.Sanxiu)));
+        var store = new SettingsStore(path);
+        var settings = store.Load();
+        Assert.Equal(root, settings.LibraryFolder);
+        Assert.Equal("zh-CN", settings.Language);
+        Assert.Equal(AssetSourceFormat.Sanxiu, settings.AssetFormat);
+        store.Save(settings with { LibraryFolder = legacy });
+        Assert.Equal(root, System.Text.Json.JsonSerializer.Deserialize<LibrarySettings>(File.ReadAllText(path))!.LibraryFolder);
+        Assert.Equal(Path.Combine(root, "flat"), DataPaths.GetClientRoot(Path.Combine(root, "flat")));
     }
 
     [Fact]
@@ -74,6 +93,17 @@ public sealed class MapBrowserTests
         window.Show();
         try
         {
+            var sidebar = window.GetVisualDescendants().OfType<TabControl>().Single(control => control.Name == "LeftSidebarTabs");
+            Assert.Equal(2, sidebar.Items.Count);
+            Assert.Equal(0, sidebar.SelectedIndex);
+            var toolPanel = window.FindControl<ResponsivePanel>("ToolPanel")!;
+            Assert.Contains(sidebar, toolPanel.GetVisualAncestors());
+            var toolsPage = Assert.IsType<TabItem>(sidebar.Items[0]);
+            var tools = Assert.IsType<Grid>(toolsPage.Content);
+            Assert.All(new[] { "Tools", "Tool Options", "Layers", "Cell Inspector" }, title =>
+                Assert.Contains(tools.GetVisualDescendants().OfType<TextBlock>(), text => text.Text == "\u283F  " + LocalText.T(title)));
+            sidebar.SelectedIndex = 1;
+            await Pump();
             var list = window.GetVisualDescendants().OfType<ListBox>().Single(control => control.Name == "MapFileList");
             var save = window.FindControl<MenuItem>("SaveButton")!;
             await Until(() => list.Items.Count == 2 && save.IsEnabled);
@@ -103,10 +133,36 @@ public sealed class MapBrowserTests
             viewport.Undo();
 
             var search = window.GetVisualDescendants().OfType<TextBox>().Single(control => control.Name == "MapFileSearch");
-            search.Text = "nested";
+            search.Text = "SECOND";
             await Until(() => list.Items.Count == 1);
+            search.Text = "nested";
+            await Until(() => list.Items.Count == 0);
             search.Clear();
             await Until(() => list.Items.Count == 2);
+            sidebar.SelectedIndex = 0;
+            await Pump();
+            var pencil = toolPanel.Children.OfType<RadioButton>().Single(button => Equals(button.Tag, "Pencil"));
+            var pencilPosition = pencil.TranslatePoint(new Point(pencil.Bounds.Width / 2, pencil.Bounds.Height / 2), window)!.Value;
+            window.MouseDown(pencilPosition, MouseButton.Left);
+            window.MouseUp(pencilPosition, MouseButton.Left);
+            await Pump();
+            Assert.Equal(EditorTool.Pencil, viewport.Tool);
+            sidebar.SelectedIndex = 1;
+            await Pump();
+            Assert.IsType<ListBoxItem>(list.ContainerFromIndex(0)).Focus();
+            Assert.True(list.IsKeyboardFocusWithin);
+            var selectedTool = viewport.Tool;
+            Assert.Equal(EditorTool.Pencil, selectedTool);
+            window.KeyPressQwerty(PhysicalKey.B, RawInputModifiers.None);
+            window.KeyReleaseQwerty(PhysicalKey.B, RawInputModifiers.None);
+            Assert.Equal(selectedTool, viewport.Tool);
+            sidebar.SelectedIndex = 0;
+            await Pump();
+            Assert.Same(toolPanel, tools.GetVisualDescendants().OfType<ResponsivePanel>().Single(control => control.Name == "ToolPanel"));
+            Assert.Equal(selectedTool, viewport.Tool);
+            sidebar.SelectedIndex = 1;
+            await Pump();
+            Assert.Same(list, window.GetVisualDescendants().OfType<ListBox>().Single(control => control.Name == "MapFileList"));
             new MapDocument(16, 16).Save(Path.Combine(maps, "added.map"));
             var refresh = window.GetVisualDescendants().OfType<Button>().Single(control => control.Name == "MapRefreshButton");
             var refreshPosition = refresh.TranslatePoint(default, window)!.Value;
@@ -123,6 +179,30 @@ public sealed class MapBrowserTests
             Assert.NotNull(frame);
             using var stream = File.Create(screenshot);
             frame.Save(stream);
+        }
+        finally { window.Close(); }
+    }
+
+    [AvaloniaFact]
+    public async Task MapBrowserStillListsMapsWhenLibrariesAreUnavailable()
+    {
+        string root = NewRoot(), maps = Path.Combine(root, "Map");
+        Directory.CreateDirectory(maps);
+        new MapDocument(16, 16).Save(Path.Combine(maps, "available.map"));
+        var store = new SettingsStore(Path.Combine(root, "profile", "settings.json"));
+        store.Save(new LibrarySettings(root, "en-US"));
+        var window = new MainWindow(new AssetHistoryStore(Path.Combine(root, "profile", "assets.json")),
+            new RecentMapStore(Path.Combine(root, "profile", "recent.json")), store);
+        window.Show();
+        try
+        {
+            var sidebar = window.GetVisualDescendants().OfType<TabControl>().Single(control => control.Name == "LeftSidebarTabs");
+            sidebar.SelectedIndex = 1;
+            await Pump();
+            var list = window.GetVisualDescendants().OfType<ListBox>().Single(control => control.Name == "MapFileList");
+            await Until(() => list.Items.Count == 1 && list.IsEnabled);
+            await ClickMap(window, list, "available.map");
+            await Until(() => window.Title!.StartsWith("available.map", StringComparison.Ordinal));
         }
         finally { window.Close(); }
     }

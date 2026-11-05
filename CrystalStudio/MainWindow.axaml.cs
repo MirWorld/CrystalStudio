@@ -159,6 +159,8 @@ public partial class MainWindow : EditorWindow
 
                 }
 
+                await RefreshMapBrowserAsync(settings.LibraryFolder);
+
                 if (assets == null) await DiscoverStampsAsync();
 
             });
@@ -336,6 +338,7 @@ public partial class MainWindow : EditorWindow
 
         ToolPanel.Margin = new Thickness(5);
 
+        docking.EnableLeftTabs();
         docking.Add("Maps", CreateMapBrowser(), Dock.Left, 2);
 
         docking.Add("Tools", new ScrollViewer { Content = ToolPanel, VerticalScrollBarVisibility = ScrollBarVisibility.Auto }, Dock.Left, 1);
@@ -344,7 +347,7 @@ public partial class MainWindow : EditorWindow
 
         layers.Margin = new Thickness(10, 5, 10, 5);
 
-        docking.Add("Layers", new ScrollViewer { Content = layers, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled }, Dock.Right, 1.9);
+        docking.Add("Layers", new ScrollViewer { Content = layers, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled }, Dock.Left, 1.9);
 
         var minimap = new MapMinimap { Viewport = Viewport, Margin = new Thickness(10) };
         RegisterEditorName("Minimap", minimap);
@@ -379,7 +382,7 @@ public partial class MainWindow : EditorWindow
 
         inspector.Margin = new Thickness(6);
 
-        docking.Add("Cell Inspector", new ScrollViewer { Content = inspector, VerticalScrollBarVisibility = ScrollBarVisibility.Auto }, Dock.Bottom, 1);
+        docking.Add("Cell Inspector", new ScrollViewer { Content = inspector, VerticalScrollBarVisibility = ScrollBarVisibility.Auto }, Dock.Left, 1);
 
         var view = ViewMenu;
 
@@ -517,7 +520,7 @@ public partial class MainWindow : EditorWindow
 
             var next = await Task.Run(() => AssetStore.Load(root, format));
 
-            var updated = settingsStore.Load() with { LibraryFolder = Path.GetFullPath(root), AssetFormat = format };
+            var updated = settingsStore.Load() with { LibraryFolder = DataPaths.GetClientRoot(root), AssetFormat = format };
 
             try { await Task.Run(() => settingsStore.Save(updated)); }
 
@@ -529,7 +532,7 @@ public partial class MainWindow : EditorWindow
             catch { next.Dispose(); throw; }
             if (closed) { next.Dispose(); return; }
             InstallLibraries(next);
-            await RefreshMapBrowserAsync(root);
+            await RefreshMapBrowserAsync(updated.LibraryFolder);
 
         }, firstSetup)
 
@@ -558,7 +561,6 @@ public partial class MainWindow : EditorWindow
         catch { next.Dispose(); throw; }
         if (closed) { next.Dispose(); return; }
         InstallLibraries(next);
-        await RefreshMapBrowserAsync(root);
 
     }
 
@@ -851,7 +853,7 @@ public partial class MainWindow : EditorWindow
 
     {
 
-        if (FocusManager?.GetFocusedElement() is TextBox or MenuItem || InputState.Modifiers.HasFlag(KeyModifiers.Alt) || busy) return; bool ctrl = InputState.Modifiers.HasFlag(KeyModifiers.Control);
+        if (FocusManager?.GetFocusedElement() is TextBox or MenuItem || mapFileList.IsKeyboardFocusWithin || InputState.Modifiers.HasFlag(KeyModifiers.Alt) || busy) return; bool ctrl = InputState.Modifiers.HasFlag(KeyModifiers.Control);
 
         if (ctrl) { if (e.Key == Key.C) { Viewport.CopySelection(); e.Handled = true; } else if (e.Key == Key.X) { Viewport.CutSelection(); e.Handled = true; } else if (e.Key == Key.V) { Viewport.BeginPaste(); e.Handled = true; } else if (e.Key == Key.S) { SaveMap(InputState.Modifiers.HasFlag(KeyModifiers.Shift)); e.Handled = true; } else if (e.Key == Key.Z) { if (InputState.Modifiers.HasFlag(KeyModifiers.Shift)) Viewport.Redo(); else Viewport.Undo(); e.Handled = true; } else if (e.Key == Key.Y) { Viewport.Redo(); e.Handled = true; } else if (e.Key == Key.N) { if (InputState.Modifiers.HasFlag(KeyModifiers.Shift)) NewStampClick(s, e); else NewClick(s, e); e.Handled = true; } else if (e.Key == Key.O) { OpenClick(s, e); e.Handled = true; } return; }
 

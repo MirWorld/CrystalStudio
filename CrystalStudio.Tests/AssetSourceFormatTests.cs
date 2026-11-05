@@ -8,6 +8,25 @@ namespace CrystalStudio.Tests;
 public sealed class AssetSourceFormatTests
 {
     [Fact]
+    public void SanxiuClientRootPrefersDataLibrariesOverMapDirectory()
+    {
+        using var files = new TemporaryAssets();
+        files.Write("Tiles.lib", 6, 20, 80);
+        files.Write("Objects.lib", 5, 40, 90);
+        string data = Path.Combine(files.Root, "Data");
+        Directory.CreateDirectory(data);
+        Directory.Move(Path.Combine(files.Root, "Map"), Path.Combine(data, "Map"));
+        Directory.CreateDirectory(Path.Combine(files.Root, "Map"));
+        File.WriteAllText(Path.Combine(files.Root, "Map", "Tiles.lib"), "map folder is not the library folder");
+        foreach (string selected in new[] { files.Root, data, Path.Combine(data, "Map") })
+        {
+            using var assets = AssetStore.Load(selected, AssetSourceFormat.Sanxiu);
+            Assert.Equal(new[] { 0, 2000 }, assets.Libraries.Keys.Order());
+            Assert.All(assets.Libraries.Values, library => Assert.StartsWith(data, library.Path));
+        }
+    }
+
+    [Fact]
     public void SanxiuGameRootSelectsDataInsteadOfTheSiblingMapFolder()
     {
         using var files = new TemporaryAssets();

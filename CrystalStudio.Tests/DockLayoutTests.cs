@@ -13,6 +13,61 @@ namespace CrystalStudio.Tests;
 public sealed class DockLayoutTests
 {
     [AvaloniaFact]
+    public async Task LeftTabsKeepResizeAndPanelDockingAcrossPageChanges()
+    {
+        string layout = Path.Combine(Path.GetTempPath(), "CrystalStudio-TabbedDock-" + Guid.NewGuid().ToString("N"), "workspace.json");
+        var window = new EditorWindow { Width = 1100, Height = 700 };
+        var workspace = new DockWorkspace(window, new Border(), (_, _) => { }, layout);
+        workspace.EnableLeftTabs();
+        var tools = new TextBlock { Text = "Tools content" };
+        var maps = new TextBlock { Text = "test.map" };
+        workspace.Add("Tools", tools, Dock.Left, 1);
+        workspace.Add("Maps", maps, Dock.Left, 2);
+        workspace.Add("Layers", new TextBlock { Text = "Layers content" }, Dock.Left, 1);
+        window.Content = workspace;
+        window.Show();
+        try
+        {
+            await Pump();
+            var tabs = window.GetVisualDescendants().OfType<TabControl>().Single();
+            Assert.Same(window, tools.GetVisualRoot());
+            tabs.SelectedIndex = 1;
+            await Pump();
+            Assert.Same(window, maps.GetVisualRoot());
+            var grip = window.GetVisualDescendants().OfType<Thumb>().Single(t => t.Name == "DockResizeLeft");
+            double before = maps.Bounds.Width;
+            await Drag(window, Centre(grip, window), new Vector(90, 0));
+            Assert.True(maps.Bounds.Width > before + 50);
+            tabs.SelectedIndex = 0;
+            await Pump();
+            Assert.Same(window, tools.GetVisualRoot());
+            var split = window.GetVisualDescendants().OfType<GridSplitter>().Single();
+            var frame = tools.GetVisualAncestors().OfType<Border>().First();
+            double height = frame.Bounds.Height;
+            await Drag(window, Centre(split, window), new Vector(0, 40));
+            Assert.True(frame.Bounds.Height > height + 20);
+            tabs.SelectedIndex = 1;
+            await Pump();
+            var header = Header(window);
+            var dockRight = header.ContextMenu!.Items.OfType<MenuItem>().Single(item => Equals(item.Header, LocalText.T("Dock ") + LocalText.T("Right")));
+            dockRight.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(MenuItem.ClickEvent));
+            await Pump();
+            Assert.Same(window, maps.GetVisualRoot());
+            var dockLeft = header.ContextMenu!.Items.OfType<MenuItem>().Single(item => Equals(item.Header, LocalText.T("Dock ") + LocalText.T("Left")));
+            dockLeft.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(MenuItem.ClickEvent));
+            await Pump();
+            Assert.Equal(1, tabs.SelectedIndex);
+            Assert.Contains(tabs, maps.GetVisualAncestors());
+            workspace.SetLayoutLocked(true);
+            Assert.False(window.GetVisualDescendants().OfType<Thumb>().Single(t => t.Name == "DockResizeLeft").IsEnabled);
+            tabs.SelectedIndex = 0;
+            await Pump();
+            Assert.Same(window, tools.GetVisualRoot());
+        }
+        finally { window.Close(); }
+    }
+
+    [AvaloniaFact]
     public async Task MapPaneCanResizeMoveAndRestoreItsSavedPosition()
     {
         string layout = Path.Combine(Path.GetTempPath(), "CrystalStudio-Dock-" + Guid.NewGuid().ToString("N"), "workspace.json");
