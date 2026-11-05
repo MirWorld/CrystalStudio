@@ -35,11 +35,12 @@ public sealed class WallFamily
     public int Step { get; init; }
     // Cursor spacing can reserve room for native turns without widening the
     // corridor. Geometry between cursor positions still uses Step-sized cells.
-    public int StrokeGridPieces { get; init; } = 1;
-    public int PaintSizePieces { get; init; } = 1;
-    public bool AreaBrush { get; init; } = true;
-    public bool SupportsJunctions { get; init; } = true;
-    public List<WallLinePortOffset> LinePortOffsets { get; init; } = [];
+    // Setters retain these defaults when source-generated JSON omits optional properties.
+    public int StrokeGridPieces { get; set; } = 1;
+    public int PaintSizePieces { get; set; } = 1;
+    public bool AreaBrush { get; set; } = true;
+    public bool SupportsJunctions { get; set; } = true;
+    public List<WallLinePortOffset> LinePortOffsets { get; set; } = [];
     [System.Text.Json.Serialization.JsonIgnore]
     public bool HasFacingModes => InnerVariants.Count > 0;
     [System.Text.Json.Serialization.JsonIgnore]
@@ -49,7 +50,7 @@ public sealed class WallFamily
     [System.Text.Json.Serialization.JsonIgnore]
     public int? RequestedDoorCount { get; set; }
     internal int DoorRandomSeed { get; } = Random.Shared.Next(1,int.MaxValue);
-    public List<WallEntrance> Entrances { get; init; } = [];
+    public List<WallEntrance> Entrances { get; set; } = [];
     [System.Text.Json.Serialization.JsonIgnore]
     internal bool DoorCountPerMap { get; set; }
     [System.Text.Json.Serialization.JsonIgnore]
@@ -68,16 +69,16 @@ public sealed class WallFamily
     public int? PreserveLegacyOuterStep { get; init; }
     public bool ConnectTouchingSections { get; init; }
     public int TurnClearancePieces { get; init; }
-    public List<WallBoundarySpan> BoundarySpans { get; init; } = [];
+    public List<WallBoundarySpan> BoundarySpans { get; set; } = [];
     public bool FitsNativeCorners => BoundarySpans.Count > 0;
-    public List<WallNativeTrim> NativeTrims { get; init; } = [];
-    public List<WallSpriteFootprint> SpriteFootprints { get; init; } = [];
+    public List<WallNativeTrim> NativeTrims { get; set; } = [];
+    public List<WallSpriteFootprint> SpriteFootprints { get; set; } = [];
     private bool? hasVariations;
     public bool HasVariations => hasVariations ??= Variants.Concat(InnerVariants).Any(v => v.Parts.Any(p => p.Choices is { Count: > 1 }));
-    public List<WallDirection> Directions { get; init; } = [];
-    public List<WallPiece> Pieces { get; init; } = [];
-    public List<WallVariant> Variants { get; init; } = [];
-    public List<WallVariant> InnerVariants { get; init; } = [];
+    public List<WallDirection> Directions { get; set; } = [];
+    public List<WallPiece> Pieces { get; set; } = [];
+    public List<WallVariant> Variants { get; set; } = [];
+    public List<WallVariant> InnerVariants { get; set; } = [];
     private readonly Dictionary<(int, int), WallLayout> layouts = [];
     private Dictionary<string,WallPiece>? piecesById;
     private Dictionary<(int Mask,int Corners),WallVariant>? variantsByMask;
@@ -374,7 +375,7 @@ public sealed record WallCatalogue(int SchemaVersion, List<WallFamily> Families)
         var definitions = DefinitionPaths(path).Select(file =>
         {
             using var stream = File.OpenRead(file);
-            return JsonSerializer.Deserialize<WallCatalogue>(stream, ReadOptions)
+            return StudioJson.Deserialize<WallCatalogue>(stream, ReadOptions)
                 ?? throw new InvalidDataException("Empty wall catalogue.");
         }).ToList();
         if (definitions.Any(d=>d.SchemaVersion!=1 || d.Families==null || d.Families.Count==0))

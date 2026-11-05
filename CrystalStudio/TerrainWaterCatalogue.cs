@@ -21,7 +21,7 @@ public sealed class TerrainWaterCatalogue
     public List<WaterStripJoin> StripJoins { get; set; } = [];
     public static TerrainWaterCatalogue Load(string path)
     {
-        var result = JsonSerializer.Deserialize<TerrainWaterCatalogue>(File.ReadAllText(path), new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? throw new InvalidDataException("Empty water catalogue.");
+        var result = StudioJson.Deserialize<TerrainWaterCatalogue>(File.ReadAllText(path), new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? throw new InvalidDataException("Empty water catalogue.");
         if (result.SchemaVersion != 1 || result.Status != "reviewed" || string.IsNullOrWhiteSpace(result.ReviewBasis) || result.Sources.Count < 2 || result.Sources.Any(s => s.Sha256.Length != 64) || result.States.Count is < 3 or > 4096 || result.Joins.Count != 4) throw new InvalidDataException("Invalid reviewed water catalogue.");
         for (int i = 0; i < result.States.Count; i++)
         {

@@ -20,9 +20,23 @@ dotnet run --project CrystalStudio/CrystalStudio.csproj -c Release
 
 发布脚本默认先执行自动验证，然后生成包含 .NET 运行时的 Windows x64 版本，目录为 `../Build/CrystalStudioAvalonia/win-x64`。`catalogue` 和 `Objects` 会一并复制。可通过 `-OutputDirectory` 指定其他目录。
 
+Windows x64 NativeAOT 使用与 `Server.Avalonia/AotBuild.win-x64.bat` 相同的 Release 发布方式。可以双击本目录的 `AotBuild.win-x64.bat`，或者执行：
+
+```powershell
+.\AotBuild.win-x64.bat
+# PowerShell 入口
+.\Publish-Avalonia.ps1 -Aot
+# 自定义输出目录；已验证源码时可以跳过测试
+.\AotBuild.win-x64.bat -OutputDirectory 'E:\Build\CrystalStudio AOT' -SkipTests
+```
+
+AOT 默认输出为 `../Build/CrystalStudioAvalonia/aot/win-x64/CrystalStudio.exe`，并保留旁边的 `catalogue`、`Objects` 和其他发布文件。脚本不依赖启动时的工作目录，默认先执行测试，测试或发布失败时返回非零退出码。普通发布继续使用 ReadyToRun；只有 `-Aot` 或独立批处理入口启用 NativeAOT。
+
+编译环境需要 .NET 10 SDK、Visual Studio 2022 Build Tools 的“使用 C++ 的桌面开发”及 Windows SDK，并保留仓库的 `HuaXiaServer/NativeStaticLibrary/x64`。AOT 配置复用服务端的 Skia、HarfBuzz 和 GLES 静态库，不引入未使用的 SQLite。设置、语言、笔刷、分类和地图附加元数据使用 JSON 源生成，现有 JSON 字段及树木指纹保持兼容；Avalonia 的现有反射绑定通过裁剪描述文件保留。
+
 界面沿用原版 32×32 工具按钮、16–18 图标、26 高度的图层行以及紧凑页签。地图和交互覆盖层独立保存绘制结果，因此鼠标悬停不会重新提交地图；缩略视图按图集批量绘制，并保留原有层次、透明叠加、动画和灯光逻辑。
 
-`CRYSTALSTUDIO_PROFILE` 可指定独立配置目录；未设置时继续使用原版用户配置目录。当前验证目标为 Windows x64，其他平台和 NativeAOT 尚未验收。游戏资源仍需要原版支持的 Crystal `.lib`，该迁移没有增加 `.lib6` 格式支持。
+`CRYSTALSTUDIO_PROFILE` 可指定独立配置目录；未设置时继续使用原版用户配置目录。当前验证目标为 Windows x64；其他平台尚未验收。游戏资源仍需要原版支持的 Crystal `.lib`，资源格式以设置中的 Default / Sanxiu 选项为准。
 
 Palette 的 Categories 使用左侧纵向分类 Tab，右侧按面板宽度排列预览网格。卡片底部仅显示精简名称，鼠标悬停后显示完整标题、副标题及对象路径。保留 Type、Region、Environment、Facing 分组及搜索；每页 24 项，切换分类时记住页码、滚动位置和选中对象，方向键可按网格选择。
 

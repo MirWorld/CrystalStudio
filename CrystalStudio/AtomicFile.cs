@@ -26,5 +26,5 @@ internal static class AtomicFile
     }
 
     public static void WriteJson<T>(string path, T value) =>
-        Write(path, stream => JsonSerializer.Serialize(stream, value));
+        Write(path, stream => StudioJson.Serialize(stream, value));
 }

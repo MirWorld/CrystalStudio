@@ -170,9 +170,9 @@ public partial class MainWindow
             var category = map.Category ?? new CategorizedStamp("", "", Path.GetFileNameWithoutExtension(target), null, null, [], [], [], [], null, "unknown", null, false, "unreviewed");
             category = category with { Id = existing?["id"]?.GetValue<string>() ?? Path.ChangeExtension(relative, null), File = relative, Preview = null, PreviewComplete = false };
             if (existing == null && index.Objects.Any(s => string.Equals(s.Id, category.Id, StringComparison.OrdinalIgnoreCase))) throw new InvalidDataException("The new catalogue ID already exists.");
-            var updated = JsonSerializer.SerializeToNode(category, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase })!.AsObject();
+            var updated = StudioJson.SerializeToNode(category, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase })!.AsObject();
             if (existing is JsonObject entry) foreach (var property in updated) entry[property.Key] = property.Value?.DeepClone();
-            else entries.Add(updated);
+            else entries.Add((JsonNode)updated);
             var cells = CellCodec.CropStamp(Viewport.Document.Cells.Select(pair => new StampCell(pair.Key % Viewport.Document.Width + map.StampOriginX, pair.Key / Viewport.Document.Width + map.StampOriginY, pair.Value)));
             string catalogueTarget = StampCategories.Resolve(index.ObjectRoot, relative);
             bool separateCopy = !string.Equals(Path.GetFullPath(target), catalogueTarget, StringComparison.OrdinalIgnoreCase);
@@ -183,7 +183,7 @@ public partial class MainWindow
             try
             {
                 if (separateCopy) CellCodec.SaveStamp(catalogueTarget, cells);
-                AtomicFile.Write(indexPath, stream => JsonSerializer.Serialize(stream, json, new JsonSerializerOptions { WriteIndented = true }));
+                AtomicFile.Write(indexPath, stream => StudioJson.Serialize(stream, json, new JsonSerializerOptions { WriteIndented = true }));
             }
             catch
             {

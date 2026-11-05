@@ -94,3 +94,28 @@ Release 自动测试通过 22 项，失败 0 项，跳过 0 项。测试覆盖�
 - `native/Program.cs`、`native-zh-CN.json`：辅助原生窗口与界面计时器测量。
 
 使用方法见 README 的“地图物体提取工具”。
+
+## Windows x64 NativeAOT 编译脚本（2026-11-05）
+
+新增 `AotBuild.win-x64.bat`，参照 `Server.Avalonia/AotBuild.win-x64.bat` 使用 Release、win-x64 和 NativeAOT，并调用统一的 `Publish-Avalonia.ps1 -Aot`。普通 PowerShell 发布方式继续使用 ReadyToRun。AOT 配置独立保存于 `CrystalStudio/Properties/PublishProfiles/NativeAot-win-x64.pubxml`，复用服务端的 Skia、HarfBuzz、GLES 静态库，并保留国际化和现有 Avalonia 反射绑定元数据。默认输出为 `../Build/CrystalStudioAvalonia/aot/win-x64`。
+
+脚本从项目之外的工作目录实际执行成功，默认先验证再发布，支持 `-OutputDirectory` 和 `-SkipTests`；含空格的自定义目录实际发布成功，可执行文件与默认目录的 SHA-256 一致。传入不支持的 `linux-x64` 时，批处理退出码为 1，因此失败不会输出成功结论。发布内容包含分类索引、预览、生成器数据及 9,170 个 `.X` 文件；发布可执行文件为 x64 原生 PE，CLR 目录 RVA 为 0，大小为 61,679,616 字节。
+
+首次尝试仅保留应用反射元数据，虽然可以生成原生文件，但是实际启动时 `LibrarySettings` 的 JSON 参数构造转换器缺少原生代码。因此，最终改为显式 JSON 源生成，关闭默认 JSON 反射，覆盖语言、设置、工作区、收藏、最近地图、分类、生成器目录、笔刷列表、地图附加元数据及提取报告。匿名指纹和报告模型改为具名记录，字段名称和顺序保持一致；墙体及河流模型的可选属性默认值有兼容性验证。
+
+最终批处理执行 **59 项测试，失败 0、跳过 0**。其中新增 3 项验证覆盖旧 JSON 字节表示、树木 SHA-256 指纹、缺省墙体参数及全部内置分类/生成器目录读取。独立的辅助 NativeAOT 程序确认 `RuntimeFeature.IsDynamicCodeSupported=false`、`JsonSerializer.IsReflectionEnabledByDefault=false`，并实际执行设置与语言、工作区、内置目录、Tree/Bush/Rock 列表、收藏、最近地图、带放置元数据的地图保存与重新读取，以及物体扫描、`.X` 导出、来源报告与分类索引更新；这些数据验证全部通过。
+
+最终发布程序在隔离配置下分别以中英文读取 `D:/App/LomcnClient/Map/0.map`，检查地图、小地图、Library 预览、Categories 纵向分类及预览网格、设置窗口，并正常退出。工作区均保存 7 个面板记录，地图没有未保存标记，源地图与原用户设置的 SHA-256 保持一致。没有终止或替换用户已经运行的旧发布程序。
+
+最终原生编译仍有 **48 条 IL2026 裁剪提示及 1 条 MicroCom IL3053 提示**，主要涉及现有 Avalonia 反射绑定；应用整体及主题保留必要元数据，已验证上述实际界面。原有 nullable 和 AVLN3001 提示继续存在。未验证的功能不能仅凭编译成功认定全部兼容；其他平台和架构仍未验证。真实 LIB 资源中的既有像素长度错误继续显示，本次没有更改图片读取或资源数据。
+
+证据位于仓库根目录 `_codex_artifacts/crystalstudio-aot-build`：
+
+- `publish-final.log`：最终批处理的完整测试与 NativeAOT 编译。
+- `native-pe.json`、`published-sha256.json`、`aot-warnings.json`：原生 PE、发布文件哈希及剩余提示。
+- `failure-verification.json`、`invalid-runtime.log`：失败退出码验证。
+- `custom-output-verification.json`、`custom-output.log`：含空格目录和跳过测试参数验证。
+- `native-verification.json`、`native-verification.log`、`verify-native.ps1`：实际程序中英文原生验证。
+- `native-map-*.png`、`native-categories-*.png`、`native-settings-*.png`：地图、分类及设置截图。
+- `smoke/`、`smoke-runtime.log`、`native-data/passed.txt`：辅助原生数据验证源码及结果。
+- `native-stderr.log`：最初反射序列化启动失败的诊断记录，最终程序已通过重新验证。

@@ -6,6 +6,10 @@ namespace CrystalStudio;
 
 internal sealed record ExtractionOutput(string Fingerprint,string File,bool Reused,int Occurrences);
 internal sealed record ExtractionExportResult(List<ExtractionOutput> Objects,string ReportPath);
+internal sealed record ExtractionReport(int SchemaVersion, string Id, DateTime CreatedUtc, List<string> Sources,
+    List<string> Warnings, List<ExtractionOutput> Outputs, List<ExtractionCandidateReport> Candidates);
+internal sealed record ExtractionCandidateReport(Guid Id, string Name, string Category, string Reason, string Kind,
+    bool Reviewed, bool IncludeBoundary, bool CanExport, string Fingerprint, string? TemplatePath, List<ExtractionOccurrence> Occurrences);
 
 internal static class ObjectExtractionExport
 {
@@ -69,7 +73,7 @@ internal static class ObjectExtractionExport
                     // Guard ID collisions, including malicious or hand-edited catalogue entries.
                     if(entries.OfType<JsonObject>().Any(e=>e["id"]?.GetValue<string>()==entry["id"]!.GetValue<string>()))
                         throw new InvalidDataException("The extracted object ID already exists with different contents.");
-                    entries.Add(entry);known[fingerprint]=(file,entry);
+                    entries.Add((JsonNode)entry);known[fingerprint]=(file,entry);
                 }
                 // Reusing content must still persist the reviewed display metadata.
                 // Other classification fields and extension properties remain intact.
@@ -80,8 +84,8 @@ internal static class ObjectExtractionExport
                 var occurrenceKeys=saved.OfType<JsonObject>().Select(o=>o.ToJsonString()).ToHashSet();
                 foreach(var occurrence in c.Occurrences)
                 {
-                    var value=JsonSerializer.SerializeToNode(occurrence,json)!.AsObject();
-                    if(occurrenceKeys.Add(value.ToJsonString()))saved.Add(value);
+                    var value=StudioJson.SerializeToNode(occurrence,json)!.AsObject();
+                    if(occurrenceKeys.Add(value.ToJsonString()))saved.Add((JsonNode)value);
                 }
                 outputs.Add(new(fingerprint,file,reused,c.Occurrences.Count));fault?.Invoke("object");
             }
@@ -93,17 +97,14 @@ internal static class ObjectExtractionExport
             using(var stream=new FileStream(reportPath,FileMode.CreateNew,FileAccess.Write,FileShare.None))
             {
                 created.Add(reportPath);
-                JsonSerializer.Serialize(stream,new
-                {
-                    schemaVersion=1,session.Id,createdUtc=DateTime.UtcNow,session.Sources,session.Warnings,outputs,
-                    candidates=candidates.Select(c=>new{c.Id,c.Name,c.Category,c.Reason,kind=c.Kind.ToString(),c.Reviewed,
-                        c.IncludeBoundary,c.CanExport,fingerprint=c.Fingerprint,c.TemplatePath,c.Occurrences})
-                },json);stream.Flush(true);
+                StudioJson.Serialize(stream,new ExtractionReport(1,session.Id,DateTime.UtcNow,session.Sources,session.Warnings,outputs,
+                    candidates.Select(c=>new ExtractionCandidateReport(c.Id,c.Name,c.Category,c.Reason,c.Kind.ToString(),c.Reviewed,
+                        c.IncludeBoundary,c.CanExport,c.Fingerprint,c.TemplatePath,c.Occurrences)).ToList()),json);stream.Flush(true);
             }
             fault?.Invoke("report");token.ThrowIfCancellationRequested();
             if(!File.ReadAllBytes(indexPath).AsSpan().SequenceEqual(before))throw new IOException("The catalogue changed during export. Scan again before saving.");
             fault?.Invoke("index");
-            AtomicFile.Write(indexPath,s=>JsonSerializer.Serialize(s,root,json));committed=true;
+            AtomicFile.Write(indexPath,s=>StudioJson.Serialize(s,root,json));committed=true;
             return new(outputs,reportPath);
         }
         finally

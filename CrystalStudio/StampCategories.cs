@@ -20,7 +20,7 @@ public static class StampCategories
     public static StampCategoryIndex Read(string path)
     {
         using var stream = File.OpenRead(path);
-        var index = JsonSerializer.Deserialize<StampCategoryIndex>(stream, new JsonSerializerOptions { PropertyNameCaseInsensitive = true })
+        var index = StudioJson.Deserialize<StampCategoryIndex>(stream, new JsonSerializerOptions { PropertyNameCaseInsensitive = true })
             ?? throw new InvalidDataException("Empty stamp category catalogue.");
         string dataRoot = Path.GetDirectoryName(Path.GetDirectoryName(Path.GetFullPath(path)))!;
         index = index with { ObjectRoot = Path.GetFullPath(index.ObjectRoot, dataRoot), PreviewRoot = Path.GetFullPath(index.PreviewRoot, dataRoot) };

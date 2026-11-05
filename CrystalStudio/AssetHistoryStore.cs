@@ -42,7 +42,7 @@ public sealed class AssetHistoryStore
     public void Load()
     {
         if (!File.Exists(FilePath)) return;
-        var saved = JsonSerializer.Deserialize<SavedAssets>(File.ReadAllText(FilePath)) ?? new();
+        var saved = StudioJson.Deserialize<SavedAssets>(File.ReadAllText(FilePath)) ?? new();
         static List<AssetReference> Clean(List<AssetReference>? entries)
         {
             List<AssetReference> result = [];

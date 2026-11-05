@@ -19,7 +19,7 @@ public sealed record TownCatalogue(int SchemaVersion, List<TownFamily> Families)
 {
     public static TownCatalogue Load(string? path = null)
     {
-        var catalogue = JsonSerializer.Deserialize<TownCatalogue>(File.ReadAllText(path ?? DataPaths.ResolveEditor("catalogue", "towns.json")),
+        var catalogue = StudioJson.Deserialize<TownCatalogue>(File.ReadAllText(path ?? DataPaths.ResolveEditor("catalogue", "towns.json")),
             new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? throw new InvalidDataException("Empty town catalogue.");
         if (catalogue.SchemaVersion != 1 || catalogue.Families.Count == 0 || catalogue.Families.Select(f => f.Id).Distinct().Count() != catalogue.Families.Count)
             throw new InvalidDataException("Invalid town catalogue.");

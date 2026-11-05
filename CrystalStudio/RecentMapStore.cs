@@ -16,7 +16,7 @@ public sealed class RecentMapStore
     public void Load()
     {
         if (!File.Exists(FilePath)) return;
-        var saved = JsonSerializer.Deserialize<List<string?>>(File.ReadAllText(FilePath)) ?? [];
+        var saved = StudioJson.Deserialize<List<string?>>(File.ReadAllText(FilePath)) ?? [];
         var clean = new List<string>();
         foreach (var entry in saved)
         {

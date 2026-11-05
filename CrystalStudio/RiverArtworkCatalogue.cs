@@ -15,10 +15,10 @@ public sealed record RiverArtworkJoin(string FromId,string ToId,int Dx,int Dy,in
 public sealed record RiverArtworkCatalogue(int SchemaVersion,string Status,string Name,string ReviewBasis,
     int EdgeBufferCells,string LandId,string WaterId,List<RiverArtworkPiece> Pieces,List<RiverArtworkProof> Sprites)
 {
-    public List<RiverArtworkJoin> Joins {get;init;}=[];
+    public List<RiverArtworkJoin> Joins {get;set;}=[];
     public static RiverArtworkCatalogue Load(string path,bool allowResearch=false)
     {
-        var value=JsonSerializer.Deserialize<RiverArtworkCatalogue>(File.ReadAllText(path),new JsonSerializerOptions{PropertyNameCaseInsensitive=true})
+        var value=StudioJson.Deserialize<RiverArtworkCatalogue>(File.ReadAllText(path),new JsonSerializerOptions{PropertyNameCaseInsensitive=true})
             ??throw new InvalidDataException("Empty river artwork catalogue.");
         if(value.SchemaVersion!=1||value.Status!="reviewed"&&!(allowResearch&&value.Status=="research")
             ||value.EdgeBufferCells!=0||string.IsNullOrWhiteSpace(value.ReviewBasis)

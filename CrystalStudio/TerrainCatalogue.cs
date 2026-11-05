@@ -15,7 +15,7 @@ public sealed class TerrainCatalogue
     public TerrainWaterCatalogue? Water { get; private set; }
     public static TerrainCatalogue Load(string? path = null)
     {
-        var result = JsonSerializer.Deserialize<TerrainCatalogue>(File.ReadAllText(path ?? DataPaths.ResolveEditor("catalogue", "terrain.json")), new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? throw new InvalidDataException("Empty terrain catalogue.");
+        var result = StudioJson.Deserialize<TerrainCatalogue>(File.ReadAllText(path ?? DataPaths.ResolveEditor("catalogue", "terrain.json")), new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? throw new InvalidDataException("Empty terrain catalogue.");
         if (result.SchemaVersion != 1 || result.Sets.Count == 0 || result.Sets.Select(s => s.Id).Distinct().Count() != result.Sets.Count) throw new InvalidDataException("Invalid terrain catalogue version or IDs.");
         foreach (var s in result.Sets)
         {

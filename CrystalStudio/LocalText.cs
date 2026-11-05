@@ -9,7 +9,7 @@ namespace CrystalStudio;
 /// <summary>UI language is loaded once at startup. Preferences apply on the next launch.</summary>
 public static class LocalText
 {
-    private sealed record Translation(string English, string Chinese);
+    internal sealed record Translation(string English, string Chinese);
     private static readonly Dictionary<string, Translation> resources = LoadResources();
     private static readonly Dictionary<string, Translation> byEnglish = resources.Values
         .GroupBy(value => value.English, StringComparer.Ordinal).ToDictionary(group => group.Key, group => group.First(), StringComparer.Ordinal);
@@ -21,7 +21,7 @@ public static class LocalText
     {
         using var stream = typeof(LocalText).Assembly.GetManifestResourceStream("CrystalStudio.Localization.Strings.json")
             ?? throw new InvalidOperationException("Missing UI language resources.");
-        return JsonSerializer.Deserialize<Dictionary<string, Translation>>(stream)
+        return StudioJson.Deserialize<Dictionary<string, Translation>>(stream)
             ?? throw new InvalidOperationException("Empty UI language resources.");
     }
 
