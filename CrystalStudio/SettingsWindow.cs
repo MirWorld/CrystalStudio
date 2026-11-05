@@ -7,8 +7,12 @@ public sealed class SettingsWindow : EditorWindow
 
     public SettingsWindow(string? currentFolder, AssetSourceFormat currentFormat,
         Func<string, AssetSourceFormat, Task> apply, bool firstSetup = false)
+        : this(new LibrarySettings(currentFolder, AssetFormat: currentFormat), (folder, format, _) => apply(folder, format), firstSetup) { }
+
+    public SettingsWindow(LibrarySettings current, Func<string, AssetSourceFormat, AiSettings, Task> apply, bool firstSetup = false)
     {
-        
+        string? currentFolder = current.LibraryFolder;
+        var currentFormat = current.AssetFormat;
         this.Title = (firstSetup ? LocalText.T("Welcome to Crystal Studio") : LocalText.T("Crystal Studio Settings"));
         Width = 660; SizeToContent = SizeToContent.Height; CanResize = false;
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
@@ -34,9 +38,13 @@ public sealed class SettingsWindow : EditorWindow
         var sanxiuFormat = new RadioButton { Name = "SanxiuAssetFormat", GroupName = "AssetSourceFormat",
             Content = LocalText.T("不紧张\\三修格式"), IsChecked = currentFormat == AssetSourceFormat.Sanxiu };
         panel.Children.Add(defaultFormat); panel.Children.Add(sanxiuFormat);
+        var ai = new AiSettingsPanel(current.Ai ?? new());
+        panel.Children.Add(new Expander { Name = "AiSettings", Header = LocalText.T("AI settings"), Content = ai,
+            HorizontalAlignment = HorizontalAlignment.Stretch, Margin = new(0, 14, 0, 14) });
+        Closed += (_, _) => ai.CancelTests();
         var buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right };
         var cancel = new Button { Content = (firstSetup ? LocalText.T("Set Up Later") : LocalText.T("Cancel")), IsCancel = true };
-        var save = new Button { Theme = (Style)this.FindResource("PrimaryButton"), Content = (firstSetup ? LocalText.T("Save and Start") : LocalText.T("Save Changes")), IsDefault = true, IsEnabled = !string.IsNullOrWhiteSpace(currentFolder) };
+        var save = new Button { Theme = (Style)this.FindResource("PrimaryButton"), Content = (firstSetup ? LocalText.T("Save and Start") : LocalText.T("Save Changes")), IsDefault = true, IsEnabled = !firstSetup || !string.IsNullOrWhiteSpace(currentFolder) };
         buttons.Children.Add(cancel); buttons.Children.Add(save); panel.Children.Add(buttons);
         var error = new TextBlock { Foreground = new ImmutableSolidColorBrush(Color.FromRgb(228, 158, 151)), TextWrapping = TextWrapping.Wrap, Margin = new(3, 8, 3, 0), IsVisible = false }; panel.Children.Add(error);
         bool changingLanguage = false;
@@ -67,12 +75,12 @@ public sealed class SettingsWindow : EditorWindow
         save.Click += async (_, _) =>
         {
             error.IsVisible = false; saving = true; save.IsEnabled = false; browse.IsEnabled = false; cancel.IsEnabled = false; languages.IsEnabled = false; defaultFormat.IsEnabled = false; sanxiuFormat.IsEnabled = false; save.Content = LocalText.T("Checking Libraries\u2026");
-            try { await apply(folder.Text, sanxiuFormat.IsChecked == true ? AssetSourceFormat.Sanxiu : AssetSourceFormat.Default); saving = false; DialogResult = true; }
+            try { var nextAi = ai.Read(); ai.IsEnabled = false; await apply(folder.Text ?? "", sanxiuFormat.IsChecked == true ? AssetSourceFormat.Sanxiu : AssetSourceFormat.Default, nextAi); saving = false; DialogResult = true; }
             catch (Exception ex)
             {
                 StudioLog.Error("Settings.Save",ex,$"Root={folder.Text}");
                 error.Text = (ex.Message); error.IsVisible = true;
-                saving = false; save.IsEnabled = true; browse.IsEnabled = true; cancel.IsEnabled = true; languages.IsEnabled = true; defaultFormat.IsEnabled = true; sanxiuFormat.IsEnabled = true; save.Content = (firstSetup ? LocalText.T("Save and Start") : LocalText.T("Save Changes"));
+                saving = false; ai.IsEnabled = true; save.IsEnabled = true; browse.IsEnabled = true; cancel.IsEnabled = true; languages.IsEnabled = true; defaultFormat.IsEnabled = true; sanxiuFormat.IsEnabled = true; save.Content = (firstSetup ? LocalText.T("Save and Start") : LocalText.T("Save Changes"));
             }
         };
     }

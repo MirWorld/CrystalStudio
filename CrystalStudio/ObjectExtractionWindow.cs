@@ -8,6 +8,8 @@ internal sealed class ObjectExtractionWindow : EditorWindow
     private readonly Action saved;
     private readonly string indexPath;
     private readonly AssetSourceFormat assetFormat;
+    private readonly Func<AiSettings> aiSettings;
+    private readonly AiClient aiClient;
     private readonly ComboBox scope=new(){ItemsSource=new[]{"Current map","Current selection","Map directory"},SelectedIndex=0,MinWidth=150};
     private readonly TextBox directory=new(){Watermark=LocalText.T("Map directory"),MinWidth=180};
     private readonly TextBox resource=new(){Watermark=LocalText.T("Resource folder"),MinWidth=180};
@@ -20,7 +22,7 @@ internal sealed class ObjectExtractionWindow : EditorWindow
     private readonly ListBox cards=new(){SelectionMode=SelectionMode.Multiple,AutoScrollToSelectedItem=false};
     private readonly TabControl categories=new(){TabStripPlacement=Dock.Left};
     private readonly StackPanel details=new(){Spacing=6};
-    private readonly Button scan,save,cancel,undo,redo,previous,next;
+    private readonly Button scan,save,cancel,undo,redo,previous,next,aiSelected,aiUnreviewed;
     private readonly List<Control> mutationControls=[];
     private readonly SemaphoreSlim previewSlots=new(2);
     private readonly HashSet<Task> previewTasks=[];
@@ -33,9 +35,10 @@ internal sealed class ObjectExtractionWindow : EditorWindow
     private int page;
     private const int PageSize=48;
     internal ObjectExtractionWindow(Func<ExtractionInput> current,string? resourceFolder,string indexPath,Action saved,
-        AssetSourceFormat assetFormat = AssetSourceFormat.Default)
+        AssetSourceFormat assetFormat = AssetSourceFormat.Default, Func<AiSettings>? aiSettings = null, AiClient? aiClient = null)
     {
         this.current=current;this.indexPath=indexPath;this.saved=saved;this.assetFormat=assetFormat;
+        this.aiSettings=aiSettings??(()=>new SettingsStore().Load().Ai??new());this.aiClient=aiClient??new();
         StudioLog.Info("Extraction.Window",$"Opened; Resources={resourceFolder}; Format={assetFormat}; Catalogue={indexPath}");
         Title=LocalText.T("Extract Map Objects");Width=1420;Height=900;MinWidth=1120;MinHeight=700;WindowStartupLocation=WindowStartupLocation.CenterOwner;
         resource.Text=resourceFolder;
@@ -69,6 +72,11 @@ internal sealed class ObjectExtractionWindow : EditorWindow
         var merge=Button("Merge selected",()=>Command(()=>Review!.Merge(SelectedIds())));
         var exclude=Button("Exclude selected",()=>Command(()=>Review!.Exclude(SelectedIds())));
         var reviewActions=new WrapPanel{Margin=new(0,4)};foreach(var b in new[]{review,unreview,merge,exclude}){reviewActions.Children.Add(b);mutationControls.Add(b);}
+        aiSelected=Button("AI correct selected names / categories",()=>_ = RecognizeAsync());aiSelected.Name="ExtractionAiSelected";
+        aiUnreviewed=Button("AI correct all unreviewed",()=>_ = RecognizeAsync(true));aiUnreviewed.Name="ExtractionAiUnreviewed";
+        reviewActions.Children.Add(aiSelected);reviewActions.Children.Add(aiUnreviewed);
+        ToolTip.SetTip(aiSelected,LocalText.T("Uses Vision AI from Settings. Results remain unreviewed and can be undone."));
+        ToolTip.SetTip(aiUnreviewed,LocalText.T("Uses Vision AI from Settings. Results remain unreviewed and can be undone."));
         // Review commands stay above the grid; the bottom row retains scan/save progress.
         filters.Children.Add(undo);filters.Children.Add(redo);
         var left=new Grid{RowDefinitions=new("*,Auto")};body.Children.Remove(cards);left.Children.Add(cards);Grid.SetRow(reviewActions,1);left.Children.Add(reviewActions);Grid.SetColumn(left,1);body.Children.Add(left);
@@ -77,7 +85,7 @@ internal sealed class ObjectExtractionWindow : EditorWindow
         save.SetResource(ThemeProperty,"PrimaryButton");actions.Children.Add(cancel);actions.Children.Add(save);
         search.TextChanged+=(_,_)=>{page=0;RefreshCards();};state.SelectionChanged+=(_,_)=>{page=0;RefreshCards();};
         categories.SelectionChanged+=(_,_)=>{if(!refreshing){page=0;RefreshCards();}};
-        cards.SelectionChanged+=(_,_)=>ShowDetails();
+        cards.SelectionChanged+=(_,_)=>{ShowDetails();UpdateState();};
         scope.SelectionChanged+=(_,_)=>{directory.IsEnabled=scope.SelectedIndex==2&&!running;};directory.IsEnabled=false;
         Closing+=(_,_)=>{StudioLog.Info("Extraction.Window","Closing; cancelling scan and previews");closed=true;operation.Cancel();previewStop.Cancel();};
         Closed+=async(_,_)=>{while(running)await Task.Delay(20);await ClearPreviews();assets?.Dispose();operation.Dispose();previewStop.Dispose();previewSlots.Dispose();};
@@ -104,9 +112,41 @@ internal sealed class ObjectExtractionWindow : EditorWindow
         cancel.IsEnabled=running;save.IsEnabled=!running&&Review?.Candidates.Any(c=>c.CanExport)==true;
         undo.IsEnabled=!running&&Review?.CanUndo==true;redo.IsEnabled=!running&&Review?.CanRedo==true;
         foreach(var control in mutationControls)control.IsEnabled=!running;
+        aiSelected.IsEnabled=!running&&assets!=null&&SelectedIds().Any();
+        aiUnreviewed.IsEnabled=!running&&assets!=null&&Review?.Candidates.Any(c=>!c.Reviewed)==true;
         statistics.Text=Review==null?LocalText.T("No scan results."):LocalText.Format("{0:N0} existing · {1:N0} new · {2:N0} duplicates · {3:N0} unreviewed · {4:N0} ready",
             Review.Candidates.Count(c=>c.Kind!=ExtractionKind.Discovered),Review.Candidates.Count(c=>c.Kind==ExtractionKind.Discovered),
             Review.Candidates.Sum(c=>c.Occurrences.Count-1),Review.Candidates.Count(c=>!c.Reviewed),Review.Candidates.Count(c=>c.CanExport));
+    }
+    internal async Task RecognizeAsync(bool allUnreviewed=false)
+    {
+        if(running||Review==null||assets==null)return;
+        var selected=SelectedIds().ToHashSet();
+        var targets=Review.Candidates.Where(c=>allUnreviewed?!c.Reviewed:selected.Contains(c.Id)).ToArray();
+        if(targets.Length==0){status.Text=LocalText.T("Select candidates for AI recognition first.");return;}
+        try
+        {
+            var endpoint=aiSettings().For(AiRole.Vision);endpoint.Validate(AiRole.Vision);
+            var allowed=StampCategories.Read(indexPath).Objects.Select(c=>c.Type).OfType<string>()
+                .Concat(Review.Candidates.Select(c=>c.Category)).Append("Unclassified")
+                .Where(c=>!string.IsNullOrWhiteSpace(c)).Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(c=>c).ToArray();
+            running=true;operation.Dispose();operation=new();UpdateState();details.IsEnabled=false;
+            progress.IsIndeterminate=false;progress.Value=0;
+            var results=new Dictionary<Guid,AiObjectRecognition>();
+            foreach(var candidate in targets)
+            {
+                operation.Token.ThrowIfCancellationRequested();
+                status.Text=LocalText.Format("AI recognizing {0} / {1}: {2}",results.Count+1,targets.Length,candidate.Name);
+                results.Add(candidate.Id,await ExtractionAi.RecognizeAsync(aiClient,endpoint,candidate,assets,allowed,operation.Token));
+                progress.Value=100.0*results.Count/targets.Length;
+            }
+            operation.Token.ThrowIfCancellationRequested();if(closed)return;
+            Review.ApplyAi(results);RefreshCategories(selected);
+            status.Text=LocalText.Format("AI corrected {0} names / categories. Review the results before saving; Undo restores the previous values.",results.Count);
+        }
+        catch(OperationCanceledException){status.Text=LocalText.T("AI recognition cancelled. Candidates unchanged.");}
+        catch(Exception ex){StudioLog.Error("Extraction.AI",ex);status.Text=LocalText.Format("AI recognition failed. Candidates unchanged. {0}",LocalText.T(ex.Message));}
+        finally{running=false;details.IsEnabled=true;UpdateState();}
     }
     internal async Task ScanAsync()
     {

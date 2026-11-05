@@ -5,7 +5,7 @@ namespace CrystalStudio;
 public enum AssetSourceFormat { Default, Sanxiu }
 
 public sealed record LibrarySettings(string? LibraryFolder = null, string? Language = null,
-    AssetSourceFormat AssetFormat = AssetSourceFormat.Default);
+    AssetSourceFormat AssetFormat = AssetSourceFormat.Default, AiSettings? Ai = null);
 
 public sealed class SettingsStore
 {

@@ -517,19 +517,23 @@ public partial class MainWindow : EditorWindow
 
     {
 
-        var dialog = new SettingsWindow(settings.LibraryFolder, settings.AssetFormat, async (root, format) =>
+        var dialog = new SettingsWindow(settingsStore.Load(), async (root, format, ai) =>
 
         {
 
-            var next = await Task.Run(() => AssetStore.Load(root, format));
+            bool librariesChanged = !string.Equals(root, settings.LibraryFolder, StringComparison.OrdinalIgnoreCase) || format != settings.AssetFormat;
+            var next = !string.IsNullOrWhiteSpace(root) && (librariesChanged || assets == null)
+                ? await Task.Run(() => AssetStore.Load(root, format)) : null;
 
-            var updated = settingsStore.Load() with { LibraryFolder = DataPaths.GetClientRoot(root), AssetFormat = format };
+            var updated = settingsStore.Load() with { LibraryFolder = string.IsNullOrWhiteSpace(root) ? null : DataPaths.GetClientRoot(root), AssetFormat = format, Ai = ai };
 
             try { await Task.Run(() => settingsStore.Save(updated)); }
 
-            catch { next.Dispose(); throw; }
+            catch { next?.Dispose(); throw; }
 
             settings = updated;
+
+            if (next == null) return;
 
             try { await InitializeWallsAsync(); }
             catch { next.Dispose(); throw; }

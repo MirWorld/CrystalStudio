@@ -84,6 +84,18 @@ internal sealed class ExtractionReview
     }
     public void Undo(){if(undo.TryPop(out var value)){redo.Push(Candidates);Candidates=value;}}
     public void Redo(){if(redo.TryPop(out var value)){undo.Push(Candidates);Candidates=value;}}
+    public void ApplyAi(IReadOnlyDictionary<Guid,AiObjectRecognition> results)
+    {
+        if(results.Count==0)return;
+        if(results.Keys.Any(id=>!Candidates.Any(c=>c.Id==id)) || results.Values.Any(r=>
+            string.IsNullOrWhiteSpace(r.Name)||string.IsNullOrWhiteSpace(r.Category)))
+            throw new InvalidDataException("Invalid AI recognition results.");
+        Change(Candidates.Select(c=>results.TryGetValue(c.Id,out var result)?c with
+        {
+            Name=result.Name,Category=result.Category,Reviewed=false,
+            Reason=c.Reason+"\n"+LocalText.T("AI recognition")+": "+result.Reason
+        }:c).ToList());
+    }
     public void Update(IEnumerable<Guid> ids,string? name=null,string? category=null,bool? reviewed=null,bool? boundary=null)
     {
         var selected=ids.ToHashSet();
