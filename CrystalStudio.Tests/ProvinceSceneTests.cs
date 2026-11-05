@@ -19,6 +19,7 @@ public sealed class ProvinceSceneTests
             new Cell { Foreground = new(2, 1), BackImage = 0x60000000 })]), SpecialBrushKind.Tree, [ProvinceStyle.All[0].Region])];
         var plan = ProvinceGenerator.Plan(source, terrain, WallCatalogue.Read(WallCatalogue.ResolvePath()), scenery, options);
         Assert.Equal(2, plan.Towns.Count);
+        Assert.Empty(plan.Ruins);
         Assert.Empty(source.Cells); Assert.Empty(source.PlacedStamps);
         var crops = plan.Towns.SelectMany(t => t.Plan.Buildings.Where(b => TownSceneDetails.Use(b.Piece) == "crop")).ToArray();
         Assert.NotEmpty(crops);
@@ -108,9 +109,29 @@ public sealed class ProvinceSceneTests
         var parameters = new Dictionary<string, string> { ["SceneList"] = "index:1", ["SeedBox"] = "27" };
         var recipe = MapCreationStore.Recipe(new MapDocument(320, 320), MapCreationKind.Province, parameters, new());
         Assert.Equal("index:1", recipe.Parameters["SceneList"]);
-        Assert.Contains("quick-map-v2", recipe.GeneratorVersion);
+        Assert.Contains("quick-map-v3", recipe.GeneratorVersion);
         Assert.Contains("towns.json", recipe.CatalogueHashes.Keys);
         Assert.Contains("province-decoration-ground.json", recipe.CatalogueHashes.Keys);
+    }
+
+    [AvaloniaFact]
+    public void ForestThemePreservesLegacyIndicesAndPinsWoodlandDuringRestore()
+    {
+        using var assets = AssetStore.Load(Path.Combine(TestApplication.Root, "Data"));
+        var window = new ProvinceGeneratorWindow(new MapDocument(320, 320), assets);
+        var scene = window.FindControl<ComboBox>("SceneList")!;
+        scene.SelectedIndex = 2;
+        Assert.True(window.FindControl<StackPanel>("RuinOptions")!.IsVisible);
+        var style = window.FindControl<ComboBox>("StyleList")!;
+        Assert.False(style.IsEnabled); Assert.Equal(0, style.SelectedIndex);
+        style.SelectedIndex = 1; Assert.Equal(0, style.SelectedIndex);
+        window.FindControl<Slider>("RuinCountSlider")!.Value = 3;
+        var settings = GeneratorPreferences.Capture(window);
+        scene.SelectedIndex = 0;
+        Assert.True(style.IsEnabled); Assert.False(window.FindControl<StackPanel>("RuinOptions")!.IsVisible);
+        GeneratorPreferences.Restore(window, settings);
+        Assert.Equal(2, scene.SelectedIndex); Assert.Equal(3, window.FindControl<Slider>("RuinCountSlider")!.Value);
+        window.Close();
     }
 
     private static HashSet<int> Reachable(MapDocument map, int x, int y)

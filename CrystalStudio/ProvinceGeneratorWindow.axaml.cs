@@ -15,6 +15,7 @@ public partial class ProvinceGeneratorWindow : EditorWindow
     private IReadOnlyList<ProvinceScenery> scenery = [];
     private TerrainWaterResources? water;
     private readonly ProvinceTownResources towns = new();
+    private readonly ProvinceRuinResources ruins = new();
     private ProvincePlan? cached;
     private RasterImage? overview, detailPreview;
     private bool ready, closed, changingSettings;
@@ -51,8 +52,18 @@ public partial class ProvinceGeneratorWindow : EditorWindow
     {
         if (TownCountSlider == null) return;
         bool village = SceneList.SelectedIndex == (int)ProvinceScene.VillageCountryside;
+        bool forestRuins = SceneList.SelectedIndex == (int)ProvinceScene.ForestRuins;
+        if (RuinOptions != null) RuinOptions.IsVisible = forestRuins;
+        StyleList.IsEnabled = !forestRuins;
+        if (forestRuins) StyleList.SelectedIndex = 0;
         TownCountSlider.Minimum = village ? 1 : 0;
         TownCountSlider.Value = village ? Math.Min(TownCountSlider.Maximum, Math.Max(1, document.Width * document.Height / 90000)) : 0;
+        if (forestRuins)
+        {
+            ForestSlider.Value = 100; CliffSlider.Value = 35; BeachSlider.Value = 0;
+            RiverSlider.Value = 40; VegetationSlider.Value = 85;
+            if (RuinCountSlider != null) RuinCountSlider.Value = Math.Clamp(document.Width * document.Height / 90000, 1, 4);
+        }
         if (village)
         {
             ForestSlider.Value = 65; CliffSlider.Value = 35; BeachSlider.Value = 20;
@@ -60,7 +71,11 @@ public partial class ProvinceGeneratorWindow : EditorWindow
         }
         UpdateDoorOptions(); Schedule();
     }
-    private void SettingsChanged(object sender, RoutedEventArgs e) { UpdateDoorOptions(); Schedule(); }
+    private void SettingsChanged(object sender, RoutedEventArgs e)
+    {
+        if (SceneList?.SelectedIndex == (int)ProvinceScene.ForestRuins && StyleList.SelectedIndex != 0) StyleList.SelectedIndex = 0;
+        UpdateDoorOptions(); Schedule();
+    }
     private void UpdateDoorOptions()
     {
         if (DoorCountSlider==null || StyleList.SelectedItem is not ProvinceStyle style) return;
@@ -82,7 +97,7 @@ public partial class ProvinceGeneratorWindow : EditorWindow
         try
         {
             int next = Random.Shared.Next(StyleList.Items.Count - 1);
-            StyleList.SelectedIndex = next >= StyleList.SelectedIndex ? next + 1 : next;
+            if (SceneList.SelectedIndex != (int)ProvinceScene.ForestRuins) StyleList.SelectedIndex = next >= StyleList.SelectedIndex ? next + 1 : next;
             foreach (var slider in new[] { ForestSlider, CliffSlider, BeachSlider, RiverSlider, VegetationSlider, TownCountSlider })
                 slider.Value = Random.Shared.Next((int)slider.Minimum, (int)slider.Maximum + 1);
             DoorCountSlider.Value=Random.Shared.Next(1, 5);
@@ -97,7 +112,7 @@ public partial class ProvinceGeneratorWindow : EditorWindow
         if (!int.TryParse(SeedBox.Text, out int seed)) { PreviewHint.Text = ((FeedbackText.Text = LocalText.T("Enter a whole-number seed."))); return; }
         var options = new ProvinceOptions(seed, StyleList.SelectedItem as ProvinceStyle, (int)ForestSlider.Value,
             (int)CliffSlider.Value, (int)BeachSlider.Value, (int)RiverSlider.Value, (int)VegetationSlider.Value, (int)TownCountSlider.Value,
-            DoorCountSlider.IsEnabled ? (int)DoorCountSlider.Value : 0, (ProvinceScene)SceneList.SelectedIndex);
+            DoorCountSlider.IsEnabled ? (int)DoorCountSlider.Value : 0, (ProvinceScene)SceneList.SelectedIndex, (int)RuinCountSlider.Value);
         int request = revision; bool detail = DetailToggle.IsChecked == true;
         var job = CancellationTokenSource.CreateLinkedTokenSource(lifetime.Token); pending = job;
         try
@@ -111,7 +126,7 @@ public partial class ProvinceGeneratorWindow : EditorWindow
                     var p = cached;
                     if (p == null || p.Options != options || p.SourceRevision != document.PickupRevision)
                     {
-                        p = ProvinceGenerator.Plan(document, terrain, walls, scenery, options, job.Token, water?.Banks, water?.Shore, assets, towns: towns);
+                        p = ProvinceGenerator.Plan(document, terrain, walls, scenery, options, job.Token, water?.Banks, water?.Shore, assets, towns: towns, ruins: ruins);
                         // Keep a finished plan even if a preview-mode change cancels
                         // rendering. Only generation options invalidate the map.
                         cached = p; overview = detailPreview = null;

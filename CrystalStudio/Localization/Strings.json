@@ -3898,5 +3898,8 @@
   "EcologyEdgePlants": {
     "English": "{0} woodland, trail and shore edge plants",
     "Chinese": "{0} 处林缘、路旁与岸边植被"
-  }
+  },
+  "ForestRuinsScene": { "English": "Forest ruins", "Chinese": "森林遗迹" },
+  "RuinCount": { "English": "Ruin clearings: ", "Chinese": "遗迹空地数量：" },
+  "ForestRuinClearings": { "English": "{0} forest ruin clearings", "Chinese": "{0} 处森林遗迹空地" }
 }
