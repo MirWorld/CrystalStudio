@@ -25,11 +25,12 @@ public sealed record TempleDefinition(string Name, string WallId, string FloorId
 public enum DungeonType { Temple, Cave }
 
 public sealed record TempleOptions(TempleDefinition Temple, int Seed = 1, int Rooms = 12, int RoomSize = 5,
-    int CorridorWidth = 2, DungeonType Type = DungeonType.Temple, int DoorCount = 0);
+    int CorridorWidth = 2, DungeonType Type = DungeonType.Temple, int DoorCount = 0, DungeonTheme Theme = DungeonTheme.Classic);
 
 public sealed record TemplePlan(MapDocument Source, long SourceRevision, MapDocument Generated,
     TempleOptions Options, int RoomCount, IReadOnlyList<(int X, int Y)> RoomCentres)
 {
+    public IReadOnlyList<PlacedStamp> Decorations { get; init; } = [];
     public IReadOnlyList<GeneratedEntrance> Entrances { get; init; } = [];
     public IReadOnlyList<GeneratedSideRoom> SideRooms { get; init; } = [];
 }
@@ -40,16 +41,18 @@ public static class TempleGenerator
     private static readonly (int U, int V)[] Directions = [(1, 0), (0, 1), (-1, 0), (0, -1)];
 
     public static TemplePlan Plan(MapDocument source, WallFamily walls, TerrainSet floor, TempleOptions options,
-        CancellationToken cancellation = default, AssetStore? assets = null)
+        CancellationToken cancellation = default, AssetStore? assets = null, DungeonThemeResources? themes = null)
     {
         cancellation.ThrowIfCancellationRequested();
         if (walls.Id != options.Temple.WallId || floor.Id != options.Temple.FloorId || !walls.DrawInterior)
             throw new ArgumentException("The selected dungeon style needs its matching interior wall brush and floor tiles.");
         if (options.Rooms is < 1 or > 30 || options.RoomSize is not (0 or 3 or 4 or 5) || options.CorridorWidth is < 1 or > 2 ||
-            options.DoorCount is < 0 or > WallEntrances.MaximumCount || !Enum.IsDefined(options.Type))
+            options.DoorCount is < 0 or > WallEntrances.MaximumCount || !Enum.IsDefined(options.Type) || !Enum.IsDefined(options.Theme) || options.Theme != DungeonTheme.Classic && options.RoomSize == 0)
             throw new ArgumentOutOfRangeException(nameof(options));
         if (source.Width < 64 || source.Height < 64 || (long)source.Width * source.Height > MapDimensions.MaximumGeneratedCells)
             throw new ArgumentException("Dungeon generation needs at least 64×64 cells and supports up to 1,000,000 cells.");
+        if (options.Theme != DungeonTheme.Classic && (options.Temple != DungeonThemes.Definition(options.Theme) || options.Type != DungeonThemes.Type(options.Theme)))
+            throw new ArgumentException("The selected theme requires its matching layout and native artwork.");
         long revision = source.PickupRevision;
         walls=walls.WithMode(true);
         walls.RequestedDoorCount=options.DoorCount;
@@ -79,12 +82,19 @@ public static class TempleGenerator
         // Room size is a maximum. Use smaller chambers when that lets the
         // requested network fit instead of turning large-wall temples into
         // one oversized room on an otherwise usable map.
-        maxRoom = Math.Min(maxRoom, (side / unit - (slots - 1) * gap) / slots);
+        if (options.Theme == DungeonTheme.Classic)
+            maxRoom = Math.Min(maxRoom, (side / unit - (slots - 1) * gap) / slots);
         int pitch = maxRoom + gap;
         int count = options.Type == DungeonType.Cave ? options.Rooms : Math.Min(options.Rooms, slots * slots);
         HashSet<(int U, int V)> nodes;
         (int U, int V)[] roomNodes;
-        if (options.Type == DungeonType.Cave)
+        if (options.Theme != DungeonTheme.Classic)
+        {
+            (nodes, roomNodes) = DungeonThemeLayout.Create(options.Theme, side / unit, Math.Max(1, maxRoom),
+                options.Rooms, corridorWidth, random, cancellation);
+            count = roomNodes.Length;
+        }
+        else if (options.Type == DungeonType.Cave)
         {
             // Winding tunnels can reach every edge of their source grid. Leave
             // room for their width before fitting, rather than carving a full
@@ -137,7 +147,7 @@ public static class TempleGenerator
         if (options.Type == DungeonType.Cave) MergeVertexContacts(nodes);
         (nodes, roomNodes) = FitMap(nodes, roomNodes, source, walls, unit, options.Temple.Margin, cancellation,
             corridorsOnly ? corridorWidth : 0);
-        if (options.Type == DungeonType.Cave)
+        if (options.Theme == DungeonTheme.Classic && options.Type == DungeonType.Cave)
             CaveLayout.AddInteriorWalls(nodes, roomNodes, corridorWidth, random, cancellation);
         if (unit > 1)
             nodes = nodes.SelectMany(p => Enumerable.Range(0, unit).SelectMany(u =>
@@ -198,6 +208,14 @@ public static class TempleGenerator
             if (corners.Any(p => Math.Abs(p.Item1 - room.X - .5) + Math.Abs(p.Item2 - room.Y - 1) <= 8.5)) floorRegion.Add((x, y));
             if (corners.All(p => Math.Abs(p.Item1 - room.X - .5) + Math.Abs(p.Item2 - room.Y - 1) <= 8.5)) ground.Add((x, y));
         }
+        TerrainSet? exterior = null;
+        if (options.Theme != DungeonTheme.Classic)
+        {
+            var catalogue = TerrainCatalogue.Load();
+            exterior = catalogue.Sets.Single(s => s.Id == DungeonThemes.Exterior(options.Theme));
+            if (assets != null && (!catalogue.MatchesAssets(exterior, assets) || !catalogue.MatchesAssets(floor, assets)))
+                throw new InvalidDataException("The selected libraries do not contain the matching themed ground artwork.");
+        }
         var variants = floor.Shapes[15];
         long totalWeight = variants.Sum(v => v.Weight);
         for (int y = 0; y < source.Height; y++)
@@ -212,6 +230,14 @@ public static class TempleGenerator
                     var variant = variants[^1];
                     foreach (var candidate in variants) { roll -= candidate.Weight; if (roll < 0) { variant = candidate; break; } }
                     cell.BackLibrary = checked((short)floor.Library); cell.BackImage |= variant.Index + 1;
+                }
+                else if (exterior != null && x % 2 == 0 && y % 2 == 0 && !floorRegion.Contains((x, y)))
+                {
+                    var background = exterior.Shapes[15];
+                    // Stable per-cell texture: exterior rendering cannot consume
+                    // the room-floor random sequence or alter walkable geometry.
+                    int index = (int)(unchecked((uint)(x * 73856093 ^ y * 19349663 ^ options.Seed)) % (uint)background.Count);
+                    cell.BackLibrary = (short)exterior.Library; cell.BackImage |= background[index].Index + 1;
                 }
                 generated.Set(x, y, cell);
             }
@@ -247,6 +273,24 @@ public static class TempleGenerator
                 wallPlan = WallBrush.PlanStroke(generated, walls, anchors, variationSeed: options.Seed, clipToMap: false, specialWalls: true);
             if (!wallPlan.Allowed) throw new InvalidDataException(wallPlan.Error);
         }
+        if (exterior != null)
+        {
+            for (int y = 0; y < source.Height; y += 2)
+            {
+                cancellation.ThrowIfCancellationRequested();
+                for (int x = 0; x < source.Width; x += 2)
+                {
+                    var cell = generated.Get(x, y);
+                    if ((cell.BackImage & 0x1fffffff) != 0 || (cell.BackImage & Blocked) == 0) continue;
+                    var copy = cell.Copy(); copy.BackLibrary = (short)exterior.Library;
+                    copy.BackImage |= exterior.Shapes[15][0].Index + 1;
+                    generated.Set(x, y, copy);
+                }
+            }
+            // Ownership is composed against the finished background.
+            wallPlan = WallBrush.PlanStroke(generated, walls, anchors, variationSeed: options.Seed, clipToMap: false, specialWalls: true);
+            if (!wallPlan.Allowed) throw new InvalidDataException(wallPlan.Error);
+        }
         // Do not accept the wall brush's edge clipping for generated temples.
         if (anchors.Any(p => p.X < radius || p.Y < radius || p.X + radius >= source.Width || p.Y + radius >= source.Height))
             throw new InvalidDataException("This layout does not fit the map. Reduce room size or use a larger map.");
@@ -258,8 +302,13 @@ public static class TempleGenerator
         var entrances=walls.Id=="stone-temple"
             ? GeneratorEntrances.AddStoneStairs(generated,options.DoorCount,options.Seed,assets,cancellation,centres)
             : GeneratorEntrances.Locations(wallPlan);
-        return new(source, revision, generated, options, (corridorsOnly ? 0 : count) + sideRooms.Count, centres)
-            { Entrances=entrances, SideRooms=sideRooms };
+        IReadOnlyList<PlacedStamp> decorations = [];
+        if (options.Theme != DungeonTheme.Classic)
+            (centres, decorations) = DungeonThemeDetails.Place(generated, centres, options.Theme, options.Seed, assets, themes ?? new(), cancellation);
+        cancellation.ThrowIfCancellationRequested();
+        if (source.PickupRevision != revision) throw new InvalidOperationException("The map changed while generating the dungeon preview.");
+        return new(source, revision, generated, options, (corridorsOnly && options.Theme == DungeonTheme.Classic ? 0 : count) + sideRooms.Count, centres)
+            { Entrances=entrances, SideRooms=sideRooms, Decorations=decorations };
     }
 
     private static (HashSet<(int U, int V)> Nodes, (int U, int V)[] Centres) FitMap(

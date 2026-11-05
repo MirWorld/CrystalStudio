@@ -9823,6 +9823,300 @@
           "y": 232
         }
       ]
+    },
+    {
+      "id": "0:0:2700",
+      "library": 0,
+      "layer": 0,
+      "layout": "Mir2",
+      "start": 2700,
+      "name": "Celestial Pale Stone",
+      "biome": "Fantasy",
+      "material": "Floor",
+      "base": false,
+      "shapes": {
+        "15": [
+          {
+            "index": 2700,
+            "weight": 1,
+            "pixelSha256": "af26d3f72d2ddc3c3663883eb9ca094f1c44ffe96210515dab100272e1af3234"
+          },
+          {
+            "index": 2701,
+            "weight": 1,
+            "pixelSha256": "d1e736113866435b2d1d45525184da55ad3670d2bc175f7f60187a663d23d77a"
+          },
+          {
+            "index": 2702,
+            "weight": 1,
+            "pixelSha256": "918e18f34de9eb4e20aad5c4c987164d6e351697a9c0b991f591ab8739108c4e"
+          },
+          {
+            "index": 2703,
+            "weight": 1,
+            "pixelSha256": "22cd06bb088daff2576bd0327f07a04df600528728a28f26c50c104f5e629050"
+          },
+          {
+            "index": 2704,
+            "weight": 1,
+            "pixelSha256": "a693ee25b9058ed1125a29af3c1e45dc5ba74f0ea9a2c516619e40e34fc0a8b1"
+          }
+        ]
+      },
+      "usage": [],
+      "nativeCount": 0
+    },
+    {
+      "id": "0:0:3000",
+      "library": 0,
+      "layer": 0,
+      "layout": "Mir2",
+      "start": 3000,
+      "name": "Abyssal Ripple",
+      "biome": "Fantasy",
+      "material": "Water",
+      "base": false,
+      "shapes": {
+        "15": [
+          {
+            "index": 3000,
+            "weight": 1,
+            "pixelSha256": "bf2e87db03eaa594bb92881bb2f75905860f3afc3213a7ab775c342853490270"
+          },
+          {
+            "index": 3001,
+            "weight": 1,
+            "pixelSha256": "bc18b0495454da3a75a47d19fe70340d7d56b7d6dfaf015d270e0ddec8382982"
+          },
+          {
+            "index": 3002,
+            "weight": 1,
+            "pixelSha256": "21d562327794b2a3cdf1f662177e51fdd592e2f22898f8ec620eb5d0a7cd5d15"
+          },
+          {
+            "index": 3003,
+            "weight": 1,
+            "pixelSha256": "f2dfbdabf46b65af3058d9afa064d40f0b7ac2be2c1968aa03a4bd9cf910df5e"
+          },
+          {
+            "index": 3004,
+            "weight": 1,
+            "pixelSha256": "b61f385de25f74fa1da1952509af8e0d38a11e729bb98273034ec9da2856688f"
+          }
+        ]
+      },
+      "usage": [],
+      "nativeCount": 0
+    },
+    {
+      "id": "0:0:3500",
+      "library": 0,
+      "layer": 0,
+      "layout": "Mir2",
+      "start": 3500,
+      "name": "Alien Fissure Floor",
+      "biome": "Fantasy",
+      "material": "Floor",
+      "base": false,
+      "shapes": {
+        "15": [
+          {
+            "index": 3500,
+            "weight": 1,
+            "pixelSha256": "702beb068a0cd33af932376cd0cae6077422c9735eb6a766fcae53959dbed58b"
+          },
+          {
+            "index": 3501,
+            "weight": 1,
+            "pixelSha256": "86411c55c272bf335b37aec3e325d1a0f38fca4c3eb19da8b2b32dff588ac622"
+          },
+          {
+            "index": 3502,
+            "weight": 1,
+            "pixelSha256": "01e692df6ac168b62925c917751b062e3e3cda1df287dc180dcb3b0cddb746d5"
+          },
+          {
+            "index": 3503,
+            "weight": 1,
+            "pixelSha256": "3ab0f7572dd22664408d5ffa6c567200e08bd478ea6ab9b5a13463fdc4cceada"
+          },
+          {
+            "index": 3504,
+            "weight": 1,
+            "pixelSha256": "509cb68faa023f7b6e67e528762030b586632504140f8117173fcc354298967f"
+          }
+        ]
+      },
+      "usage": [],
+      "nativeCount": 0
+    },
+    {
+      "id": "0:0:4450",
+      "library": 0,
+      "layer": 0,
+      "layout": "Mir2",
+      "start": 4450,
+      "name": "Celestial Cloud Sea",
+      "biome": "Fantasy",
+      "material": "Floor",
+      "base": false,
+      "shapes": {
+        "15": [
+          {
+            "index": 4450,
+            "weight": 1,
+            "pixelSha256": "39feb662333f74a04ab420f728b61a019c64e56e9661c18c0899fbffd336e959"
+          },
+          {
+            "index": 4451,
+            "weight": 1,
+            "pixelSha256": "320d5a15aa4ba71e9aa249b7449a6441092999726186dfac1792ccff71f45051"
+          },
+          {
+            "index": 4452,
+            "weight": 1,
+            "pixelSha256": "69dd9d6085315c2bfb0a43fcb982637a6a14d5ca4a3ede6ec2b6e7b4dbfddd17"
+          },
+          {
+            "index": 4453,
+            "weight": 1,
+            "pixelSha256": "b93bb52ee481b698d6ec096e68107ad3942305a3f452682502f1428b58d102db"
+          },
+          {
+            "index": 4454,
+            "weight": 1,
+            "pixelSha256": "b93bb52ee481b698d6ec096e68107ad3942305a3f452682502f1428b58d102db"
+          }
+        ]
+      },
+      "usage": [],
+      "nativeCount": 0
+    },
+    {
+      "id": "0:0:4500",
+      "library": 0,
+      "layer": 0,
+      "layout": "Mir2",
+      "start": 4500,
+      "name": "Abyssal Blue Stone",
+      "biome": "Fantasy",
+      "material": "Floor",
+      "base": false,
+      "shapes": {
+        "15": [
+          {
+            "index": 4500,
+            "weight": 1,
+            "pixelSha256": "fbb06df3f1f0f10c424550cbca54e328512bdf5c3550cfe57403591b01dda46e"
+          },
+          {
+            "index": 4501,
+            "weight": 1,
+            "pixelSha256": "df8573738db01b5dc630f81b256c3df5b22e4a75e4a47b3a5a5ce529393e32a0"
+          },
+          {
+            "index": 4502,
+            "weight": 1,
+            "pixelSha256": "63560330fa2e37854b268383b71e9b58fba7368fad8ac21f0d6325dfe3493d1b"
+          },
+          {
+            "index": 4503,
+            "weight": 1,
+            "pixelSha256": "15d534b06f52d14888666e7d551fa1b40c2d3c8cd4b9c3a9790bc98924392124"
+          },
+          {
+            "index": 4504,
+            "weight": 1,
+            "pixelSha256": "4f01741d97e364797588d5924d2c74baa46f765e98e6b916528d06613ab6ae05"
+          }
+        ]
+      },
+      "usage": [],
+      "nativeCount": 0
+    },
+    {
+      "id": "0:0:3350",
+      "library": 0,
+      "layer": 0,
+      "layout": "Mir2",
+      "start": 3350,
+      "name": "Alien Dark Basalt",
+      "biome": "Fantasy",
+      "material": "Floor",
+      "base": false,
+      "shapes": {
+        "15": [
+          {
+            "index": 3350,
+            "weight": 1,
+            "pixelSha256": "4a149997fe50ddb99a7ac6aeaa515a75c03dfef14deb9babb01407af09e62127"
+          },
+          {
+            "index": 3351,
+            "weight": 1,
+            "pixelSha256": "c1af7fc210c2bc8ecad400235c3d6e6de66f315134c1d9b02dffb4d41778bc27"
+          },
+          {
+            "index": 3352,
+            "weight": 1,
+            "pixelSha256": "ecae836bbf7c6de51dca5f619d4504e958989781ed6a86111000f5d7861c27ca"
+          },
+          {
+            "index": 3353,
+            "weight": 1,
+            "pixelSha256": "144f8fabf11c58a355a2edddb1559400a2481a65ac49c25c242ffbe03ce690c7"
+          },
+          {
+            "index": 3354,
+            "weight": 1,
+            "pixelSha256": "740fb282784d6a11bc32ab95a71371d8fa3b10e8a430fa6e44fe64ad371bc20b"
+          }
+        ]
+      },
+      "usage": [],
+      "nativeCount": 0
+    },
+    {
+      "id": "0:0:2550",
+      "library": 0,
+      "layer": 0,
+      "layout": "Mir2",
+      "start": 2550,
+      "name": "Celestial Azure Inlay",
+      "biome": "Fantasy",
+      "material": "Floor",
+      "base": false,
+      "shapes": {
+        "15": [
+          {
+            "index": 2550,
+            "weight": 1,
+            "pixelSha256": "9656f0909e94c30abe297d60c066220ad689a979e429357f47cda72d526aacb8"
+          },
+          {
+            "index": 2551,
+            "weight": 1,
+            "pixelSha256": "56f3a8ed4acc77de2b6c387843dd94a4c76dde525f9446a7cfd30aabc9c96cde"
+          },
+          {
+            "index": 2552,
+            "weight": 1,
+            "pixelSha256": "ef4272679d260b05dddf5a530ea6dd2d710c48ad391c1d58e5189bb106b42dbc"
+          },
+          {
+            "index": 2553,
+            "weight": 1,
+            "pixelSha256": "5012e0c07b3755dccf00ee6a266c2c022dbfab0f4c6836770dd1832612a63ef1"
+          },
+          {
+            "index": 2554,
+            "weight": 1,
+            "pixelSha256": "a52fd746a84fb6f3eead50839990f7d72258b9748d2de4ff9d6f83804161eb63"
+          }
+        ]
+      },
+      "usage": [],
+      "nativeCount": 0
     }
   ],
   "blends": [

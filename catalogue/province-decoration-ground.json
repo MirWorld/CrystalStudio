@@ -926,6 +926,81 @@
       "id": "mir/mir_00977",
       "status": "freestanding",
       "evidence": "Mining-yard native artwork audit (matching client libraries): transparent surroundings; complete self-contained mine mouth, cart, rock spoil, timber or storage prop; no baked terrain card."
+    },
+    {
+      "id": "mir/mir_00051",
+      "status": "freestanding",
+      "evidence": "Fantasy dungeon native artwork audit: complete foreground rendered from current libraries and visually inspected; transparent surroundings, self-contained structure or colony, no baked terrain card."
+    },
+    {
+      "id": "mir/mir_02433",
+      "status": "freestanding",
+      "evidence": "Fantasy dungeon native artwork audit: complete foreground rendered from current libraries and visually inspected; transparent surroundings, self-contained structure or colony, no baked terrain card."
+    },
+    {
+      "id": "mir/mir_02434",
+      "status": "freestanding",
+      "evidence": "Fantasy dungeon native artwork audit: complete foreground rendered from current libraries and visually inspected; transparent surroundings, self-contained structure or colony, no baked terrain card."
+    },
+    {
+      "id": "mir/mir_04626",
+      "status": "freestanding",
+      "evidence": "Fantasy dungeon native artwork audit: complete foreground rendered from current libraries and visually inspected; transparent surroundings, self-contained structure or colony, no baked terrain card."
+    },
+    {
+      "id": "mir/mir_04630",
+      "status": "freestanding",
+      "evidence": "Fantasy dungeon native artwork audit: complete foreground rendered from current libraries and visually inspected; transparent surroundings, self-contained structure or colony, no baked terrain card."
+    },
+    {
+      "id": "mir/mir_04642",
+      "status": "freestanding",
+      "evidence": "Fantasy dungeon native artwork audit: complete foreground rendered from current libraries and visually inspected; transparent surroundings, self-contained structure or colony, no baked terrain card."
+    },
+    {
+      "id": "mir/mir_04646",
+      "status": "freestanding",
+      "evidence": "Fantasy dungeon native artwork audit: complete foreground rendered from current libraries and visually inspected; transparent surroundings, self-contained structure or colony, no baked terrain card."
+    },
+    {
+      "id": "mir/mir_08675",
+      "status": "freestanding",
+      "evidence": "Fantasy dungeon native artwork audit: complete foreground rendered from current libraries and visually inspected; transparent surroundings, self-contained structure or colony, no baked terrain card."
+    },
+    {
+      "id": "mir/mir_01561",
+      "status": "freestanding",
+      "evidence": "Fantasy dungeon native artwork audit: complete foreground rendered from current libraries and visually inspected; transparent surroundings, self-contained structure or colony, no baked terrain card."
+    },
+    {
+      "id": "mir/mir_01562",
+      "status": "freestanding",
+      "evidence": "Fantasy dungeon native artwork audit: complete foreground rendered from current libraries and visually inspected; transparent surroundings, self-contained structure or colony, no baked terrain card."
+    },
+    {
+      "id": "mir/mir_01563",
+      "status": "freestanding",
+      "evidence": "Fantasy dungeon native artwork audit: complete foreground rendered from current libraries and visually inspected; transparent surroundings, self-contained structure or colony, no baked terrain card."
+    },
+    {
+      "id": "mir/mir_07418",
+      "status": "freestanding",
+      "evidence": "Fantasy dungeon native artwork audit: complete foreground rendered from current libraries and visually inspected; transparent surroundings, self-contained structure or colony, no baked terrain card."
+    },
+    {
+      "id": "mir/mir_08382",
+      "status": "freestanding",
+      "evidence": "Fantasy dungeon native artwork audit: complete foreground rendered from current libraries and visually inspected; transparent surroundings, self-contained structure or colony, no baked terrain card."
+    },
+    {
+      "id": "mir/mir_00788",
+      "status": "freestanding",
+      "evidence": "Fantasy dungeon native artwork audit: transparent surroundings, self-contained shrine or tower without terrain card; complete foreground inspected."
+    },
+    {
+      "id": "mir/mir_01643",
+      "status": "freestanding",
+      "evidence": "Fantasy dungeon native artwork audit: transparent surroundings, self-contained shrine or tower without terrain card; complete foreground inspected."
     }
   ]
 }
