@@ -118,6 +118,8 @@ public sealed partial class MapViewport : SceneControl
     }
     private bool SelectionContains(int x, int y) => Selection is Rect area && x >= area.Left && x < area.Right && y >= area.Top && y < area.Bottom;
     public event Action<int, int>? Hover;
+    // Raised when the user right-clicks a ground or middle tile to select its source asset.
+    public event Action<int, int, MapLayer>? AssetPicked;
     public event Action? Changed;
     public event Action? AssetUsed;
     public event Action<double, int>? Rendered;
@@ -395,6 +397,18 @@ public sealed partial class MapViewport : SceneControl
         selectionStart = (x, y); selectionDragged = false;
         return true;
     }
+    public bool PickTile(int x, int y)
+    {
+        if (!Document.Contains(x, y) || Layer is not (MapLayer.Ground or MapLayer.Middle)) return false;
+        var cell = Document.Get(x, y);
+        int library = Layer == MapLayer.Ground ? cell.BackLibrary : cell.MiddleLibrary;
+        int image = Layer == MapLayer.Ground ? (cell.BackImage & 0x1FFFFFFF) - 1 : cell.MiddleImage - 1;
+        if (library < 0 || image < 0) return false;
+        Library = library;
+        SpriteIndex = image;
+        AssetPicked?.Invoke(library, image, Layer);
+        return true;
+    }
     private void UpdateSelection(int x, int y)
     {
         if ((x, y) != selectionStart) selectionDragged = true;
@@ -406,7 +420,7 @@ public sealed partial class MapViewport : SceneControl
     protected override void OnPointerPressed(PointerPressedEventArgs e)
     {
         base.OnPointerPressed(e); Focus(); mouse = e.GetPosition(this);
-        hover = CellAt(mouse); if(e.GetCurrentPoint(this).Properties.IsRightButtonPressed) { if (!SelectionContains(hover.X, hover.Y)) Deselect(); return; } panning = e.GetCurrentPoint(this).Properties.IsMiddleButtonPressed || InputState.IsKeyDown(Key.Space);
+        hover = CellAt(mouse); if(e.GetCurrentPoint(this).Properties.IsRightButtonPressed) { if (PickTile(hover.X, hover.Y)) { e.Handled = true; return; } if (!SelectionContains(hover.X, hover.Y)) Deselect(); return; } panning = e.GetCurrentPoint(this).Properties.IsMiddleButtonPressed || InputState.IsKeyDown(Key.Space);
         if (panning) { panStart = mouse; originStart = origin; CapturePointer(e.Pointer); dragging = true; return; }
         if (!e.GetCurrentPoint(this).Properties.IsLeftButtonPressed) return;
         if(PastingRegion){PlaceRegion();e.Handled=true;return;}
