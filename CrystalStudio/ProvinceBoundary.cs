@@ -54,7 +54,7 @@ public static class ProvinceBoundary
         }
         var kind = style.Arid ? SpecialBrushKind.Rock : SpecialBrushKind.Tree;
         var trees = ProvinceSceneryPalette.Select(scenery, style, kind, boundary: true);
-        if (trees.Length == 0) throw new InvalidOperationException($"Province generation needs {kind.Plural()} artwork to close the map boundary.");
+        if (trees.Length == 0) return 0;
         var random = new Random(seed ^ 0x7EEB0A);
         int count = 0;
         // Fill the protected belt and its irregular woodland fringe before

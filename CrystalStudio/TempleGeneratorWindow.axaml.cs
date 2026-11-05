@@ -15,18 +15,26 @@ public partial class TempleGeneratorWindow : EditorWindow
     private bool ready, closed;
     private int revision;
     private TemplePlan? cached;
+    private TempleOptions? cachedRequest;
     private RasterImage? overview, detailPreview;
+    private readonly MapResourceCache resourceCache;
+    private Point? inspectionCentre;
+    private Point? detailCentre;
+    private Rect displayedRegion;
+    internal GeneratorPreviewState PreviewState { get; } = new();
     public TemplePlan? Plan { get; private set; }
+    internal bool PreferencesRestored { get; private set; }
     private readonly IReadOnlyDictionary<string, string>? savedParameters;
 
     public TempleGeneratorWindow(MapDocument document, AssetStore assets, WallCatalogue walls, TerrainCatalogue terrain, IReadOnlyDictionary<string, string>? parameters = null)
     {
         this.document = document; this.assets = assets; this.walls = walls; this.terrain = terrain; savedParameters = parameters;
+        resourceCache = new(terrain, assets);
         InitializeComponent();
         WidthList.SelectedIndex = 1; TempleList.ItemsSource = TempleDefinition.All; TempleList.SelectedIndex = 0;
         DungeonTypeList.ItemsSource = Enum.GetValues<DungeonType>(); DungeonTypeList.SelectedIndex = 0;
         timer.Tick += GeneratePreview;
-        Loaded += (_, _) => { ready = true; GeneratorPreferences.Restore(this, savedParameters); Schedule(); };
+        Loaded += (_, _) => { ready = true; GeneratorPreferences.Restore(this, savedParameters); PreferencesRestored = true; Schedule(); };
         Closed += (_, _) => { closed = true; timer.Stop(); pending?.Cancel(); };
     }
 
@@ -34,9 +42,9 @@ public partial class TempleGeneratorWindow : EditorWindow
     private void UpdateDoorOptions()
     {
         if (DoorCountSlider==null || TempleList.SelectedItem is not TempleDefinition temple) return;
-        var family=walls.Families.Single(f=>f.Id==temple.WallId);
-        DoorCountSlider.IsEnabled=GeneratorEntrances.SupportsDungeon(family);
-        DoorHint.Text = (family.Id=="stone-temple" ? LocalText.T("Places spaced stair entrances on clear floor space. 0 = none.") : (!family.SupportsDoors ? LocalText.T("This style has no matching wall entrance objects.") : LocalText.T("Total per dungeon. Random entrances stay apart and clear of corners. Small maps may fit fewer.")));
+        var family=walls.Families.FirstOrDefault(f=>f.Id==temple.WallId);
+        DoorCountSlider.IsEnabled=family != null && GeneratorEntrances.SupportsDungeon(family);
+        DoorHint.Text = (family?.Id=="stone-temple" ? LocalText.T("Places spaced stair entrances on clear floor space. 0 = none.") : (family?.SupportsDoors!=true ? LocalText.T("This style has no matching wall entrance objects.") : LocalText.T("Total per dungeon. Random entrances stay apart and clear of corners. Small maps may fit fewer.")));
     }
     private void Schedule()
     {
@@ -74,31 +82,34 @@ public partial class TempleGeneratorWindow : EditorWindow
             RasterImage bitmap;
             try
             {
+                var preflight = await Task.Run(() => MapResourcePreflight.Dungeon(options, walls, assets, resourceCache), job.Token);
+                if (closed || request != revision) return;
+                PreviewState.Report(preflight.Report); preflight.Report.EnsureReady();
+                Point? centre = inspectionCentre;
                 (plan, bitmap) = await Task.Run(() =>
                 {
                     var family = walls.Families.Single(f => f.Id == temple.WallId).WithMode(true);
                     var floor = terrain.Sets.Single(s => s.Id == temple.FloorId);
                     var result = cached;
-                    if (result == null || result.Options != options || result.SourceRevision != document.PickupRevision)
+                    if (result == null || cachedRequest != options || result.SourceRevision != document.PickupRevision)
                     {
-                        string? error = family.Availability(assets);
-                        if (error != null) throw new InvalidDataException(error);
                         job.Token.ThrowIfCancellationRequested();
-                        if (!terrain.MatchesAssets(floor, assets)) throw new InvalidDataException($"The current libraries do not contain the matching {floor.Name} artwork for {temple.Name}.");
-                        result = TempleGenerator.Plan(document, family, floor, options, job.Token, assets);
-                        cached = result; overview = detailPreview = null;
+                        result = TempleGenerator.Plan(document, family, floor, preflight.Options, job.Token, assets);
+                        cached = result; cachedRequest = options; overview = detailPreview = null;
                     }
-                    var preview = (detail ? detailPreview : overview) ?? TemplePreview.Create(result, assets, detail, job.Token);
-                    if (detail) detailPreview = preview; else overview = preview;
+                    var preview = (detail ? detailCentre == centre ? detailPreview : null : overview) ?? TemplePreview.Create(result, assets, detail, job.Token, centre);
+                    if (detail) { detailPreview = preview; detailCentre = centre; } else overview = preview;
                     return (result, preview);
                 }, job.Token);
             }
             finally { worker.Release(); }
             if (closed || request != revision) return;
             cached = Plan = plan; PreviewImage.Source = bitmap; PreviewImage.Opacity = 1;
+            displayedRegion = TemplePreview.Region(plan, detail, inspectionCentre);
             PreviewHint.IsVisible = false; ApplyButton.IsEnabled = true; RandomizeButton.IsEnabled = true;
             int count = plan.RoomCentres.Count - plan.SideRooms.Count;
             FeedbackText.Text = string.Concat(string.Concat(string.Concat(string.Concat(string.Concat(((options.RoomSize == 0 ? LocalText.Format("Corridors Only · {0} connected junctions",count) : (options.Type == DungeonType.Cave ? LocalText.Format("Cave · {0} connected cavern pockets",count) : LocalText.Format("Temple · {0} connected rooms",plan.RoomCount)))), LocalText.Format(" · {0}×{1} cells · Seed {2}",document.Width,document.Height,seed)), ((count < options.Rooms ? LocalText.Format(". Layout limited to {0} to fit this map and native walls.",count) : ("")))), LocalText.Format(" · Entrances {0}/{1}",plan.Entrances.Count,options.DoorCount)), ((plan.SideRooms.Count > 0 ? LocalText.Format(" · {0} corridor side rooms",plan.SideRooms.Count) : ("")))), ((plan.Entrances.Count<options.DoorCount ? LocalText.T(". Fewer entrances fit with safe spacing.") : (""))));
+            PreviewState.Complete();
         }
         catch (OperationCanceledException) { }
         catch (Exception ex)
@@ -107,23 +118,26 @@ public partial class TempleGeneratorWindow : EditorWindow
         }
         finally { if (ReferenceEquals(pending, job)) pending = null; job.Dispose(); }
     }
-    private void ApplyClick(object sender, RoutedEventArgs e) { if (Plan != null && ApplyButton.IsEnabled) DialogResult = true; }
+    internal void Inspect(Point normalized)
+    {
+        if (PreviewImage.Source == null || !MapPreviewRegion.TrySelect(normalized, displayedRegion, PreviewImage.Source.Size, true, out var centre)) return;
+        inspectionCentre = centre;
+        detailPreview = null; DetailToggle.IsChecked = true; Schedule();
+    }
+    private void ApplyClick(object sender, RoutedEventArgs e) { if (Plan != null && ApplyButton.IsEnabled && QuickMapPreview.Confirm(this)) DialogResult = true; }
 }
 
 public static class TemplePreview
 {
-    public static RasterImage Create(TemplePlan plan, AssetStore assets, bool detail = false, CancellationToken cancellation = default)
+    internal static Rect Region(TemplePlan plan, bool detail, Point? centre) => detail
+        ? MapPreviewRegion.Detail(new Rect(0, 0, plan.Generated.Width, plan.Generated.Height), centre ?? new Point(plan.RoomCentres[0].X, plan.RoomCentres[0].Y), 32, 24)
+        : new Rect(0, 0, plan.Generated.Width, plan.Generated.Height);
+    public static RasterImage Create(TemplePlan plan, AssetStore assets, bool detail = false, CancellationToken cancellation = default, Point? centre = null)
     {
         var cells = plan.Generated.Cells.Select(p => new StampCell(p.Key % plan.Generated.Width, p.Key / plan.Generated.Width, p.Value))
             .Where(s => (s.Cell.BackImage & 0x1fffffff) != 0 || s.Cell.ForegroundImages.Count > 0);
-        Rect? area = null;
-        if (detail)
-        {
-            var centre = plan.RoomCentres[0];
-            // Crop the rendered scene, not its anchors: a tall wall anchored
-            // outside this rectangle can still cover floor inside it.
-            area = new Rect((centre.X - 24) * 48, (centre.Y - 24) * 32, 48 * 48, 48 * 32);
-        }
+        Rect region = Region(plan, detail, centre);
+        Rect area = new(region.X * 48, region.Y * 32, region.Width * 48, region.Height * 32);
         return StampPreview.Create(cells.ToArray(), assets, 1600, 1000, cancellation, area, waitForAssets: true)!;
     }
 }

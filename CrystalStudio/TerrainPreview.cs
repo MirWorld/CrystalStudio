@@ -3,15 +3,20 @@ namespace CrystalStudio;
 
 public static class TerrainPreview
 {
-    public static RasterImage Create(TerrainPlan plan, AssetStore assets, bool detail = false,CancellationToken cancellation=default)
+    internal static Rect Region(TerrainPlan plan, bool detail, Point? centre)
     {
-        if (plan.CoastObjects.Count != 0) return SavedObjectPreview(plan, assets, detail,cancellation);
-        int x = plan.Area.X, y = plan.Area.Y, width = plan.Area.Width, height = plan.Area.Height;
-        if (detail)
-        {
-            width = Math.Min(width, 32); height = Math.Min(height, 24);
-            x += Math.Max(0, ((plan.Area.Width - width) / 2) & ~1); y += Math.Max(0, ((plan.Area.Height - height) / 2) & ~1);
-        }
+        var area = new Rect(plan.Area.X, plan.Area.Y, plan.Area.Width, plan.Area.Height);
+        if (!detail) return area;
+        var focus = centre ?? (plan.CoastObjects.FirstOrDefault() is { } coast
+            ? new Point(coast.X + (coast.Layout.Cells.Max(cell => cell.X) + 1) / 2.0, coast.Y + (coast.Layout.Cells.Max(cell => cell.Y) + 1) / 2.0)
+            : area.Center);
+        return MapPreviewRegion.Detail(area, focus, 32, 24);
+    }
+    public static RasterImage Create(TerrainPlan plan, AssetStore assets, bool detail = false,CancellationToken cancellation=default, Point? centre = null)
+    {
+        if (plan.CoastObjects.Count != 0) return SavedObjectPreview(plan, assets, detail,cancellation,centre);
+        var region = Region(plan, detail, centre);
+        int x = (int)region.X, y = (int)region.Y, width = (int)region.Width, height = (int)region.Height;
         double scale = Math.Min(1, Math.Min(1600.0 / (width * 48), 1000.0 / (height * 32)));
         int outputWidth = Math.Max(1, (int)Math.Ceiling(width * 48 * scale)), outputHeight = Math.Max(1, (int)Math.Ceiling(height * 32 * scale));
         var sprites = new Dictionary<(int, int), byte[]>();
@@ -88,7 +93,7 @@ public static class TerrainPreview
          return bitmap;
     }
 
-    private static RasterImage SavedObjectPreview(TerrainPlan plan, AssetStore assets, bool detail,CancellationToken cancellation)
+    private static RasterImage SavedObjectPreview(TerrainPlan plan, AssetStore assets, bool detail,CancellationToken cancellation, Point? centre)
     {
         // Use the existing object preview renderer; do not invent a second coast drawing order.
         var cells = plan.Tiles.ToDictionary(t => (t.X,t.Y), t => new Cell { BackLibrary = checked((short)t.Library), BackImage = t.Index + 1 });
@@ -99,25 +104,10 @@ public static class TerrainPreview
             if ((cell.BackImage & 0x1fffffff) == 0 && cells.TryGetValue(key,out var ground)) cell.BackImage |= ground.BackImage;
             cells[key] = cell;
         }
-        int x = plan.Area.X,y = plan.Area.Y,width = plan.Area.Width,height = plan.Area.Height;
-        if (detail)
-        {
-            var coast = plan.CoastObjects[0]; width = Math.Min(32,width); height = Math.Min(24,height);
-            x = coast.X + ((coast.Layout.Cells.Max(c=>c.X)+1-width)/2 & ~1);
-            y = coast.Y + ((coast.Layout.Cells.Max(c=>c.Y)+1-height)/2 & ~1);
-        }
         cancellation.ThrowIfCancellationRequested();
-        var selected = cells.Select(p=>new StampCell(p.Key.Item1-plan.Area.X,p.Key.Item2-plan.Area.Y,p.Value)).ToArray();
-        var preview = StampPreview.Create(selected,assets,1600,1000,cancellation,waitForAssets:true)!;
-        if (!detail) return preview;
-        // Crop the rendered whole object so tall fragments anchored outside the detail remain visible.
-        // This changes only the requested preview region, not the existing renderer or saved layers.
-        double mapWidth=(plan.Area.Width+1)/2*96.0,mapHeight=(plan.Area.Height+1)/2*64.0;
-        double scale=Math.Min(1592/mapWidth,992/mapHeight),offsetX=(1600-mapWidth*scale)/2,offsetY=(1000-mapHeight*scale)/2;
-        int left=Math.Clamp((int)Math.Floor(offsetX+(x-plan.Area.X)*48*scale),0,1599);
-        int top=Math.Clamp((int)Math.Floor(offsetY+(y-plan.Area.Y)*32*scale),0,999);
-        int right=Math.Clamp((int)Math.Ceiling(offsetX+(x-plan.Area.X+width)*48*scale),left+1,1600);
-        int bottom=Math.Clamp((int)Math.Ceiling(offsetY+(y-plan.Area.Y+height)*32*scale),top+1,1000);
-        var cropped=new CroppedBitmap(preview,new PixelRect(left,top,right-left,bottom-top));return cropped;
+        var selected = cells.Select(pair => new StampCell(pair.Key.Item1, pair.Key.Item2, pair.Value)).ToArray();
+        var region = Region(plan, detail, centre);
+        return StampPreview.Create(selected, assets, 1600, 1000, cancellation,
+            new Rect(region.X * 48, region.Y * 32, region.Width * 48, region.Height * 32), waitForAssets: true, fastRaster: !detail)!;
     }
 }

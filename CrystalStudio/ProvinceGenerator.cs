@@ -62,7 +62,6 @@ public static class ProvinceGenerator
             }
             catch (IOException) { }
         }
-        if (!result.Any(s => s.Kind == SpecialBrushKind.Tree)) throw new InvalidDataException("No matching outdoor tree stamps are available in the object catalogue.");
         return result;
     }
 

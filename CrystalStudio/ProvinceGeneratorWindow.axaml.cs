@@ -14,12 +14,20 @@ public partial class ProvinceGeneratorWindow : EditorWindow
     private WallCatalogue walls = null!;
     private IReadOnlyList<ProvinceScenery> scenery = [];
     private TerrainWaterResources? water;
+    private Task<(IReadOnlyList<ProvinceScenery> Scenery, TerrainWaterResources Water)>? optionalResources;
     private readonly ProvinceTownResources towns = new();
     private ProvincePlan? cached;
+    private ProvinceOptions? cachedRequest;
+    private MapResourceCache resourceCache = null!;
+    private Point? inspectionCentre;
+    private Point? detailCentre;
+    private Rect displayedRegion;
+    internal GeneratorPreviewState PreviewState { get; } = new();
     private RasterImage? overview, detailPreview;
     private bool ready, closed, changingSettings;
     private int revision;
     public ProvincePlan? Plan { get; private set; }
+    internal bool PreferencesRestored { get; private set; }
     private readonly IReadOnlyDictionary<string, string>? savedParameters;
 
     public ProvinceGeneratorWindow(MapDocument document, AssetStore assets, WallCatalogue? wallCatalogue = null, IReadOnlyDictionary<string, string>? parameters = null)
@@ -37,20 +45,45 @@ public partial class ProvinceGeneratorWindow : EditorWindow
     {
         try
         {
-            (terrain, walls, scenery) = await Task.Run(() => (TerrainCatalogue.Load(), suppliedWalls ?? WallCatalogue.Read(WallCatalogue.ResolvePath()),
-                ProvinceGenerator.LoadScenery(assets, lifetime.Token)), lifetime.Token);
-            water = await TerrainWaterResources.Load(assets, lifetime.Token);
+            (terrain, walls) = await Task.Run(() =>
+            {
+                var ground = TerrainCatalogue.Load();
+                var cliffs = suppliedWalls;
+                if (cliffs == null)
+                {
+                    try { cliffs = WallCatalogue.Read(WallCatalogue.ResolvePath()); }
+                    catch (IOException) { cliffs = new(1, []); }
+                }
+                return (ground, cliffs);
+            }, lifetime.Token);
             if (closed) return;
-            ready = true; RandomizeButton.IsEnabled = true; GeneratorPreferences.Restore(this, savedParameters); UpdateDoorOptions(); Schedule();
+            resourceCache = new(terrain, assets);
+            GeneratorPreferences.Restore(this, savedParameters);
+            var style = (ProvinceStyle)StyleList.SelectedItem!;
+            var required = await Task.Run(() => MapResourcePreflight.ProvinceGround(style, resourceCache), lifetime.Token);
+            if (closed) return;
+            PreviewState.Report(required);
+            ready = true; RandomizeButton.IsEnabled = true; PreferencesRestored = true; UpdateDoorOptions(); Schedule();
         }
         catch (OperationCanceledException) { }
         catch (Exception ex) { if (!closed) { PreviewHint.Text = LocalText.T("Province artwork unavailable"); FeedbackText.Text = (ex.Message); } }
     }
+    private Task<(IReadOnlyList<ProvinceScenery> Scenery, TerrainWaterResources Water)> LoadOptionalResources() => optionalResources ??= Task.Run(async () =>
+    {
+        IReadOnlyList<ProvinceScenery> decoration;
+        try { decoration = ProvinceGenerator.LoadScenery(assets, lifetime.Token); }
+        catch (Exception exception) when (exception is IOException or System.Text.Json.JsonException) { decoration = []; }
+        TerrainWaterResources shoreline;
+        try { shoreline = await TerrainWaterResources.Load(assets, lifetime.Token); }
+        catch (Exception exception) when (exception is IOException or System.Text.Json.JsonException)
+        { shoreline = new(null, null, null, exception.Message, null, exception.Message); }
+        return (decoration, shoreline);
+    }, lifetime.Token);
     private void SettingsChanged(object sender, RoutedEventArgs e) { UpdateDoorOptions(); Schedule(); }
     private void UpdateDoorOptions()
     {
         if (DoorCountSlider==null || StyleList.SelectedItem is not ProvinceStyle style) return;
-        var family=(walls ?? suppliedWalls)?.Families.Single(f=>f.Id==style.WallId);
+        var family=(walls ?? suppliedWalls)?.Families.FirstOrDefault(f=>f.Id==style.WallId);
         DoorCountSlider.IsEnabled=family?.SupportsDoors==true && CliffSlider.Value>0;
         DoorHint.Text = (family?.SupportsDoors!=true ? LocalText.T("This style has no matching cliff entrance objects.") : (CliffSlider.Value==0 ? LocalText.T("Enable cliffs to place entrances.") : LocalText.T("Total across generated cliffs. Random entrances stay apart. Maps without suitable cliffs may fit fewer.")));
     }
@@ -92,27 +125,39 @@ public partial class ProvinceGeneratorWindow : EditorWindow
             ProvincePlan plan; RasterImage bitmap;
             try
             {
+                var required = await Task.Run(() => MapResourcePreflight.ProvinceGround(options.Style!, resourceCache), job.Token);
+                if (closed || request != revision) return;
+                PreviewState.Report(required); required.EnsureReady();
+                if (optionalResources?.IsCompleted != true) PreviewHint.Text = LocalText.T("Checking optional scenery and water artwork…");
+                (scenery, water) = await LoadOptionalResources().WaitAsync(job.Token);
+                if (closed || request != revision) return;
+                var preflight = await Task.Run(() => MapResourcePreflight.Province(terrain, walls, assets, scenery, water, options, towns, resourceCache, job.Token), job.Token);
+                if (closed || request != revision) return;
+                PreviewState.Report(preflight.Report); preflight.Report.EnsureReady();
+                Point? centre = inspectionCentre;
                 (plan, bitmap) = await Task.Run(() =>
                 {
                     var p = cached;
-                    if (p == null || p.Options != options || p.SourceRevision != document.PickupRevision)
+                    if (p == null || cachedRequest != options || p.SourceRevision != document.PickupRevision)
                     {
-                        p = ProvinceGenerator.Plan(document, terrain, walls, scenery, options, job.Token, water?.Banks, water?.Shore, assets, towns: towns);
+                        p = ProvinceGenerator.Plan(document, terrain, walls, scenery, preflight.Options, job.Token, water?.Banks, water?.Shore, assets, towns: towns);
                         // Keep a finished plan even if a preview-mode change cancels
                         // rendering. Only generation options invalidate the map.
-                        cached = p; overview = detailPreview = null;
+                        cached = p; cachedRequest = options; overview = detailPreview = null;
                     }
-                    var preview = detail ? detailPreview : overview;
-                    preview ??= ProvincePreview.Create(p.Generated, assets, detail, job.Token);
-                    if (detail) detailPreview = preview; else overview = preview;
+                    var preview = detail ? detailCentre == centre ? detailPreview : null : overview;
+                    preview ??= ProvincePreview.Create(p.Generated, assets, detail, job.Token, centre);
+                    if (detail) { detailPreview = preview; detailCentre = centre; } else overview = preview;
                     return (p, preview);
                 }, job.Token);
             }
             finally { worker.Release(); }
             if (closed || request != revision) return;
             Plan = plan; PreviewImage.Source = bitmap; PreviewImage.Opacity = 1;
+            displayedRegion = ProvincePreview.Region(plan.Generated, detail, inspectionCentre);
             PreviewHint.IsVisible = false; ApplyButton.IsEnabled = true;
             FeedbackText.Text = string.Concat(string.Concat(LocalText.Format("{0} · {1}×{2} · Seed {3}\n",plan.Style.Name,document.Width,document.Height,seed), (string.Join(" · ", plan.Features))), ((plan.Notes.Count == 0 ? ("") : string.Concat(("\n"), (string.Join(" ", plan.Notes))))));
+            PreviewState.Complete();
         }
         catch (OperationCanceledException) { }
         catch (Exception ex)
@@ -121,16 +166,25 @@ public partial class ProvinceGeneratorWindow : EditorWindow
         }
         finally { if (ReferenceEquals(pending, job)) pending = null; job.Dispose(); }
     }
-    private void ApplyClick(object sender, RoutedEventArgs e) { if (Plan != null && ApplyButton.IsEnabled) DialogResult = true; }
+    internal void Inspect(Point normalized)
+    {
+        if (PreviewImage.Source == null || !MapPreviewRegion.TrySelect(normalized, displayedRegion, PreviewImage.Source.Size, true, out var centre)) return;
+        inspectionCentre = centre;
+        detailPreview = null; DetailToggle.IsChecked = true; Schedule();
+    }
+    private void ApplyClick(object sender, RoutedEventArgs e) { if (Plan != null && ApplyButton.IsEnabled && QuickMapPreview.Confirm(this)) DialogResult = true; }
 }
 
 public static class ProvincePreview
 {
-    public static RasterImage Create(MapDocument map, AssetStore assets, bool detail = false, CancellationToken cancellation = default)
+    internal static Rect Region(MapDocument map, bool detail, Point? centre) => detail
+        ? MapPreviewRegion.Detail(new Rect(0, 0, map.Width, map.Height), centre ?? new Point(map.Width / 2.0, map.Height / 2.0), 32, 24)
+        : new Rect(0, 0, map.Width, map.Height);
+    public static RasterImage Create(MapDocument map, AssetStore assets, bool detail = false, CancellationToken cancellation = default, Point? centre = null)
     {
         var cells = map.Cells.Select(p => new StampCell(p.Key % map.Width, p.Key / map.Width, p.Value)).ToArray();
-        Rect area = detail ? new((map.Width / 2 - 32) * 48, (map.Height / 2 - 32) * 32, 64 * 48, 64 * 32)
-            : new(0, 0, map.Width * 48, map.Height * 32);
+        Rect region = Region(map, detail, centre);
+        Rect area = new(region.X * 48, region.Y * 32, region.Width * 48, region.Height * 32);
         return StampPreview.Create(cells, assets, 1600, 1000, cancellation, area, waitForAssets: true, fastRaster: !detail)!;
     }
 }

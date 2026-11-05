@@ -42,6 +42,7 @@ internal static class StudioJson
 [JsonSourceGenerationOptions(GenerationMode = JsonSourceGenerationMode.Metadata)]
 [JsonSerializable(typeof(LibrarySettings))]
 [JsonSerializable(typeof(MapCreationProfile))]
+[JsonSerializable(typeof(MapCreationPresetPackage))]
 [JsonSerializable(typeof(MapCreationRecipe))]
 [JsonSerializable(typeof(MapRecoveryEntry))]
 [JsonSerializable(typeof(Dictionary<string, LocalText.Translation>))]
