@@ -22,10 +22,10 @@ public sealed record ProvinceStyle(string Name, string WallId, string Region, st
     public override string ToString() => Name;
 }
 
-public enum ProvinceScene { Wilderness, VillageCountryside }
+public enum ProvinceScene { Wilderness, VillageCountryside, ForestRuins }
 public sealed record ProvinceOptions(int Seed = 1, ProvinceStyle? Style = null, int ForestChance = 85,
     int CliffChance = 70, int BeachChance = 35, int RiverChance = 55, int Vegetation = 55, int TownCount = 0, int DoorCount = 0,
-    ProvinceScene Scene = ProvinceScene.Wilderness);
+    ProvinceScene Scene = ProvinceScene.Wilderness, int RuinCount = 2);
 public sealed record ProvinceScenery(BrushTree Tree, SpecialBrushKind Kind, IReadOnlyList<string> Regions)
 {
     public string? CatalogueId { get; init; }
@@ -33,6 +33,7 @@ public sealed record ProvinceScenery(BrushTree Tree, SpecialBrushKind Kind, IRea
 public sealed record ProvincePlan(MapDocument Source, long SourceRevision, MapDocument Generated,
     ProvinceOptions Options, ProvinceStyle Style, IReadOnlyList<string> Features, IReadOnlyList<string> Notes)
 {
+    public IReadOnlyList<ProvinceRuin> Ruins { get; init; } = [];
     public IReadOnlyList<ProvinceTown> Towns { get; init; } = [];
     public IReadOnlyList<GeneratedEntrance> Entrances { get; init; } = [];
 }
@@ -71,7 +72,7 @@ public static class ProvinceGenerator
     public static ProvincePlan Plan(MapDocument source, TerrainCatalogue terrain, WallCatalogue walls,
         IReadOnlyList<ProvinceScenery> scenery, ProvinceOptions options, CancellationToken cancellation = default,
         RiverCoastPieces? banks = null, RiverShoreComponents? shore = null, AssetStore? assets = null,
-        Action<string, TimeSpan>? timing = null, ProvinceTownResources? towns = null)
+        Action<string, TimeSpan>? timing = null, ProvinceTownResources? towns = null, ProvinceRuinResources? ruins = null)
     {
         var watch = timing == null ? null : System.Diagnostics.Stopwatch.StartNew();
         void Mark(string stage) { if (watch != null) { timing!(stage, watch.Elapsed); watch.Restart(); } }
@@ -79,11 +80,13 @@ public static class ProvinceGenerator
         if (source.Width < 128 || source.Height < 128 || (long)source.Width * source.Height > MapDimensions.MaximumGeneratedCells)
             throw new ArgumentException("Province generation needs at least 128×128 cells and supports up to 1,000,000 cells. Larger maps give rivers and borders more room.");
         if (new[] { options.ForestChance, options.CliffChance, options.BeachChance, options.RiverChance, options.Vegetation }.Any(v => v is < 0 or > 100) ||
-            options.TownCount is < 0 or > 8 || options.DoorCount is < 0 or > WallEntrances.MaximumCount ||
+            options.RuinCount is < 1 or > 4 || options.TownCount is < 0 or > 8 || options.DoorCount is < 0 or > WallEntrances.MaximumCount ||
             !Enum.IsDefined(options.Scene) || options.Style != null && !ProvinceStyle.All.Contains(options.Style)) throw new ArgumentException("Invalid province settings.");
         long revision = source.PickupRevision;
         var random = new Random(options.Seed);
-        var style = options.Style ?? ProvinceStyle.All[random.Next(ProvinceStyle.All.Count)];
+        var style = options.Style ?? ProvinceStyle.All[options.Scene == ProvinceScene.ForestRuins ? 0 : random.Next(ProvinceStyle.All.Count)];
+        if (options.Scene == ProvinceScene.ForestRuins && style != ProvinceStyle.All[0])
+            throw new ArgumentException("Forest ruins require the Bichon woodland landscape.");
         bool forest = random.Next(100) < options.ForestChance, cliffs = random.Next(100) < options.CliffChance;
         bool beach = random.Next(100) < options.BeachChance, river = random.Next(100) < options.RiverChance;
         var notes = new List<string>(); var features = new List<string>();
@@ -100,7 +103,7 @@ public static class ProvinceGenerator
         }
         var waterMode = river ? beach ? TerrainWaterMode.RiverToSea : TerrainWaterMode.River : beach ? TerrainWaterMode.Beach : TerrainWaterMode.None;
         var generated = new MapDocument(source.Width, source.Height);
-        double coverage = style.PatchCoverage + random.NextDouble() * .2;
+        double coverage = options.Scene == ProvinceScene.ForestRuins ? .8 + random.NextDouble() * .12 : style.PatchCoverage + random.NextDouble() * .2;
         var groundOptions = new TerrainOptions(basis, patch, null, options.Seed, coverage,
             Math.Clamp(Math.Min(source.Width, source.Height) / 10.0, 12, 65) + random.Next(12), 2 + random.Next(3), 1 + random.Next(2), waterMode)
             { KeepPathsOnBase = true, CompactBeach = beach && new Random(options.Seed ^ 0xBEAC4).Next(3) != 0 };
@@ -188,15 +191,20 @@ public static class ProvinceGenerator
             features.Add($"{settlements.Towns.Count} towns · {settlements.Towns.Sum(t => t.Plan.Buildings.Count(b => b.Piece.Role == "house"))} houses");
             Mark("Towns and connecting roads");
         }
+        var roads = ground.PathCells.Concat(settlements?.Towns.SelectMany(t =>
+            t.Plan.Roads.Select(p => (X: t.X + p.X, Y: t.Y + p.Y)).Concat(t.Approach)) ?? []).ToArray();
+        var ruinScenes = options.Scene == ProvinceScene.ForestRuins
+            ? ProvinceRuins.Place(generated, terrain, style, options, reserved, roads, ruins ?? new(), assets, notes, cancellation) : [];
+        if (ruinScenes.Count > 0) features.Add(LocalText.Format("{0} forest ruin clearings", ruinScenes.Count));
+        Mark("Forest ruins and connecting trails");
         var sceneryGround = new ProvinceSceneryGround(terrain);
-        int perimeterObjects = ProvinceBoundary.Plant(generated, boundary, scenery, style, options.Seed, cancellation, forestSides, settlements?.Protected, sceneryGround);
+        int perimeterObjects = ProvinceBoundary.Plant(generated, boundary, scenery, style, options.Seed, cancellation, forestSides, options.Scene == ProvinceScene.ForestRuins ? reserved : settlements?.Protected, sceneryGround);
         Mark("Boundary scenery");
         var groves = ProvinceLandmarks.PlantGroves(generated, scenery, style, reserved, options.Seed, options.Vegetation, cancellation, sceneryGround);
         if (groves.Groves > 0) features.Add($"{groves.Groves} dense inland groves");
-        var roads = ground.PathCells.Concat(settlements?.Towns.SelectMany(t =>
-            t.Plan.Roads.Select(p => (X: t.X + p.X, Y: t.Y + p.Y)).Concat(t.Approach)) ?? []);
         int edgePlants = ProvinceEcology.PlantEdges(generated, terrain, scenery, style, reserved, coastReserved,
-            roads, options.Seed, options.Vegetation, cancellation);
+            roads.Concat(ruinScenes.SelectMany(r => r.Approach)), options.Seed, options.Vegetation, cancellation);
+        edgePlants += ProvinceRuins.PlantOvergrowth(generated, ruinScenes, scenery, terrain, style, reserved, options, cancellation);
         if (edgePlants > 0) features.Add(LocalText.Format("{0} woodland, trail and shore edge plants", edgePlants));
         int trees = (style.Arid ? 0 : perimeterObjects) + groves.Trees + Scatter(SpecialBrushKind.Tree, 4);
         int bushes = edgePlants + Scatter(SpecialBrushKind.Bush, 3);
@@ -212,7 +220,7 @@ public static class ProvinceGenerator
             if (!scenery.Any(s => s.Kind == kind)) notes.Add($"No matching outdoor {kind.Plural()} are available.");
         cancellation.ThrowIfCancellationRequested();
         if (source.PickupRevision != revision) throw new InvalidOperationException("The map changed while generating the province preview.");
-        return new(source, revision, generated, options, style, features, notes) { Towns = settlements?.Towns ?? [], Entrances=entrances };
+        return new(source, revision, generated, options, style, features, notes) { Towns = settlements?.Towns ?? [], Entrances=entrances, Ruins = ruinScenes };
 
         int Scatter(SpecialBrushKind kind, int spacing)
         {

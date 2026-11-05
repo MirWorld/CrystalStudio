@@ -351,6 +351,20 @@ internal static class ProvinceTowns
         return plan with { Buildings = buildings, Cells = cells.Values.ToList() };
     }
 
+    internal static void BlendPaths(MapDocument map, TerrainCatalogue terrain, ProvinceStyle style,
+        HashSet<(int X, int Y)> paths, int seed, CancellationToken token)
+    {
+        var basis = terrain.Sets.Single(s => s.Id == style.BaseId);
+        var patch = terrain.Sets.Single(s => s.Id == style.PatchId);
+        var masks = new Dictionary<(int, int), int>();
+        foreach (var shape in basis.Shapes) foreach (var tile in shape.Value) masks[(basis.Library, tile.Index + 1)] = 0;
+        foreach (var shape in patch.Shapes) foreach (var tile in shape.Value) masks[(patch.Library, tile.Index + 1)] = shape.Key;
+        var hard = new bool[map.Width * map.Height];
+        foreach (var p in map.Cells)
+            hard[p.Key] = (p.Value.BackImage & 0x60000000) != 0 || p.Value.ForegroundImages.Count > 0 || p.Value.MiddleImage != 0;
+        BlendStreets(map, basis, patch, masks, hard, paths, seed, token, 0);
+    }
+
     private static void BlendStreets(MapDocument map, TerrainSet basis, TerrainSet patch,
         Dictionary<(int, int), int> masks, bool[] hard, HashSet<(int X, int Y)> streets, int seed, CancellationToken token, int shoulder)
     {

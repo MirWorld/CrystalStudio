@@ -751,6 +751,96 @@
       "id": "mir/mir_06352",
       "status": "freestanding",
       "evidence": "Rendered native foreground inspected: no baked terrain card; framed crop bed and stone plinth are self-contained props."
+    },
+    {
+      "id": "mir/mir_06074",
+      "status": "freestanding",
+      "evidence": "Native foreground rendered from matching libraries and visually inspected in forest-ruins artwork audit: transparent surroundings; self-contained rubble, plinth or timber; no baked terrain card."
+    },
+    {
+      "id": "mir/mir_06076",
+      "status": "freestanding",
+      "evidence": "Native foreground rendered from matching libraries and visually inspected in forest-ruins artwork audit: transparent surroundings; self-contained rubble, plinth or timber; no baked terrain card."
+    },
+    {
+      "id": "mir/mir_06425",
+      "status": "freestanding",
+      "evidence": "Native foreground rendered from matching libraries and visually inspected in forest-ruins artwork audit: transparent surroundings; self-contained rubble, plinth or timber; no baked terrain card."
+    },
+    {
+      "id": "mir/mir_06426",
+      "status": "freestanding",
+      "evidence": "Native foreground rendered from matching libraries and visually inspected in forest-ruins artwork audit: transparent surroundings; self-contained rubble, plinth or timber; no baked terrain card."
+    },
+    {
+      "id": "mir/mir_03772",
+      "status": "freestanding",
+      "evidence": "Native foreground rendered from matching libraries and visually inspected in forest-ruins artwork audit: transparent surroundings; self-contained rubble, plinth or timber; no baked terrain card."
+    },
+    {
+      "id": "mir/mir_03774",
+      "status": "freestanding",
+      "evidence": "Native foreground rendered from matching libraries and visually inspected in forest-ruins artwork audit: transparent surroundings; self-contained rubble, plinth or timber; no baked terrain card."
+    },
+    {
+      "id": "mir/mir_03856",
+      "status": "freestanding",
+      "evidence": "Native foreground rendered from matching libraries and visually inspected in forest-ruins artwork audit: transparent surroundings; self-contained rubble, plinth or timber; no baked terrain card."
+    },
+    {
+      "id": "mir/mir_04217",
+      "status": "freestanding",
+      "evidence": "Native foreground rendered from matching libraries and visually inspected in forest-ruins artwork audit: transparent surroundings; self-contained rubble, plinth or timber; no baked terrain card."
+    },
+    {
+      "id": "mir/mir_04246",
+      "status": "freestanding",
+      "evidence": "Native foreground rendered from matching libraries and visually inspected in forest-ruins artwork audit: transparent surroundings; self-contained rubble, plinth or timber; no baked terrain card."
+    },
+    {
+      "id": "mir/mir_00154",
+      "status": "freestanding",
+      "evidence": "Native foreground rendered from matching libraries and visually inspected in forest-ruins artwork audit: transparent surroundings; self-contained rubble, plinth or timber; no baked terrain card."
+    },
+    {
+      "id": "mir/mir_00155",
+      "status": "freestanding",
+      "evidence": "Native foreground rendered from matching libraries and visually inspected in forest-ruins artwork audit: transparent surroundings; self-contained rubble, plinth or timber; no baked terrain card."
+    },
+    {
+      "id": "mir/mir_00156",
+      "status": "freestanding",
+      "evidence": "Native foreground rendered from matching libraries and visually inspected in forest-ruins artwork audit: transparent surroundings; self-contained rubble, plinth or timber; no baked terrain card."
+    },
+    {
+      "id": "mir/mir_00157",
+      "status": "freestanding",
+      "evidence": "Native foreground rendered from matching libraries and visually inspected in forest-ruins artwork audit: transparent surroundings; self-contained rubble, plinth or timber; no baked terrain card."
+    },
+    {
+      "id": "mir/mir_01731",
+      "status": "freestanding",
+      "evidence": "Native foreground rendered from matching libraries and visually inspected in forest-ruins artwork audit: transparent surroundings; self-contained rubble, plinth or timber; no baked terrain card."
+    },
+    {
+      "id": "mir/mir_01732",
+      "status": "freestanding",
+      "evidence": "Native foreground rendered from matching libraries and visually inspected in forest-ruins artwork audit: transparent surroundings; self-contained rubble, plinth or timber; no baked terrain card."
+    },
+    {
+      "id": "mir/mir_06402",
+      "status": "freestanding",
+      "evidence": "Native foreground rendered from matching libraries and visually inspected in forest-ruins artwork audit: transparent surroundings; self-contained rubble, plinth or timber; no baked terrain card."
+    },
+    {
+      "id": "mir/mir_06403",
+      "status": "freestanding",
+      "evidence": "Native foreground rendered from matching libraries and visually inspected in forest-ruins artwork audit: transparent surroundings; self-contained rubble, plinth or timber; no baked terrain card."
+    },
+    {
+      "id": "mir/mir_06404",
+      "status": "freestanding",
+      "evidence": "Native foreground rendered from matching libraries and visually inspected in forest-ruins artwork audit: transparent surroundings; self-contained rubble, plinth or timber; no baked terrain card."
     }
   ]
 }
