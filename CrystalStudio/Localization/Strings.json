@@ -1,5 +1,6 @@
 {
   "DimensionsTotalLimit": {"English": "Use dimensions from 16 to 4096, with at most 16,000,000 cells.", "Chinese": "宽高须为 16～4096，且总格数不能超过 1600 万。"},
+  "MixedUnchanged": {"English": "Mixed — leave unchanged", "Chinese": "混合值 — 留空不修改"},
   "OriginalSize_20261105": {
     "English": "Original Size",
     "Chinese": "原始大小"

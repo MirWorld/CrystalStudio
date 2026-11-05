@@ -538,9 +538,34 @@ public sealed partial class MapViewport : SceneControl
         return count;
     }
     public void FillSelection() { if (Selection is not Rect r || SpriteIndex < 0 && !IsCollisionLayer) return; History.Begin(); var previous = Tool; Tool = EditorTool.Pencil; lastPaint = (-999, -999); for (int y = (int)r.Y; y < r.Bottom; y++) for (int x = (int)r.X; x < r.Right; x++) Apply(x, y); Tool = previous; History.Commit(); Changed?.Invoke(); }
-    public void ApplyMetadata(byte light, byte door, byte offset, Rect? areaOverride = null)
+    internal byte? CommonMetadata(Rect area, Func<Cell, byte> read)
     {
-        Rect area = areaOverride ?? Selection ?? new Rect(hover.X, hover.Y, 1, 1); if (!Document.Contains((int)area.X, (int)area.Y)) return; History.Begin(); for (int y = (int)area.Y; y < area.Bottom; y++) for (int x = (int)area.X; x < area.Right; x++) { History.Record(Document, x, y); var c = Document.Get(x, y).Copy(); c.Light = light; c.Door = door; c.DoorOffset = offset; Document.Set(x, y, c); InvalidateCell(x, y); }
+        byte? value = null;
+        for (int y = Math.Max(0, (int)area.Y); y < Math.Min(Document.Height, area.Bottom); y++)
+        for (int x = Math.Max(0, (int)area.X); x < Math.Min(Document.Width, area.Right); x++)
+        {
+            byte next = read(Document.Get(x, y));
+            if (value.HasValue && value != next) return null;
+            value = next;
+        }
+        return value;
+    }
+    public void ApplyMetadata(byte? light, byte? door, byte? offset, Rect? areaOverride = null)
+    {
+        if (light == null && door == null && offset == null) return;
+        Rect area = areaOverride ?? Selection ?? new Rect(hover.X, hover.Y, 1, 1);
+        History.Begin();
+        for (int y = Math.Max(0, (int)area.Y); y < Math.Min(Document.Height, area.Bottom); y++)
+        for (int x = Math.Max(0, (int)area.X); x < Math.Min(Document.Width, area.Right); x++)
+        {
+            var original = Document.Get(x, y);
+            var cell = original.Copy();
+            if (light.HasValue) cell.Light = light.Value;
+            if (door.HasValue) cell.Door = door.Value;
+            if (offset.HasValue) cell.DoorOffset = offset.Value;
+            if (cell.SameContents(original)) continue;
+            History.Record(Document, x, y); Document.Set(x, y, cell); InvalidateCell(x, y);
+        }
         History.Commit(); RefreshAssets(); Changed?.Invoke();
     }
     public void ClearSelection() { brushPreviewKey = null; if (Selection is not Rect r) return; History.Begin(); for (int y = (int)r.Y; y < r.Bottom; y++) for (int x = (int)r.X; x < r.Right; x++) { History.Record(Document, x, y); var c = Document.Get(x, y).Copy(); switch (Layer) { case MapLayer.Ground: c.BackImage &= 0x60000000; break; case MapLayer.Middle: c.MiddleImage = 0; c.MiddleFrames = 0; c.MiddleTick = 0; break; case MapLayer.Objects: c.Foreground = null; break; case MapLayer.LowCollision: case MapLayer.HighCollision: c.BackImage &= ~ActiveCollisionMask; break; } Document.Set(x, y, c); InvalidateCell(x,y); } History.Commit(); chunks.Clear(); frontRows.Clear(); InvalidateVisual(); Changed?.Invoke(); }
