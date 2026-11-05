@@ -281,6 +281,7 @@ public sealed class DockWorkspace : Grid
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
         {
+            StudioLog.Warning("Workspace.Restore",$"File={layoutPath}; using defaults",ex);
             if (defaultLayout is { Count: > 0 }) ApplyLayout(defaultLayout);
             Rebuild();
         }
@@ -369,6 +370,6 @@ public sealed class DockWorkspace : Grid
     private void Save()
     {
         try { AtomicFile.WriteJson(layoutPath, panes.Select(p => new LayoutEntry(p.Title, p.Side, p.Size, p.EditorWindow is not null, p.EditorWindow?.Left ?? 0, p.EditorWindow?.Top ?? 0, p.EditorWindow?.Bounds.Width ?? 380, p.EditorWindow?.Bounds.Height ?? 450, dockSizes[p.Side], p.Visible, 2, IsLayoutLocked))); }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { StudioLog.Error("Workspace.Save",ex,$"File={layoutPath}"); }
     }
 }

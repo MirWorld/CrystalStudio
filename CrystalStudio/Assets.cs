@@ -272,7 +272,7 @@ public sealed class AssetStore : IDisposable
                 {
                     try { sprite = library.DecodeOverview(reader, key.Image, level, token); }
                     catch (Exception ex) when (ex is IOException or InvalidDataException or ArgumentException)
-                    { failed[key] = 0; Error?.Invoke(ex.Message); continue; }
+                    { failed[key] = 0; StudioLog.Error("Assets.Overview", ex, $"Library={key.Library}; Image={key.Image}; File={library.Path}"); Error?.Invoke(ex.Message); continue; }
                     if (sprite == null) { failed[key] = 0; continue; }
                     token.ThrowIfCancellationRequested();
                     if (overviewCache.TryAdd((key.Library, key.Image, level), sprite))
@@ -316,7 +316,7 @@ public sealed class AssetStore : IDisposable
                         else failed[(k.Item1, k.Item2)] = 0;
                     }
                 }
-                catch (Exception ex) { failed[(k.Item1, k.Item2)] = 0; Error?.Invoke(ex.Message); }
+                catch (Exception ex) { failed[(k.Item1, k.Item2)] = 0; StudioLog.Error("Assets.Decode", ex, $"Library={k.Item1}; Image={k.Item2}; File={Libraries.GetValueOrDefault(k.Item1)?.Path}"); Error?.Invoke(ex.Message); }
                 finally { pending.TryRemove(k, out _); Updated?.Invoke(); }
             }
         }
@@ -335,7 +335,11 @@ public sealed class AssetStore : IDisposable
         }, CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
     }
     public static AssetStore Load(string root, AssetSourceFormat format = AssetSourceFormat.Default)
-    { var store = new AssetStore(format); try { store.Register(root); return store; } catch { store.Dispose(); throw; } }
+    {
+        var store = new AssetStore(format);
+        try { store.Register(root); StudioLog.Info("Assets.Load", $"Root={root}; Format={format}; Libraries={store.Libraries.Count}"); return store; }
+        catch (Exception ex) { StudioLog.Error("Assets.Load", ex, $"Root={root}; Format={format}"); store.Dispose(); throw; }
+    }
     private void Add(int id, string root, string relative) { string path = System.IO.Path.Combine(root, relative.Replace('\\', System.IO.Path.DirectorySeparatorChar) + ".lib"); if (File.Exists(path)) Libraries[id] = new(path); }
     private void Register(string root)
     {

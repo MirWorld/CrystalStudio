@@ -51,6 +51,7 @@ public sealed class SettingsWindow : EditorWindow
             }
             catch (Exception ex) when (ex is System.IO.IOException or UnauthorizedAccessException or System.Text.Json.JsonException)
             {
+                StudioLog.Error("Settings.Language",ex);
                 changingLanguage = true; languages.SelectedIndex = savedLanguageIndex; changingLanguage = false;
                 error.Text = LocalText.Format("Could not save language preference: {0}",ex.Message); error.IsVisible = true;
             }
@@ -69,6 +70,7 @@ public sealed class SettingsWindow : EditorWindow
             try { await apply(folder.Text, sanxiuFormat.IsChecked == true ? AssetSourceFormat.Sanxiu : AssetSourceFormat.Default); saving = false; DialogResult = true; }
             catch (Exception ex)
             {
+                StudioLog.Error("Settings.Save",ex,$"Root={folder.Text}");
                 error.Text = (ex.Message); error.IsVisible = true;
                 saving = false; save.IsEnabled = true; browse.IsEnabled = true; cancel.IsEnabled = true; languages.IsEnabled = true; defaultFormat.IsEnabled = true; sanxiuFormat.IsEnabled = true; save.Content = (firstSetup ? LocalText.T("Save and Start") : LocalText.T("Save Changes"));
             }

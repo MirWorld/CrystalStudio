@@ -36,6 +36,7 @@ internal sealed class ObjectExtractionWindow : EditorWindow
         AssetSourceFormat assetFormat = AssetSourceFormat.Default)
     {
         this.current=current;this.indexPath=indexPath;this.saved=saved;this.assetFormat=assetFormat;
+        StudioLog.Info("Extraction.Window",$"Opened; Resources={resourceFolder}; Format={assetFormat}; Catalogue={indexPath}");
         Title=LocalText.T("Extract Map Objects");Width=1420;Height=900;MinWidth=1120;MinHeight=700;WindowStartupLocation=WindowStartupLocation.CenterOwner;
         resource.Text=resourceFolder;
         scope.Name="ExtractionScope";directory.Name="ExtractionDirectory";
@@ -57,7 +58,7 @@ internal sealed class ObjectExtractionWindow : EditorWindow
         body.Children.Add(categories);Grid.SetColumn(cards,1);body.Children.Add(cards);
         cards.ItemsPanel=new FuncTemplate<Panel?>(()=>new WrapPanel());
         cards.SetValue(ScrollViewer.HorizontalScrollBarVisibilityProperty,ScrollBarVisibility.Disabled);
-        cards.ItemTemplate=new FuncDataTemplate<ExtractionCandidate>((c,_)=>Card(c!));
+        cards.ItemTemplate=new FuncDataTemplate<ExtractionCandidate>((c,_)=>c==null?null:Card(c));
         var detailScroll=new ScrollViewer{Content=details,HorizontalScrollBarVisibility=ScrollBarVisibility.Disabled};Grid.SetColumn(detailScroll,2);body.Children.Add(detailScroll);
         var footer=new Grid{ColumnDefinitions=new("*,Auto"),ColumnSpacing=12};Grid.SetRow(footer,4);root.Children.Add(footer);footer.Children.Add(status);
         var actions=new StackPanel{Orientation=Orientation.Horizontal,Spacing=6};Grid.SetColumn(actions,1);footer.Children.Add(actions);
@@ -78,7 +79,7 @@ internal sealed class ObjectExtractionWindow : EditorWindow
         categories.SelectionChanged+=(_,_)=>{if(!refreshing){page=0;RefreshCards();}};
         cards.SelectionChanged+=(_,_)=>ShowDetails();
         scope.SelectionChanged+=(_,_)=>{directory.IsEnabled=scope.SelectedIndex==2&&!running;};directory.IsEnabled=false;
-        Closing+=(_,_)=>{closed=true;operation.Cancel();previewStop.Cancel();};
+        Closing+=(_,_)=>{StudioLog.Info("Extraction.Window","Closing; cancelling scan and previews");closed=true;operation.Cancel();previewStop.Cancel();};
         Closed+=async(_,_)=>{while(running)await Task.Delay(20);await ClearPreviews();assets?.Dispose();operation.Dispose();previewStop.Dispose();previewSlots.Dispose();};
         UpdateState();RefreshCategories();
     }
@@ -95,7 +96,7 @@ internal sealed class ObjectExtractionWindow : EditorWindow
         if(Review==null||running)return;
         var ids=SelectedIds().ToHashSet();
         try{action();RefreshCategories(ids);status.Text=LocalText.T("Review updated. Use Undo to restore the previous review.");}
-        catch(Exception ex){status.Text=LocalText.T(ex.Message);}
+        catch(Exception ex){StudioLog.Error("Extraction.Review",ex);status.Text=LocalText.T(ex.Message);}
     }
     private void UpdateState()
     {
@@ -112,6 +113,7 @@ internal sealed class ObjectExtractionWindow : EditorWindow
         if(running)return;
         try
         {
+            StudioLog.Info("Extraction.Scan",$"Starting; Scope={scope.SelectedIndex}; Resources={resource.Text}; MapDirectory={directory.Text}; Format={assetFormat}");
             if(string.IsNullOrWhiteSpace(resource.Text))throw new InvalidDataException("Choose a resource folder.");
             IEnumerable<ExtractionInput> inputs;
             if(scope.SelectedIndex==2)
@@ -133,11 +135,13 @@ internal sealed class ObjectExtractionWindow : EditorWindow
             var updates=new Progress<ExtractionProgress>(p=>{if(!closed)status.Text=LocalText.Format("{0} · {1:N0} maps · {2:N0} candidates · {3:N0} occurrences\n{4}",LocalText.T(p.Phase),p.Maps,p.Candidates,p.Occurrences,p.Source);});
             var result=await service.ScanAsync(inputs,operation.Token,updates);
             if(closed)return;session=result;Review=new(result.Candidates);page=0;RefreshCategories();
+            StudioLog.Info("Extraction.Scan",$"Completed; Maps={result.Sources.Count}; Candidates={result.Candidates.Count}; Warnings={result.Warnings.Count}");
+            foreach(var warning in result.Warnings)StudioLog.Warning("Extraction.Scan",warning);
             status.Text=LocalText.Format("Scan complete · {0:N0} maps · {1:N0} warnings. Select candidates to review.",result.Sources.Count,result.Warnings.Count);
             ToolTip.SetTip(status,string.Join("\n",result.Warnings.Take(30)));
         }
-        catch(OperationCanceledException){status.Text=LocalText.T("Scan cancelled. Source maps remain unchanged.");}
-        catch(Exception ex){status.Text=LocalText.T(ex.Message);}
+        catch(OperationCanceledException){StudioLog.Info("Extraction.Scan","Cancelled");status.Text=LocalText.T("Scan cancelled. Source maps remain unchanged.");}
+        catch(Exception ex){StudioLog.Error("Extraction.Scan",ex,$"Resources={resource.Text}; MapDirectory={directory.Text}");status.Text=LocalText.T(ex.Message);}
         finally{running=false;details.IsEnabled=true;progress.IsIndeterminate=false;UpdateState();}
     }
     private async Task SaveAsync()
@@ -146,11 +150,13 @@ internal sealed class ObjectExtractionWindow : EditorWindow
         running=true;operation.Dispose();operation=new();UpdateState();details.IsEnabled=false;progress.IsIndeterminate=true;status.Text=LocalText.T("Saving reviewed objects…");
         try
         {
+            StudioLog.Info("Extraction.Export",$"Starting; Catalogue={indexPath}; Candidates={Review.Candidates.Count}");
             var result=await ObjectExtractionExport.SaveAsync(indexPath,session,Review.Candidates,operation.Token);
+            StudioLog.Info("Extraction.Export",$"Completed; Objects={result.Objects.Count}; Report={result.ReportPath}");
             saved();status.Text=LocalText.Format("Saved {0:N0} unique objects. Report: {1}",result.Objects.Count,result.ReportPath);ToolTip.SetTip(status,result.ReportPath);
         }
-        catch(OperationCanceledException){status.Text=LocalText.T("Export cancelled. Catalogue unchanged.");}
-        catch(Exception ex){status.Text=LocalText.T(ex.Message);}
+        catch(OperationCanceledException){StudioLog.Info("Extraction.Export","Cancelled");status.Text=LocalText.T("Export cancelled. Catalogue unchanged.");}
+        catch(Exception ex){StudioLog.Error("Extraction.Export",ex,$"Catalogue={indexPath}");status.Text=LocalText.T(ex.Message);}
         finally{running=false;details.IsEnabled=true;progress.IsIndeterminate=false;UpdateState();}
     }
     private void RefreshCategories(HashSet<Guid>? ids=null)
@@ -206,7 +212,7 @@ internal sealed class ObjectExtractionWindow : EditorWindow
             HoldPreview(target,bitmap);target.Source=bitmap;
         }
         catch(OperationCanceledException){}
-        catch(Exception ex){if(!closed)ToolTip.SetTip(target,ex.Message);}
+        catch(Exception ex){StudioLog.Error("Extraction.Thumbnail",ex,$"Candidate={c.Id}; Name={c.Name}; Cells={c.Cells.Count}");if(!closed)ToolTip.SetTip(target,ex.Message);}
         finally{target.DetachedFromVisualTree-=Detached;if(entered)previewSlots.Release();}
     }
     private void HoldPreview(Control target,RasterImage bitmap)
@@ -232,6 +238,7 @@ internal sealed class ObjectExtractionWindow : EditorWindow
         details.Children.Clear();var selected=cards.SelectedItems?.OfType<ExtractionCandidate>().ToList()??[];
         if(selected.Count==0){details.Children.Add(new TextBlock{Text=LocalText.T("Select a candidate to inspect its fragments, collision and sources."),TextWrapping=TextWrapping.Wrap});return;}
         var c=selected[0];
+        StudioLog.Info("Extraction.Selection",$"Selected={selected.Count}; Candidate={c.Id}; Name={c.Name}; Cells={c.Cells.Count}; Sources={string.Join(", ",c.Occurrences.Take(5).Select(o=>o.Source))}");
         details.Children.Add(new TextBlock{Text=LocalText.Format("{0:N0} selected",selected.Count),FontWeight=FontWeight.SemiBold});
         var name=new TextBox{Text=selected.Count==1?c.Name:"",Watermark=LocalText.T("Name (leave empty to retain)")};details.Children.Add(name);
         var category=new TextBox{Text=c.Category,Watermark=LocalText.T("Category")};details.Children.Add(category);
@@ -244,9 +251,10 @@ internal sealed class ObjectExtractionWindow : EditorWindow
         var a=new StackPanel();a.Children.Add(new TextBlock{Text=LocalText.T("Isolated object")});a.Children.Add(isolated);area.Children.Add(a);
         var b=new StackPanel();b.Children.Add(new TextBlock{Text=LocalText.T("Map context")});b.Children.Add(context);Grid.SetColumn(b,1);area.Children.Add(b);
         if(assets!=null){Track(DetailPreview(isolated,c,false));Track(DetailPreview(context,c,true));}
-        var fragments=new ListBox{Height=150,SelectionMode=SelectionMode.Multiple};
+        var fragments=new ListBox{Name="ExtractionFragments",Height=150,SelectionMode=SelectionMode.Multiple};
         var rows=c.Cells.Where(s=>s.Cell.HasForeground).Select(s=>new FragmentRow(s.X,s.Y,$"({s.X}, {s.Y})  {s.Cell.Foreground!.Library}/{s.Cell.Foreground.Image&0x7FFF}  [{s.Cell.Foreground.Frames}, {s.Cell.Foreground.Tick}]")).ToArray();
-        fragments.ItemsSource=rows;fragments.ItemTemplate=new FuncDataTemplate<FragmentRow>((r,_)=>new TextBlock{Text=r!.Text,FontSize=11});details.Children.Add(fragments);
+        // Avalonia clears template data while recycling a virtualized row.
+        fragments.ItemsSource=rows;fragments.ItemTemplate=new FuncDataTemplate<FragmentRow>((r,_)=>new TextBlock{Text=r?.Text,FontSize=11});details.Children.Add(fragments);
         void UpdateFragments(){var points=fragments.SelectedItems!.OfType<FragmentRow>().Select(r=>(r.X,r.Y)).ToHashSet();isolated.Selected=points;context.Selected=points;isolated.InvalidateVisual();context.InvalidateVisual();}
         fragments.SelectionChanged+=(_,_)=>UpdateFragments();isolated.FragmentClicked=context.FragmentClicked=point=>
         {var row=rows.FirstOrDefault(r=>r.X==point.X&&r.Y==point.Y);if(row!=null){if(fragments.SelectedItems!.Contains(row))fragments.SelectedItems.Remove(row);else fragments.SelectedItems.Add(row);}};
@@ -294,7 +302,7 @@ internal sealed class ObjectExtractionWindow : EditorWindow
             if(result.Bitmap==null)return;if(token.IsCancellationRequested||closed||target.GetVisualRoot()==null){result.Bitmap.Dispose();return;}
             HoldPreview(target,result.Bitmap);target.Image=result.Bitmap;target.Area=result.Area;target.Candidate=c;target.Context=context;target.InvalidateVisual();
         }
-        catch(OperationCanceledException){}catch(Exception ex){if(!closed)ToolTip.SetTip(target,ex.Message);}
+        catch(OperationCanceledException){}catch(Exception ex){StudioLog.Error("Extraction.DetailPreview",ex,$"Candidate={c.Id}; Name={c.Name}; Context={context}; Cells={c.Cells.Count}");if(!closed)ToolTip.SetTip(target,ex.Message);}
         finally{target.DetachedFromVisualTree-=Detached;if(entered)previewSlots.Release();}
     }
     private sealed record FragmentRow(int X,int Y,string Text);

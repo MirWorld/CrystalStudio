@@ -83,8 +83,8 @@ public sealed class StampCategoryNode : INotifyPropertyChanged
             },DispatcherPriority.Background);
         }
         catch(OperationCanceledException) when(token.IsCancellationRequested) { }
-        catch(Exception ex) when(ex is IOException or UnauthorizedAccessException or InvalidDataException or ArgumentException)
-        { }
+        catch(Exception ex)
+        { StudioLog.Error("Palette.Preview",ex,$"Stamp={Stamp?.File}; Label={Label}"); }
         finally
         {
             if(!EditorLifetime.IsExiting)
@@ -152,7 +152,7 @@ public partial class MainWindow
             });
             await Dispatcher.UIThread.InvokeAsync(() => { if (!closed) categoryIndex = result; });
         }
-        catch (Exception ex) { await Dispatcher.UIThread.InvokeAsync(() => { if (!closed) { categoryIndex = null; categoryError = ex.Message; } }); }
+        catch (Exception ex) { StudioLog.Error("Palette.Load",ex); await Dispatcher.UIThread.InvokeAsync(() => { if (!closed) { categoryIndex = null; categoryError = ex.Message; } }); }
         finally { await Dispatcher.UIThread.InvokeAsync(() => { categoriesLoading = false; if (!closed && CategoryPalette) BuildPage(); }); }
     }
 

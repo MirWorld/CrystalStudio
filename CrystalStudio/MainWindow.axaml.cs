@@ -121,7 +121,7 @@ public partial class MainWindow : EditorWindow
         InitializeComponent(); ThemeService.Initialize(); DarkModeToggle.IsChecked = ThemeService.ForceDark; initialized = true; AssetList.ItemsSource = choices;
         InitializeLanguageMenu();
 
-        try { assetHistory.Load(); } catch (Exception ex) { Status.Text = LocalText.Format("Could not read saved assets: {0}",ex.Message); }
+        try { assetHistory.Load(); } catch (Exception ex) { StudioLog.Error("Assets.History",ex); Status.Text = LocalText.Format("Could not read saved assets: {0}",ex.Message); }
 
         searchDelay.Tick += (_, _) => { searchDelay.Stop(); page = 0; BuildPage(); };
 
@@ -155,7 +155,7 @@ public partial class MainWindow : EditorWindow
 
                     try { await LoadLibraries(settings.LibraryFolder); }
 
-                    catch (Exception ex) { Status.Text = LocalText.T("Saved Library Folder Unavailable \u2014 Open Settings to Change It"); ToolTip.SetTip(Status, (ex.Message)); }
+                    catch (Exception ex) { StudioLog.Error("Startup.Libraries",ex,$"Root={settings.LibraryFolder}; Format={settings.AssetFormat}"); Status.Text = LocalText.T("Saved Library Folder Unavailable \u2014 Open Settings to Change It"); ToolTip.SetTip(Status, (ex.Message)); }
 
                 }
 
@@ -407,7 +407,7 @@ public partial class MainWindow : EditorWindow
 
     private void UpdateLabels() { if (!initialized || Viewport == null) return; ZoomLabel.Content = ($"{Viewport.Zoom:P0}"); SelectedLabel.Text = (Viewport.Tool == EditorTool.TownStamp ? (Viewport.Town?.Name ?? LocalText.T("Generate a Town")) : (Viewport.Tool == EditorTool.Wall ? (Viewport.WallCatalogueError ?? LocalText.Format("Wall · {0} · Drag to connect · Shift to remove", LocalText.T(Viewport.WallFamily?.DisplayName ?? "Choose type"))) : (Viewport.Tool == EditorTool.SpecialBrush ? LocalText.Format("Special Brush · {0} · {1} variant(s) · {2}% density",LocalText.T(Viewport.SpecialBrushKind.BrushName()),Viewport.Trees.Count,Viewport.TreeOptions.Density) : (Viewport.IsStampPickingTool ? (Viewport.PickedStamp?.Name ?? ((Viewport.Tool == EditorTool.Clone ? LocalText.T("Choose a placed stamp to clone") : LocalText.T("Choose a placed stamp to move")))) : (StampMode ? (selectedStampName ?? LocalText.T("Choose an object stamp")) : (Viewport.IsCollisionLayer ? LocalText.Format("{0} collision · Paint to apply, erase to remove",LocalText.T(Viewport.Layer == MapLayer.LowCollision ? "Low" : "High")) : (Viewport.SpriteIndex < 0 ? ((PatternPalette ? LocalText.T("Select a terrain set to brush") : LocalText.T("Select a sprite to place"))) : (PatternPalette ? LocalText.Format("Library {0} / Terrain set {1}",Viewport.Library,Viewport.SpriteIndex / AutoTileBrush.BlockSize(AssetLayout(Viewport.Library, Viewport.Layer))) : LocalText.Format("Library {0} / Sprite {1}",Viewport.Library,Viewport.SpriteIndex))))))))); UpdateWorkspace(); UpdateMapBrowserControls(); }
 
-    private async Task Run(Func<Task> action) { if (busy) return; busy = true; UpdateLabels(); try { await action(); } catch (Exception ex) { MessageBox.Show(this, ex.Message, "Crystal Studio", MessageBoxButton.OK, MessageBoxImage.Warning); Status.Text = LocalText.T("Operation failed"); } finally { busy = false; UpdateLabels(); } }
+    private async Task Run(Func<Task> action) { if (busy) return; busy = true; UpdateLabels(); try { await action(); } catch (Exception ex) { StudioLog.Error("Editor.Operation",ex,$"Map={mapPath}; Tool={Viewport.Tool}"); MessageBox.Show(this, ex.Message, "Crystal Studio", MessageBoxButton.OK, MessageBoxImage.Warning); Status.Text = LocalText.T("Operation failed"); } finally { busy = false; UpdateLabels(); } }
 
     private bool ConfirmDiscard() { if (!Viewport.History.Dirty && activeMap?.CategoryDirty != true) return true; var answer = MessageBox.Show(this, "Save your changes before continuing?", activeMap?.IsStamp == true ? "Unsaved stamp" : "Unsaved map", MessageBoxButton.YesNoCancel, MessageBoxImage.Question); if (answer == MessageBoxResult.Cancel) return false; if (answer == MessageBoxResult.Yes) return SaveMap(); return true; }
 
@@ -460,11 +460,13 @@ public partial class MainWindow : EditorWindow
     private async Task OpenMap(string path)
     {
         path = Path.GetFullPath(path);
+        StudioLog.Info("Map.Open",$"Path={path}; Format={settings.AssetFormat}");
         var existing = mapTabs.Items.Cast<TabItem>().FirstOrDefault(t => string.Equals(((OpenMapTab)t.Tag).Path, path, StringComparison.OrdinalIgnoreCase));
         if (existing != null) { mapTabs.SelectedItem = existing; RememberMap(path); return; }
         Status.Text = LocalText.T("Reading map\u2026");
         var d = await Task.Run(() => MapDocument.Load(path, settings.AssetFormat));
         AddMapTab(d, path);
+        StudioLog.Info("Map.Open",$"Loaded; Path={path}; Size={d.Width}x{d.Height}; Stamps={d.PlacedStamps.Count}");
         RememberMap(path);
         Status.Text = (d.MetadataWarning ?? LocalText.Format("Map loaded · {0:N0} remembered stamps", d.PlacedStamps.Count));
     }
@@ -504,7 +506,7 @@ public partial class MainWindow : EditorWindow
         if (activeMap?.IsStamp == true) return SaveStampEditor(saveAs);
         string? target = saveAs ? null : mapPath; if (target == null) { var picker = new SaveFileDialog { Filter = "Crystal map (*.map)|*.map", FileName = mapPath == null ? "Untitled.map" : Path.GetFileName(mapPath), InitialDirectory = mapPath == null ? "" : Path.GetDirectoryName(mapPath), DefaultExt = ".map", AddExtension = true, OverwritePrompt = true }; if (picker.ShowDialog(this) != true) return false; target = picker.FileName; }
 
-        try { if (mapPath == null) Viewport.Document.SourceFormat = settings.AssetFormat; Viewport.Document.Save(target); mapPath = target; RememberMap(target); Viewport.History.Saved(); UpdateLabels(); UpdateMapTabLabels(); Status.Text = LocalText.Format("Saved {0}",Path.GetFileName(target)); return true; } catch (Exception ex) { MessageBox.Show(this, ex.Message, "Save failed"); return false; }
+        try { if (mapPath == null) Viewport.Document.SourceFormat = settings.AssetFormat; Viewport.Document.Save(target); mapPath = target; RememberMap(target); Viewport.History.Saved(); UpdateLabels(); UpdateMapTabLabels(); Status.Text = LocalText.Format("Saved {0}",Path.GetFileName(target)); return true; } catch (Exception ex) { StudioLog.Error("Map.Save",ex,$"Path={target}"); MessageBox.Show(this, ex.Message, "Save failed"); return false; }
 
     }
 
@@ -596,7 +598,7 @@ public partial class MainWindow : EditorWindow
 
         var picker = new SaveFileDialog { Filter = "Crystal object (*.X)|*.X", FileName = "Object.X" }; if (picker.ShowDialog(this) != true) return;
 
-        try { List<StampCell> cells = []; for (int y = (int)r.Y; y < r.Bottom; y++) for (int x = (int)r.X; x < r.Right; x++) { var c = Viewport.Document.Get(x, y); if (!c.Empty) cells.Add(new(x - (int)r.X - (int)r.Width / 2, y - (int)r.Y - (int)r.Height / 2, c)); } CellCodec.SaveStamp(picker.FileName, cells); Status.Text = LocalText.Format("Exported {0} object cells",cells.Count); } catch (Exception ex) { MessageBox.Show(this, ex.Message, "Export failed"); }
+        try { List<StampCell> cells = []; for (int y = (int)r.Y; y < r.Bottom; y++) for (int x = (int)r.X; x < r.Right; x++) { var c = Viewport.Document.Get(x, y); if (!c.Empty) cells.Add(new(x - (int)r.X - (int)r.Width / 2, y - (int)r.Y - (int)r.Height / 2, c)); } CellCodec.SaveStamp(picker.FileName, cells); Status.Text = LocalText.Format("Exported {0} object cells",cells.Count); } catch (Exception ex) { StudioLog.Error("Stamp.Export",ex,$"Path={picker.FileName}"); MessageBox.Show(this, ex.Message, "Export failed"); }
 
     }
 

@@ -135,3 +135,27 @@ Release 自动测试通过 22 项，失败 0 项，跳过 0 项。测试覆盖�
 原有 **48 条 IL2026、1 条 MicroCom IL3053** 以及 nullable、AVLN3001 提示仍存在。真实客户端中部分图片仍有既有的 `Unexpected sprite pixel length` 错误，本次没有修改资源文件或图片解码逻辑。
 
 证据位于仓库根目录 `_codex_artifacts/crystalstudio-root-tabs`：`baseline-build.log`、`baseline-tests.log`、`final-tests.log`、`aot-publish.log`、`published-evidence.json`、`native-verification.json`、`verify-native.ps1`，以及中英文工具页、过滤列表、设置和切换后界面的截图与 UI Automation 记录。
+
+## 提取候选预览闪退与日志（2026-11-05）
+
+Windows 应用程序事件在 13:23:56 记录旧 `aot-root-tabs/win-x64/CrystalStudio.exe` 的未处理 `NullReferenceException`。堆栈指向 `ObjectExtractionWindow.ShowDetails` 内碎片行模板，并包含 `ContentPresenter.ContentChanged`、`ClearContainerForItemOverride` 和 `VirtualizingStackPanel.RecycleElement`。因此，候选预览期间的闪退源于列表回收时模板收到空数据，但是原代码仍读取 `r!.Text`。对应的 Windows 原生退出事件是未处理托管异常的结果，不能据此认定是图片或原生内存故障。
+
+碎片行模板改为容许空数据，候选卡片模板增加相同保护。新增回归测试使用 96 个碎片，反复滚动首尾、选择碎片和重新选择候选，并验证源地图内容保留。恢复旧模板后该测试出现同一空引用堆栈；使用修复模板后通过。最终 NativeAOT 编译脚本执行完整测试，**74 项通过、失败 0、跳过 0**。
+
+新增文件日志及进程、UI 调度器、未观察任务的异常监听。UI 监听在平台服务初始化后注册，避免提前访问 `Dispatcher.UIThread` 创建不能执行桌面消息循环的调度器。所有致命异常保留终止行为，资源和操作错误保留现有提示，并增加完整堆栈及上下文。日志单元测试验证 300 次并发写入、关闭前可读的完整 UTF-8 内容、内部异常与堆栈、文件轮换、并行会话及非日志文件保留。
+
+辅助 JIT 子进程分别注入后台线程和 UI 线程未处理异常，均以非零退出码结束，日志包含对应全局处理器及异常堆栈；后台线程异常还包含内部异常。未观察任务异常被记录后以 0 退出。实际 NativeAOT 程序使用无效配置注入启动异常，日志记录 `Program.Main` 堆栈并以 1 退出；另用同名普通文件阻止创建主日志目录，确认程序改用临时目录，并记录原始目录错误及最终异常。这些故障均使用独立测试配置。
+
+实际 AOT 发布程序以中英文分别读取 `D:\App\LomcnClient\Map\0.map`，扫描得到 733 个候选，每页 48 项。验证候选网格滚动、分类切换、368 格木桥候选的碎片列表首尾往返 8 次、详情重新选择 4 次、碎片选择及关闭窗口。两次会话均没有致命异常，日志记录 `DynamicCode=False` 和退出码 0；源地图 SHA-256 保持不变。测试没有导出物体或保存地图。
+
+发布文件为 `../Build/CrystalStudioAvalonia/aot-crash-fix/win-x64/CrystalStudio.exe`，大小 61,793,792 字节，AMD64 PE 的 CLR 目录 RVA 为 0。仍有原有 48 条 IL2026 和 1 条 MicroCom IL3053 提示。真实 LIB 中已有的像素长度错误及 34 条扫描警告仍存在，目前会记录文件和图片编号；本次没有更改资源数据或解码算法。强制结束进程及无法执行托管处理器的原生故障不保证留下最终异常记录，其他平台未验证。
+
+证据位于仓库根目录 `_codex_artifacts/crystalstudio-crash-logging`：
+
+- `windows-events-before.json`、`repro-before-fix.log`、`repro-after-fix.log`：原始闪退事件及修复前后的回归结果。
+- `aot-publish.log`、`published-evidence.json`：最终完整测试、原生发布与文件哈希。
+- `hook-smoke/`、`verify-hooks.ps1`、`hook-verification.json`：异常注入源码、脚本和退出结果；`hook-profile-*`、`native-startup-fatal` 及临时日志路径包含对应记录。
+- `verify-native.ps1`、`native-final-verification.log`、`native-verified/native-verification.json`：最终程序中英文交互验证。
+- `native-verified/native-fragments-*.png`、`native-verified/native-grid-*.png` 及对应 `.uia.json`：候选网格、碎片列表及详情预览。
+
+日志位置与轮换规则见 README 的“日志与异常诊断”。

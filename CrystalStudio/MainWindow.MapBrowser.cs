@@ -84,6 +84,7 @@ public partial class MainWindow
         catch (OperationCanceledException) when (token.IsCancellationRequested) { }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
         {
+            StudioLog.Error("MapBrowser.Scan",ex,$"Root={selectedFolder}");
             if (!closed && !token.IsCancellationRequested)
             {
                 mapFileStatus.Text = LocalText.T("Could not read map folder"); mapFileStatus.SetTip(ex.Message);

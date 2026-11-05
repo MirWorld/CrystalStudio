@@ -309,6 +309,37 @@ public sealed class ObjectExtractionTests
         finally{window.Close();}
     }
     [AvaloniaFact]
+    public async Task CandidateFragmentListCanRecycleRowsAndRebuildDetails()
+    {
+        using var box=new Sandbox();
+        var cells=Enumerable.Range(0,96).Select(i=>FrontCell(10+i%12,10+i/12,1)).ToArray();
+        box.Template("large.X","House",cells);
+        var map=Map(cells);
+        var window=new ObjectExtractionWindow(()=>new("recycle.map",map),TestApplication.Root,box.Index,()=>{});
+        window.Show();Dispatcher.UIThread.RunJobs();
+        async Task Pump(){await Task.Delay(25);Dispatcher.UIThread.RunJobs();}
+        try
+        {
+            await window.ScanAsync();await Pump();
+            Assert.Single(window.Review!.Candidates);
+            var candidates=window.GetVisualDescendants().OfType<ListBox>().Single(l=>l.Name=="ExtractionCandidates");
+            for(int cycle=0;cycle<4;cycle++)
+            {
+                candidates.SelectedIndex=0;await Pump();
+                var fragments=window.GetVisualDescendants().OfType<ListBox>().Single(l=>l!=candidates);
+                Assert.Equal(96,fragments.Items.Count);
+                fragments.ScrollIntoView(fragments.Items[^1]!);await Pump();
+                fragments.ScrollIntoView(fragments.Items[0]!);await Pump();
+                fragments.SelectedIndex=0;
+                Assert.Contains(window.GetVisualDescendants().OfType<ExtractionPreview>(),preview=>preview.Selected.Count==1);
+                candidates.SelectedIndex=-1;await Pump();
+            }
+            Assert.All(cells,cell=>Assert.Equal(cell.Cell.Foreground,map.Get(cell.X,cell.Y).Foreground));
+        }
+        finally{window.Close();await Pump();}
+    }
+
+    [AvaloniaFact]
     public async Task ToolWindowScansReviewsSavesAndKeepsEditorHistoryUntouched()
     {
         using var box=new Sandbox();var map=Map(FrontCell(5,5,1));var history=new EditHistory();long revision=map.PickupRevision;bool refreshed=false;
