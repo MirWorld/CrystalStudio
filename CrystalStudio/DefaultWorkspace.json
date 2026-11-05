@@ -1,5 +1,19 @@
 [
   {
+    "Title": "Maps",
+    "Side": 0,
+    "Size": 300,
+    "Floating": false,
+    "Left": 0,
+    "Top": 0,
+    "Width": 380,
+    "Height": 450,
+    "DockSize": 240,
+    "Visible": true,
+    "Version": 2,
+    "Locked": false
+  },
+  {
     "Title": "Minimap",
     "Side": 2,
     "Size": 220,
@@ -22,7 +36,7 @@
     "Top": 0,
     "Width": 380,
     "Height": 450,
-    "DockSize": 156,
+    "DockSize": 240,
     "Visible": true,
     "Version": 2,
     "Locked": false
@@ -36,7 +50,7 @@
     "Top": 0,
     "Width": 380,
     "Height": 450,
-    "DockSize": 156,
+    "DockSize": 240,
     "Visible": true,
     "Version": 2,
     "Locked": false
@@ -50,7 +64,7 @@
     "Top": 0,
     "Width": 380,
     "Height": 450,
-    "DockSize": 156,
+    "DockSize": 240,
     "Visible": true,
     "Version": 2,
     "Locked": false
@@ -64,7 +78,7 @@
     "Top": 0,
     "Width": 380,
     "Height": 450,
-    "DockSize": 156,
+    "DockSize": 240,
     "Visible": true,
     "Version": 2,
     "Locked": false

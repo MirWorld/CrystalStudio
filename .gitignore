@@ -1,5 +1,12 @@
-﻿CrystalStudio.Tests/bin
-CrystalStudio.Tests/obj
-CrystalStudio/obj
-CrystalStudio/bin
-/.vs
+# 编译输出
+/Build/
+**/bin/
+**/obj/
+
+# 测试结果
+**/TestResults/
+
+# IDE 本地配置
+/.vs/
+*.user
+*.suo

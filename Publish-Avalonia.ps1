@@ -1,6 +1,6 @@
 param(
     [string]$RuntimeIdentifier = 'win-x64',
-    [string]$OutputDirectory = (Join-Path $PSScriptRoot '..\Build\CrystalStudioAvalonia\win-x64'),
+    [string]$OutputDirectory = (Join-Path $PSScriptRoot 'Build\Release'),
     [switch]$SkipTests
 )
 $ErrorActionPreference = 'Stop'

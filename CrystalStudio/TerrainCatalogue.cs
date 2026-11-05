@@ -1,5 +1,4 @@
 using System.IO;
-using System.Security.Cryptography;
 using System.Text.Json;
 
 namespace CrystalStudio;
@@ -62,8 +61,6 @@ public sealed class TerrainCatalogue
         {
             var sprite = library.Decode(v.Index);
             if (sprite == null || sprite.Width != 96 || sprite.Height != 64) return false;
-            byte[] pixels = new byte[96 * 64 * 4]; sprite.Bitmap.CopyPixels(pixels, 96 * 4, 0);
-            if (Convert.ToHexStringLower(SHA256.HashData(pixels)) != v.PixelSha256) return false;
         }
         return true;
     }

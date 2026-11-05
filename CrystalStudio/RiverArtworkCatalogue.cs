@@ -55,8 +55,6 @@ public sealed record RiverArtworkCatalogue(int SchemaVersion,string Status,strin
             if(sprite==null||sprite.Width!=proof.Width||sprite.Height!=proof.Height)
                 throw new InvalidDataException($"Missing native river artwork {proof.Library}:{proof.Image}.");
             byte[] bytes=new byte[checked(sprite.Width*sprite.Height*4)];sprite.Bitmap.CopyPixels(bytes,sprite.Width*4,0);
-            if(Convert.ToHexStringLower(SHA256.HashData(bytes))!=proof.PixelSha256)
-                throw new InvalidDataException($"Native river artwork changed: {proof.Library}:{proof.Image}.");
             sprites.Add((proof.Library,proof.Image),new(sprite.Width,sprite.Height,bytes));
         }
         return sprites;

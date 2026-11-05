@@ -97,7 +97,7 @@ public partial class MainWindow : EditorWindow
 
     private int pendingRefresh;
 
-    private readonly SettingsStore settingsStore = new();
+    private readonly SettingsStore settingsStore;
 
     private LibrarySettings settings = new();
 
@@ -111,10 +111,11 @@ public partial class MainWindow : EditorWindow
 
     public MainWindow() : this(new AssetHistoryStore()) { }
 
-    public MainWindow(AssetHistoryStore historyStore, RecentMapStore? recentMapStore = null)
+    public MainWindow(AssetHistoryStore historyStore, RecentMapStore? recentMapStore = null, SettingsStore? settingsProvider = null)
 
     {
 
+        settingsStore = settingsProvider ?? new SettingsStore();
         assetHistory = historyStore;
         recentMaps = recentMapStore ?? new RecentMapStore();
         InitializeComponent(); ThemeService.Initialize(); DarkModeToggle.IsChecked = ThemeService.ForceDark; initialized = true; AssetList.ItemsSource = choices;
@@ -335,6 +336,8 @@ public partial class MainWindow : EditorWindow
 
         ToolPanel.Margin = new Thickness(5);
 
+        docking.Add("Maps", CreateMapBrowser(), Dock.Left, 2);
+
         docking.Add("Tools", new ScrollViewer { Content = ToolPanel, VerticalScrollBarVisibility = ScrollBarVisibility.Auto }, Dock.Left, 1);
 
         docking.Add("Tool Options", new ScrollViewer { Content = options, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled, VerticalScrollBarVisibility = ScrollBarVisibility.Auto }, Dock.Left, 0.15);
@@ -399,7 +402,7 @@ public partial class MainWindow : EditorWindow
 
     }
 
-    private void UpdateLabels() { if (!initialized || Viewport == null) return; ZoomLabel.Content = ($"{Viewport.Zoom:P0}"); SelectedLabel.Text = (Viewport.Tool == EditorTool.TownStamp ? (Viewport.Town?.Name ?? LocalText.T("Generate a Town")) : (Viewport.Tool == EditorTool.Wall ? (Viewport.WallCatalogueError ?? LocalText.Format("Wall · {0} · Drag to connect · Shift to remove", LocalText.T(Viewport.WallFamily?.DisplayName ?? "Choose type"))) : (Viewport.Tool == EditorTool.SpecialBrush ? LocalText.Format("Special Brush · {0} · {1} variant(s) · {2}% density",LocalText.T(Viewport.SpecialBrushKind.BrushName()),Viewport.Trees.Count,Viewport.TreeOptions.Density) : (Viewport.IsStampPickingTool ? (Viewport.PickedStamp?.Name ?? ((Viewport.Tool == EditorTool.Clone ? LocalText.T("Choose a placed stamp to clone") : LocalText.T("Choose a placed stamp to move")))) : (StampMode ? (selectedStampName ?? LocalText.T("Choose an object stamp")) : (Viewport.IsCollisionLayer ? LocalText.Format("{0} collision · Paint to apply, erase to remove",LocalText.T(Viewport.Layer == MapLayer.LowCollision ? "Low" : "High")) : (Viewport.SpriteIndex < 0 ? ((PatternPalette ? LocalText.T("Select a terrain set to brush") : LocalText.T("Select a sprite to place"))) : (PatternPalette ? LocalText.Format("Library {0} / Terrain set {1}",Viewport.Library,Viewport.SpriteIndex / AutoTileBrush.BlockSize(AssetLayout(Viewport.Library, Viewport.Layer))) : LocalText.Format("Library {0} / Sprite {1}",Viewport.Library,Viewport.SpriteIndex))))))))); UpdateWorkspace(); }
+    private void UpdateLabels() { if (!initialized || Viewport == null) return; ZoomLabel.Content = ($"{Viewport.Zoom:P0}"); SelectedLabel.Text = (Viewport.Tool == EditorTool.TownStamp ? (Viewport.Town?.Name ?? LocalText.T("Generate a Town")) : (Viewport.Tool == EditorTool.Wall ? (Viewport.WallCatalogueError ?? LocalText.Format("Wall · {0} · Drag to connect · Shift to remove", LocalText.T(Viewport.WallFamily?.DisplayName ?? "Choose type"))) : (Viewport.Tool == EditorTool.SpecialBrush ? LocalText.Format("Special Brush · {0} · {1} variant(s) · {2}% density",LocalText.T(Viewport.SpecialBrushKind.BrushName()),Viewport.Trees.Count,Viewport.TreeOptions.Density) : (Viewport.IsStampPickingTool ? (Viewport.PickedStamp?.Name ?? ((Viewport.Tool == EditorTool.Clone ? LocalText.T("Choose a placed stamp to clone") : LocalText.T("Choose a placed stamp to move")))) : (StampMode ? (selectedStampName ?? LocalText.T("Choose an object stamp")) : (Viewport.IsCollisionLayer ? LocalText.Format("{0} collision · Paint to apply, erase to remove",LocalText.T(Viewport.Layer == MapLayer.LowCollision ? "Low" : "High")) : (Viewport.SpriteIndex < 0 ? ((PatternPalette ? LocalText.T("Select a terrain set to brush") : LocalText.T("Select a sprite to place"))) : (PatternPalette ? LocalText.Format("Library {0} / Terrain set {1}",Viewport.Library,Viewport.SpriteIndex / AutoTileBrush.BlockSize(AssetLayout(Viewport.Library, Viewport.Layer))) : LocalText.Format("Library {0} / Sprite {1}",Viewport.Library,Viewport.SpriteIndex))))))))); UpdateWorkspace(); UpdateMapBrowserControls(); }
 
     private async Task Run(Func<Task> action) { if (busy) return; busy = true; UpdateLabels(); try { await action(); } catch (Exception ex) { MessageBox.Show(this, ex.Message, "Crystal Studio", MessageBoxButton.OK, MessageBoxImage.Warning); Status.Text = LocalText.T("Operation failed"); } finally { busy = false; UpdateLabels(); } }
 
@@ -526,6 +529,7 @@ public partial class MainWindow : EditorWindow
             catch { next.Dispose(); throw; }
             if (closed) { next.Dispose(); return; }
             InstallLibraries(next);
+            await RefreshMapBrowserAsync(root);
 
         }, firstSetup)
 
@@ -554,6 +558,7 @@ public partial class MainWindow : EditorWindow
         catch { next.Dispose(); throw; }
         if (closed) { next.Dispose(); return; }
         InstallLibraries(next);
+        await RefreshMapBrowserAsync(root);
 
     }
 

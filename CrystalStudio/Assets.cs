@@ -339,6 +339,7 @@ public sealed class AssetStore : IDisposable
     private void Add(int id, string root, string relative) { string path = System.IO.Path.Combine(root, relative.Replace('\\', System.IO.Path.DirectorySeparatorChar) + ".lib"); if (File.Exists(path)) Libraries[id] = new(path); }
     private void Register(string root)
     {
+        root = DataPaths.ResolveLibraryFolder(root);
         if (Format == AssetSourceFormat.Sanxiu) { RegisterSanxiu(root); return; }
         // IDs follow the reference editor's Crystal library table.
         string map = Directory.Exists(System.IO.Path.Combine(root, "Map")) ? System.IO.Path.Combine(root, "Map") : root;

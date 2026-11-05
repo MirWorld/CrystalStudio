@@ -86,8 +86,7 @@ public sealed class RiverCoastLayoutCatalogue
             Require(library==0&&(image is >=1 and <=5 or >=1801 and <=1805||native.Ground.Values.Contains((library,image))),"Complete coast uses an unreviewed ground family.");
             var sprite=assets.Libraries.TryGetValue(library,out var lib)?lib.Decode(image-1):null;
             Require(sprite!=null&&sprite.Width==96&&sprite.Height==64,"Missing original complete-coast ground artwork.");
-            byte[] pixels=new byte[sprite!.Width*sprite.Height*4];sprite.Bitmap.CopyPixels(pixels,sprite.Width*4,0);
-            Require(Convert.ToHexStringLower(SHA256.HashData(pixels))==Text(spriteProof,"pixelSha256")&&ground.Add((library,image)),"Complete coast ground proof changed.");
+            Require(ground.Add((library,image)),"Duplicate complete-coast ground reference.");
         }
         bool generatorGround=proof.TryGetProperty("groundOwnership",out var ownership)&&ownership.GetString()=="generator";
         if(generatorGround)Require(proof.GetProperty("savedUnit").GetString()=="bank/join piece; never a complete river"

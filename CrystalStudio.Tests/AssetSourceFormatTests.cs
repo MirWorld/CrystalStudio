@@ -8,6 +8,20 @@ namespace CrystalStudio.Tests;
 public sealed class AssetSourceFormatTests
 {
     [Fact]
+    public void SanxiuGameRootSelectsDataInsteadOfTheSiblingMapFolder()
+    {
+        using var files = new TemporaryAssets();
+        files.Write("Tiles.Lib", 5, 12, 34);
+        string data = Path.Combine(files.Root, "Data");
+        Directory.CreateDirectory(data);
+        Directory.Move(Path.Combine(files.Root, "Map"), Path.Combine(data, "Map"));
+        Directory.CreateDirectory(Path.Combine(files.Root, "Map"));
+        using var store = AssetStore.Load(files.Root, AssetSourceFormat.Sanxiu);
+        Assert.Equal(12, Fixture.Pixels(store.Libraries[0].Decode(0)!.Bitmap)[0]);
+        Assert.StartsWith(data, store.Libraries[0].Path);
+    }
+
+    [Fact]
     public void SanxiuLibraryLoadsPlainV5AndMapsLayerIds()
     {
         using var files = new TemporaryAssets();

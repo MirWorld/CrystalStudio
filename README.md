@@ -13,12 +13,13 @@ Requires the .NET 10 SDK. Keep the `CrystalStudio`, `catalogue` and
 `Objects` folders together, then run these commands from their parent folder:
 
 ```powershell
-dotnet build CrystalStudio/CrystalStudio.csproj -c Release
+dotnet build CrystalStudio.sln -c Debug
+dotnet build CrystalStudio.sln -c Release
 dotnet run --project CrystalStudio/CrystalStudio.csproj -c Release
 ./Publish-Avalonia.ps1
 ```
 
-发布脚本默认先执行自动验证，然后生成包含 .NET 运行时的 Windows x64 版本，目录为 `../Build/CrystalStudioAvalonia/win-x64`。`catalogue` 和 `Objects` 会一并复制。可通过 `-OutputDirectory` 指定其他目录。
+发布脚本默认先执行自动验证，然后生成包含 .NET 运行时的 Windows x64 版本，目录为项目根目录的 `Build/Release`。`catalogue` 和 `Objects` 会一并复制。可通过 `-OutputDirectory` 指定其他目录。
 
 界面沿用原版 32×32 工具按钮、16–18 图标、26 高度的图层行以及紧凑页签。地图和交互覆盖层独立保存绘制结果，因此鼠标悬停不会重新提交地图；缩略视图按图集批量绘制，并保留原有层次、透明叠加、动画和灯光逻辑。
 
@@ -32,16 +33,20 @@ GUI 支持简体中文和 English。通过 **View → Language (restart required
 
 语言设置独立于资源目录保存，首次配置资源目录前也可选择语言。界面文字、内置分类及选项提供中英文显示；物体名称、资源文件名、文件路径和分类保存标识保留原文，因此地图与物体格式保持兼容。外部异常详情及未登记的目录名称可能仍显示原文。
 
-当前 Windows 版本位于 `../Build/CrystalStudioAvalonia/i18n-restart/win-x64/CrystalStudio.exe`。GUI 对照、22 项测试、语言重启验证、真实地图保存校验及性能数据见 [VALIDATION.md](VALIDATION.md)。
+解决方案为根目录的 `CrystalStudio.sln`，包含编辑器和测试项目。Debug、Release 主程序分别输出到 `Build/Debug/CrystalStudio.exe`、`Build/Release/CrystalStudio.exe`；测试程序位于各自的 `Tests` 子目录。此前的 GUI、语言重启、地图保存和性能验证记录见 [VALIDATION.md](VALIDATION.md)。
 
 Game artwork is not included. You will need your game client's **Data** folder
 containing Crystal `.lib` files.
 
+选择包含 `Data` 和 `Map` 的游戏根目录后，左侧「地图列表」自动列出 Map 及子目录中的 `.map` 文件。单击打开，重复点击切回已有标签并保留未保存内容；支持搜索和刷新。新增界面随现有语言设置显示中英文。 拖动侧栏与画布之间的竖线调整宽度，拖动面板之间的横线调整高度；拖标题可换位置或拖出成为浮动窗口。布局自动保存。若已锁定布局，请先在「视图」中取消「锁定面板布局」。
+
+生成器不再要求外部素材像素指纹与原始素材一致，允许替换图片。仍检查素材能否读取、图片编号、必要尺寸和模板结构；内置目录及地图编辑元数据的完整性校验保留。
+
 ## Getting Started
 
 1. Start the editor using the command above, or run `CrystalStudio.exe` from a published release.
-2. Open **Edit > Settings** and select your game client's **Data** folder.
-3. Open a map with **File > Open Map**, or choose **File > New Map**.
+2. Open **Edit > Settings** and select your game client folder containing **Data** and **Map**. Libraries load from Data; existing Data and library folder selections remain supported.
+3. Click a `.map` file in the left **Maps** panel to open it. The list includes subfolders and supports search and refresh. **File > Open Map** and **File > New Map** remain available.
 4. Choose a tool and an asset, then edit the map.
 5. Save with **Ctrl+S**.
 

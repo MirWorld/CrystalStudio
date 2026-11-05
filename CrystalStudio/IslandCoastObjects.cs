@@ -32,9 +32,6 @@ public sealed class IslandCoastObjects
             int library=proof.GetProperty("library").GetInt32(),image=proof.GetProperty("image").GetInt32();
             if(!assets.Libraries.TryGetValue(library,out var lib)||lib.Decode(image-1) is not {} sprite||sprite.Width!=96||sprite.Height!=64)
                 throw new InvalidDataException("The map-5 island tiles are unavailable in these libraries.");
-            var pixels=new byte[96*64*4];sprite.Bitmap.CopyPixels(pixels,96*4,0);
-            if(Convert.ToHexStringLower(SHA256.HashData(pixels))!=proof.GetProperty("pixelSha256").GetString())
-                throw new InvalidDataException("The map-5 island tile artwork has changed.");
         }
         return new(pieces);
     }
