@@ -3,6 +3,10 @@ namespace CrystalStudio;
 public sealed class SettingsWindow : EditorWindow
 {
     public SettingsWindow(string? currentFolder, Func<string, Task> apply, bool firstSetup = false)
+        : this(currentFolder, AssetSourceFormat.Default, (folder, _) => apply(folder), firstSetup) { }
+
+    public SettingsWindow(string? currentFolder, AssetSourceFormat currentFormat,
+        Func<string, AssetSourceFormat, Task> apply, bool firstSetup = false)
     {
         
         this.Title = (firstSetup ? LocalText.T("Welcome to Crystal Studio") : LocalText.T("Crystal Studio Settings"));
@@ -23,6 +27,12 @@ public sealed class SettingsWindow : EditorWindow
         DockPanel.SetDock(browse, Dock.Right); folderRow.Children.Add(browse);
         var folder = new TextBox { Text = currentFolder ?? "", IsReadOnly = true, VerticalContentAlignment = VerticalAlignment.Center };
         folderRow.Children.Add(folder); panel.Children.Add(folderRow);
+        panel.Children.Add(new TextBlock { Text = LocalText.T("Asset format"), Margin = new(0, 14, 0, 5) });
+        var defaultFormat = new RadioButton { Name = "DefaultAssetFormat", GroupName = "AssetSourceFormat",
+            Content = LocalText.T("Default (Crystal libraries)"), IsChecked = currentFormat != AssetSourceFormat.Sanxiu };
+        var sanxiuFormat = new RadioButton { Name = "SanxiuAssetFormat", GroupName = "AssetSourceFormat",
+            Content = LocalText.T("不紧张\\三修格式"), IsChecked = currentFormat == AssetSourceFormat.Sanxiu };
+        panel.Children.Add(defaultFormat); panel.Children.Add(sanxiuFormat);
         var buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right };
         var cancel = new Button { Content = (firstSetup ? LocalText.T("Set Up Later") : LocalText.T("Cancel")), IsCancel = true };
         var save = new Button { Theme = (Style)this.FindResource("PrimaryButton"), Content = (firstSetup ? LocalText.T("Save and Start") : LocalText.T("Save Changes")), IsDefault = true, IsEnabled = !string.IsNullOrWhiteSpace(currentFolder) };
@@ -54,12 +64,12 @@ public sealed class SettingsWindow : EditorWindow
         };
         save.Click += async (_, _) =>
         {
-            error.IsVisible = false; saving = true; save.IsEnabled = false; browse.IsEnabled = false; cancel.IsEnabled = false; languages.IsEnabled = false; save.Content = LocalText.T("Checking Libraries\u2026");
-            try { await apply(folder.Text); saving = false; DialogResult = true; }
+            error.IsVisible = false; saving = true; save.IsEnabled = false; browse.IsEnabled = false; cancel.IsEnabled = false; languages.IsEnabled = false; defaultFormat.IsEnabled = false; sanxiuFormat.IsEnabled = false; save.Content = LocalText.T("Checking Libraries\u2026");
+            try { await apply(folder.Text, sanxiuFormat.IsChecked == true ? AssetSourceFormat.Sanxiu : AssetSourceFormat.Default); saving = false; DialogResult = true; }
             catch (Exception ex)
             {
                 error.Text = (ex.Message); error.IsVisible = true;
-                saving = false; save.IsEnabled = true; browse.IsEnabled = true; cancel.IsEnabled = true; languages.IsEnabled = true; save.Content = (firstSetup ? LocalText.T("Save and Start") : LocalText.T("Save Changes"));
+                saving = false; save.IsEnabled = true; browse.IsEnabled = true; cancel.IsEnabled = true; languages.IsEnabled = true; defaultFormat.IsEnabled = true; sanxiuFormat.IsEnabled = true; save.Content = (firstSetup ? LocalText.T("Save and Start") : LocalText.T("Save Changes"));
             }
         };
     }

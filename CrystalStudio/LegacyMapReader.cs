@@ -37,6 +37,8 @@ namespace CrystalStudio.Formats
         public CellInfo[,] MapCells = null!;
         public string FileName;
         private byte[] Bytes = [];
+        public bool IsCrystalVersion1 => Bytes.Length >= 8 && Bytes[0] == 1 && Bytes[1] == 0 &&
+            Bytes[2] == (byte)'C' && Bytes[3] == (byte)'#';
 
         public MapReader(string FileName)
         {

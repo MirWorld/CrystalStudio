@@ -7,6 +7,7 @@ public sealed partial class MapViewport : SceneControl
     public MapDocument Document { get; private set; } = new(256, 256);
     public EditHistory History { get; private set; } = new();
     public AssetStore? Assets { get; set; }
+    private TilePatternLayout BrushLayout => AutoTileBrush.Layout(Library, Layer, Assets?.Format ?? AssetSourceFormat.Default);
     private EditorTool tool;
     public EditorTool Tool
     {
@@ -308,7 +309,7 @@ public sealed partial class MapViewport : SceneControl
             else if ((Tool == EditorTool.Brush || Tool == EditorTool.Pencil) && SpriteIndex >= 0 && !IsCollisionLayer)
             {
                 dc.PushOpacity(0.55);
-                var layout = AutoTileBrush.Layout(Library, Layer);
+                var layout = BrushLayout;
                 if (Tool == EditorTool.Brush && layout != TilePatternLayout.None && Assets?.Libraries.TryGetValue(Library, out var atlas) == true)
                 {
                     var key = (hover.X, hover.Y, BrushSize, Library, SpriteIndex, Layer, editRevision);
@@ -381,7 +382,7 @@ public sealed partial class MapViewport : SceneControl
         // This also handles long diagonal joins without truncating the preview neighbourhood.
         var copy = new MapDocument(Document.Width, Document.Height);
         var changed = new HashSet<(int X, int Y)>();
-        new AutoTileBrush(copy, new(), Layer, Library, SpriteIndex, atlasCount, AutoTileBrush.Layout(Library, Layer), (cx, cy) => changed.Add((cx, cy)), BrushSeed(x, y), Document.Get).Paint(x, y, BrushSize);
+        new AutoTileBrush(copy, new(), Layer, Library, SpriteIndex, atlasCount, BrushLayout, (cx, cy) => changed.Add((cx, cy)), BrushSeed(x, y), Document.Get).Paint(x, y, BrushSize);
         return changed.OrderBy(p => p.Y).ThenBy(p => p.X).Select(p => new StampCell(p.X, p.Y, copy.Get(p.X, p.Y))).ToList();
     }
     private bool BeginSelection(int x, int y)
@@ -463,7 +464,7 @@ public sealed partial class MapViewport : SceneControl
         if (Tool == EditorTool.SpecialBrush) { PaintTrees(x, y); return; }
         if (Tool != EditorTool.Brush && Tool != EditorTool.Pencil && Tool != EditorTool.Eraser) return;
         if (Tool != EditorTool.Eraser && !IsCollisionLayer && SpriteIndex < 0) return;
-        var layout = AutoTileBrush.Layout(Library, Layer);
+        var layout = BrushLayout;
         if (Tool == EditorTool.Brush && layout != TilePatternLayout.None && Assets?.Libraries.TryGetValue(Library, out var atlas) == true)
         {
             new AutoTileBrush(Document, History, Layer, Library, SpriteIndex, atlas.Count, layout, InvalidateCell, BrushSeed(x, y)).Paint(x, y, BrushSize);

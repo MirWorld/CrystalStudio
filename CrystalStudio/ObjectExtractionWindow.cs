@@ -7,6 +7,7 @@ internal sealed class ObjectExtractionWindow : EditorWindow
     private readonly Func<ExtractionInput> current;
     private readonly Action saved;
     private readonly string indexPath;
+    private readonly AssetSourceFormat assetFormat;
     private readonly ComboBox scope=new(){ItemsSource=new[]{"Current map","Current selection","Map directory"},SelectedIndex=0,MinWidth=150};
     private readonly TextBox directory=new(){Watermark=LocalText.T("Map directory"),MinWidth=180};
     private readonly TextBox resource=new(){Watermark=LocalText.T("Resource folder"),MinWidth=180};
@@ -31,9 +32,10 @@ internal sealed class ObjectExtractionWindow : EditorWindow
     private bool running,closed,refreshing;
     private int page;
     private const int PageSize=48;
-    internal ObjectExtractionWindow(Func<ExtractionInput> current,string? resourceFolder,string indexPath,Action saved)
+    internal ObjectExtractionWindow(Func<ExtractionInput> current,string? resourceFolder,string indexPath,Action saved,
+        AssetSourceFormat assetFormat = AssetSourceFormat.Default)
     {
-        this.current=current;this.indexPath=indexPath;this.saved=saved;
+        this.current=current;this.indexPath=indexPath;this.saved=saved;this.assetFormat=assetFormat;
         Title=LocalText.T("Extract Map Objects");Width=1420;Height=900;MinWidth=1120;MinHeight=700;WindowStartupLocation=WindowStartupLocation.CenterOwner;
         resource.Text=resourceFolder;
         scope.Name="ExtractionScope";directory.Name="ExtractionDirectory";
@@ -126,7 +128,7 @@ internal sealed class ObjectExtractionWindow : EditorWindow
             }
             running=true;operation.Dispose();operation=new();UpdateState();details.IsEnabled=false;progress.IsIndeterminate=true;
             Review=null;session=null;await ClearPreviews();RefreshCategories();assets?.Dispose();string folderPath=resource.Text!;
-            assets=await Task.Run(()=>AssetStore.Load(folderPath),operation.Token);
+            assets=await Task.Run(()=>AssetStore.Load(folderPath,assetFormat),operation.Token);
             var service=new ObjectExtractionService(indexPath,assets);
             var updates=new Progress<ExtractionProgress>(p=>{if(!closed)status.Text=LocalText.Format("{0} · {1:N0} maps · {2:N0} candidates · {3:N0} occurrences\n{4}",LocalText.T(p.Phase),p.Maps,p.Candidates,p.Occurrences,p.Source);});
             var result=await service.ScanAsync(inputs,operation.Token,updates);

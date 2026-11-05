@@ -9,6 +9,7 @@ internal sealed record ExtractionSession(string Id,List<ExtractionCandidate> Can
 internal sealed class ObjectExtractionService
 {
     private readonly string indexPath;
+    private readonly AssetSourceFormat format;
     private readonly Func<int,int,SpriteHeader?> header;
     private readonly Dictionary<(int,int),SpriteHeader?> headers=[];
     private readonly Dictionary<(int,int),HashSet<string>> associations=[];
@@ -19,7 +20,7 @@ internal sealed class ObjectExtractionService
     private StampIdentifier.Catalogue templates=null!;
     public ObjectExtractionService(string indexPath,Func<int,int,SpriteHeader?> header){this.indexPath=indexPath;this.header=header;}
     public ObjectExtractionService(string indexPath,AssetStore assets):this(indexPath,(lib,image)=>
-        assets.Libraries.TryGetValue(lib,out var library)?library.ReadHeader(image):null){}
+        assets.Libraries.TryGetValue(lib,out var library)?library.ReadHeader(image):null){format=assets.Format;}
     public Task<ExtractionSession> ScanAsync(IEnumerable<ExtractionInput> inputs,CancellationToken token,IProgress<ExtractionProgress>? progress=null)
         =>Task.Run(()=>Scan(inputs,token,progress),token);
     private void Prepare(CancellationToken token,IProgress<ExtractionProgress>? progress)
@@ -60,7 +61,7 @@ internal sealed class ObjectExtractionService
         {
             token.ThrowIfCancellationRequested();progress?.Report(new("Reading map",sources.Count,unique.Count,occurrences,input.Source));
             MapDocument map;
-            try{map=input.Snapshot??MapDocument.Load(input.Source);token.ThrowIfCancellationRequested();}
+            try{map=input.Snapshot??MapDocument.Load(input.Source,format);token.ThrowIfCancellationRequested();}
             catch(Exception ex) when(ex is IOException or InvalidDataException or UnauthorizedAccessException or ArgumentException or IndexOutOfRangeException)
             {warnings.Add(input.Source+": "+ex.Message);continue;}
             sources.Add(input.Source);

@@ -34,6 +34,7 @@ public sealed partial class MapDocument(int width, int height)
 {
     public int Width { get; } = width;
     public int Height { get; } = height;
+    public AssetSourceFormat SourceFormat { get; internal set; }
     private readonly Dictionary<int, Cell> cells = [];
     private readonly Dictionary<int, Cell> presentationCells = [];
     private static readonly Cell empty = new();
@@ -51,17 +52,24 @@ public sealed partial class MapDocument(int width, int height)
         else presentationCells.Remove(k);
         PickupRevision++;
     }
-    public static MapDocument Load(string path)
+    public static MapDocument Load(string path, AssetSourceFormat format = AssetSourceFormat.Default)
     {
         if (!File.Exists(path)) throw new FileNotFoundException("Map file not found.", path);
         var legacy = new MapReader(path);
         if (legacy.Width <= 0 || legacy.Height <= 0 || (long)legacy.Width * legacy.Height > 16_000_000) throw new InvalidDataException("Invalid map dimensions.");
-        var d = new MapDocument(legacy.Width, legacy.Height);
+        var d = new MapDocument(legacy.Width, legacy.Height) { SourceFormat = format };
+        bool sanxiuIds = format == AssetSourceFormat.Sanxiu && legacy.IsCrystalVersion1;
         for (int x = 0; x < d.Width; x++) for (int y = 0; y < d.Height; y++)
         {
             var s = legacy.MapCells[x, y] ?? throw new InvalidDataException("Incomplete map cell data.");
             var c = new Cell { BackLibrary = s.BackIndex, BackImage = s.BackImage, MiddleLibrary = s.MiddleIndex, MiddleImage = s.MiddleImage, Door = s.DoorIndex, DoorOffset = s.DoorOffset, MiddleFrames = s.MiddleAnimationFrame, MiddleTick = s.MiddleAnimationTick, TileAnimation = s.TileAnimationImage, TileOffset = s.TileAnimationOffset, TileFrames = s.TileAnimationFrames, Light = s.Light };
             if (s.HasFront) c.Foreground = new(s.FrontIndex, s.FrontImage, s.FrontAnimationFrame, s.FrontAnimationTick);
+            if (sanxiuIds)
+            {
+                if (c.MiddleLibrary >= 0 && c.MiddleImage != 0) c.MiddleLibrary = checked((short)(c.MiddleLibrary + 1000));
+                if (c.Foreground is { Library: >= 0 } front && (front.Image & 0x7FFF) != 0)
+                    c.Foreground = front with { Library = checked((short)(front.Library + 2000)) };
+            }
             d.Set(x, y, c);
         }
         StampMetadata.Read(path, d);
@@ -73,7 +81,19 @@ public sealed partial class MapDocument(int width, int height)
         {
             using var w = new BinaryWriter(stream, System.Text.Encoding.UTF8, leaveOpen: true);
             w.Write((short)1); w.Write((byte)'C'); w.Write((byte)'#'); w.Write(checked((short)Width)); w.Write(checked((short)Height));
-            for (int x = 0; x < Width; x++) for (int y = 0; y < Height; y++) CellCodec.Write(w, Get(x, y), true);
+            for (int x = 0; x < Width; x++) for (int y = 0; y < Height; y++)
+            {
+                Cell cell = Get(x, y);
+                if (SourceFormat == AssetSourceFormat.Sanxiu)
+                {
+                    cell = cell.Copy();
+                    if (cell.MiddleImage != 0 && cell.MiddleLibrary is >= 1000 and < 2000)
+                        cell.MiddleLibrary -= 1000;
+                    if (cell.Foreground is { Library: >= 2000 and < 3000 } front)
+                        cell.Foreground = front with { Library = (short)(front.Library - 2000) };
+                }
+                CellCodec.Write(w, cell, true);
+            }
             StampMetadata.Write(w, d: this);
         });
     }

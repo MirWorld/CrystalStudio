@@ -42,7 +42,7 @@ public partial class MainWindow
             Viewport.Tool is not (EditorTool.Brush or EditorTool.Pencil or EditorTool.Bucket) ||
             assets?.Libraries.TryGetValue(Viewport.Library, out var library) != true) return null;
         return AssetReference.Tile(library!.Path, Viewport.Library, Viewport.SpriteIndex, Viewport.Layer,
-            PatternPalette ? AutoTileBrush.Layout(Viewport.Library, Viewport.Layer) : TilePatternLayout.None);
+            PatternPalette ? AssetLayout(Viewport.Library, Viewport.Layer) : TilePatternLayout.None);
     }
 
     private void SaveAssetHistory()
