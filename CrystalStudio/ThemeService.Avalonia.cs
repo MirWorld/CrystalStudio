@@ -9,13 +9,13 @@ public static class ThemeService
     public static bool ForceDark { get; private set; }
     public static event Action? Changed;
     private static readonly string preferences = Path.Combine(EditorPaths.ProfileDirectory, "appearance.json");
-    private sealed record Preference(bool ForceDark);
+    internal sealed record Preference(bool ForceDark);
     public static Brush Brush(string key) => Application.Current?.TryFindResource(key, out var value) == true && value is Brush brush ? brush : Brushes.Gray;
     public static void Initialize()
     {
         if (initialized) return;
         initialized = true;
-        try { if (File.Exists(preferences)) ForceDark = JsonSerializer.Deserialize<Preference>(File.ReadAllText(preferences))?.ForceDark ?? false; }
+        try { if (File.Exists(preferences)) ForceDark = StudioJson.Deserialize<Preference>(File.ReadAllText(preferences))?.ForceDark ?? false; }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException) { }
         if (Application.Current?.PlatformSettings is { } platform) platform.ColorValuesChanged += (_, _) => ApplyPlatform();
         ApplyPlatform();

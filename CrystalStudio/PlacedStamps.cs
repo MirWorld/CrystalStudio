@@ -144,7 +144,7 @@ internal static class StampMetadata
     // Missing fields already deserialize to these defaults in existing readers.
     private static readonly JsonSerializerOptions compact = new()
         { DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingDefault };
-    private sealed record Payload(int Version,List<PlacedStamp> Stamps);
+    internal sealed record Payload(int Version,List<PlacedStamp> Stamps);
     private const int Limit=256*1024*1024;
     private sealed class LimitedWriteStream(Stream target):Stream
     {
@@ -160,7 +160,7 @@ internal static class StampMetadata
     {
         if(d.PlacedStamps.Count==0)return;
         int version=d.PlacedStamps.Any(s=>s.Wall!=null)?3:d.PlacedStamps.Any(s=>s.Changes.Any(c=>c.OwnedFronts!=null))?2:1;
-        using var compressed=new MemoryStream();using(var zip=new BrotliStream(compressed,CompressionLevel.Fastest,true))JsonSerializer.Serialize(new LimitedWriteStream(zip),new Payload(version,[..d.PlacedStamps]),compact);
+        using var compressed=new MemoryStream();using(var zip=new BrotliStream(compressed,CompressionLevel.Fastest,true))StudioJson.Serialize(new LimitedWriteStream(zip),new Payload(version,[..d.PlacedStamps]),compact);
         if(compressed.Length>Limit)throw new InvalidDataException("Placed-object metadata is too large.");
         var data=compressed.ToArray();w.Write(data);w.Write((long)data.Length);w.Write(SHA256.HashData(data));w.Write(magic);
     }
@@ -179,7 +179,7 @@ internal static class StampMetadata
             if(!SHA256.HashData(data).SequenceEqual(hash))throw new InvalidDataException("Metadata checksum failed.");
             using var zip=new BrotliStream(new MemoryStream(data),CompressionMode.Decompress);using var expanded=new MemoryStream();byte[] buffer=new byte[8192];int n;
             while((n=zip.Read(buffer))>0){if(expanded.Length+n>Limit)throw new InvalidDataException("Metadata expands beyond the size limit.");expanded.Write(buffer,0,n);}
-            var payload=JsonSerializer.Deserialize<Payload>(expanded.ToArray())??throw new InvalidDataException("Empty stamp metadata.");
+            var payload=StudioJson.Deserialize<Payload>(expanded.ToArray())??throw new InvalidDataException("Empty stamp metadata.");
             if(payload.Version is not (1 or 2 or 3)||payload.Stamps==null||payload.Stamps.Count>100000||payload.Stamps.Select(s=>s.Id).Distinct().Count()!=payload.Stamps.Count)throw new InvalidDataException("Invalid stamp metadata version or instances.");
             foreach(var s in payload.Stamps)
             {

@@ -35,14 +35,14 @@ internal sealed class ForegroundImagesConverter : JsonConverter<ForegroundImages
         if (reader.TokenType != JsonTokenType.StartArray) throw new JsonException("Invalid foreground metadata.");
         if (!reader.Read()) throw new JsonException("Incomplete foreground metadata.");
         if (reader.TokenType == JsonTokenType.EndArray) return default;
-        var image = JsonSerializer.Deserialize<Front>(ref reader, options) ?? throw new JsonException("Invalid foreground image.");
+        var image = StudioJson.Deserialize<Front>(ref reader, options) ?? throw new JsonException("Invalid foreground image.");
         if (!reader.Read() || reader.TokenType != JsonTokenType.EndArray) throw new JsonException("A cell supports one foreground image.");
         return new(image);
     }
     public override void Write(Utf8JsonWriter writer, ForegroundImages value, JsonSerializerOptions options)
     {
         writer.WriteStartArray();
-        if (value.Value is { } image) JsonSerializer.Serialize(writer, image, options);
+        if (value.Value is { } image) StudioJson.Serialize(writer, image, options);
         writer.WriteEndArray();
     }
 }

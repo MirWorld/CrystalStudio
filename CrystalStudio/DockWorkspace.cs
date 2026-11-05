@@ -38,7 +38,7 @@ public sealed class DockWorkspace : Grid
     public static IReadOnlyList<LayoutEntry> LoadDefaultLayout()
     {
         using var stream = typeof(DockWorkspace).Assembly.GetManifestResourceStream("CrystalStudio.DefaultWorkspace.json");
-        return stream is null ? [] : JsonSerializer.Deserialize<List<LayoutEntry>>(stream) ?? [];
+        return stream is null ? [] : StudioJson.Deserialize<List<LayoutEntry>>(stream) ?? [];
     }
 
     public void SetLayoutLocked(bool locked)
@@ -233,7 +233,7 @@ public sealed class DockWorkspace : Grid
         try
         {
             IReadOnlyList<LayoutEntry>? entries = File.Exists(layoutPath)
-                ? JsonSerializer.Deserialize<List<LayoutEntry>>(File.ReadAllText(layoutPath)) : defaultLayout;
+                ? StudioJson.Deserialize<List<LayoutEntry>>(File.ReadAllText(layoutPath)) : defaultLayout;
             if (entries is null) return;
             IsLayoutLocked = false;
             ApplyLayout(entries);

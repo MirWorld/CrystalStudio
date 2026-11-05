@@ -10,13 +10,14 @@ public sealed record TreeListDocument(int Version, string Name, List<TreeListEnt
 // Share layouts and library/image references, so custom trees do not depend on local .X file paths.
 public static class TreeBrushList
 {
+    internal sealed record EntryIdentity(string Name, IReadOnlyList<StampCell> Cells);
     private const int MaxTrees = 1000, MaxCells = 250_000, MaxBytes = 32 * 1024 * 1024;
     private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true, WriteIndented = true };
 
     public static TreeListEntry Entry(string name, string type, IEnumerable<StampCell> cells)
     {
         var tree = BrushTree.FromCells(name, "", cells);
-        string id = Convert.ToHexString(SHA256.HashData(JsonSerializer.SerializeToUtf8Bytes(new { Name = name, Cells = tree.Cells })));
+        string id = Convert.ToHexString(SHA256.HashData(StudioJson.SerializeToUtf8Bytes(new EntryIdentity(name, tree.Cells))));
         return new(id, name, type, tree.Cells.Select(c => c with { Cell = c.Cell.Copy() }).ToList());
     }
 
@@ -46,14 +47,14 @@ public static class TreeBrushList
     {
         using var stream = File.OpenRead(path);
         if (stream.Length > MaxBytes) throw new InvalidDataException("Tree list exceeds the 32 MiB limit.");
-        try { return Validate(JsonSerializer.Deserialize<TreeListDocument>(stream, JsonOptions)); }
+        try { return Validate(StudioJson.Deserialize<TreeListDocument>(stream, JsonOptions)); }
         catch (JsonException error) { throw new InvalidDataException("Invalid tree list cell data.", error); }
     }
 
     public static void Save(string path, string name, IEnumerable<TreeListEntry> trees)
     {
         var document = Validate(new(1, name, trees.ToList()));
-        byte[] json = JsonSerializer.SerializeToUtf8Bytes(document, JsonOptions);
+        byte[] json = StudioJson.SerializeToUtf8Bytes(document, JsonOptions);
         if (json.Length > MaxBytes) throw new InvalidDataException("Tree list exceeds the 32 MiB limit.");
         AtomicFile.Write(path, stream => stream.Write(json));
     }

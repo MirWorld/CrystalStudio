@@ -22,7 +22,7 @@ public sealed class SettingsStore
     private static LibrarySettings Read(string path)
     {
         using var stream = File.OpenRead(path);
-        return JsonSerializer.Deserialize<LibrarySettings>(stream)
+        return StudioJson.Deserialize<LibrarySettings>(stream)
             ?? throw new InvalidDataException("Settings are empty. Open Settings to configure your library folder.");
     }
     public void Save(LibrarySettings settings) => AtomicFile.WriteJson(FilePath, settings);
