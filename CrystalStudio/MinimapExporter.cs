@@ -36,7 +36,7 @@ internal static class MinimapExporter
 
             void Add(int library, int image, bool blend)
             {
-                if (library >= 0 && image >= 0) commands.Add((x, y, layer, library, image, blend));
+                if (library >= 0 && image >= 0 && !MapSpriteDrawing.SkipFront(library, document.SourceFormat)) commands.Add((x, y, layer, library, image, blend));
             }
         }
 

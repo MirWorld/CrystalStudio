@@ -6,6 +6,10 @@ internal static class MapSpriteDrawing
     internal static int MiddleFrames(byte frames) => frames == 255 ? 0 :
         (frames & 15) > 0 ? frames & 15 : frames;
     internal static bool MiddleBlend(byte frames) => frames != 255 && (frames & 15) is 8 or 10;
+    internal static bool SkipFront(int library, AssetSourceFormat format) =>
+        format == AssetSourceFormat.Sanxiu && library == 2200;
+
+    private static bool IsSanxiuSpecial(int library) => library is 2012 or 2025 or 2026 or 2027 or 2028 || library > 2200 && library < 2400;
 
     internal static Rect Bounds(Sprite sprite, int x, int y, int library, int image,
         bool anchored, bool front = false, bool blend = false,
@@ -18,7 +22,25 @@ internal static class MapSpriteDrawing
     {
         double px = x * 48.0, py = y * 32.0;
         bool tile = (sprite.Width == 48 && sprite.Height == 32) || (sprite.Width == 96 && sprite.Height == 64);
-        if (front && blend)
+        if (format == AssetSourceFormat.Sanxiu && front)
+        {
+            bool special = IsSanxiuSpecial(library);
+            if (blend && special)
+            {
+                // UnityMir uses a three-cell (96 px) baseline for these blend
+                // libraries and applies the image header offset.
+                px += sprite.X; py += 32 - 96 + sprite.Y;
+            }
+            else
+            {
+                py += 32 - sprite.Height;
+                if (blend && image is >= 2723 and <= 2732)
+                { px += sprite.X; py += sprite.Y; }
+                else if (!blend && special && (sprite.X != 0 || sprite.Y != 0))
+                    py += 11;
+            }
+        }
+        else if (front && blend)
         {
             if (library is 14 or 27 || library is > 99 and < 199)
             { px += sprite.X; py += 32 - 96 + sprite.Y; }
@@ -31,11 +53,6 @@ internal static class MapSpriteDrawing
         else if (front && library == 28 && (sprite.X != 0 || sprite.Y != 0))
         { px += sprite.X; py += sprite.Y; }
         else if (anchored && (!tile || blend)) py += 32 - sprite.Height;
-        // UnityMir's MLibrary applies the image header offset when submitting a
-        // front object with offSet=true. Scope that behavior to Sanxiu so the
-        // existing Default/Crystal placement rules remain unchanged.
-        if (format == AssetSourceFormat.Sanxiu && front)
-        { px += sprite.X; py += sprite.Y; }
         return new(px, py, sprite.Width, sprite.Height);
     }
 

@@ -367,7 +367,7 @@ public sealed partial class MapViewport : SceneControl
     }
     private void AppendSprite(SceneGroup scene, MapSpriteDrawing.BackgroundIndex background, int x, int y, int lib, int index, bool anchored, bool front, bool blend)
     {
-        if (index < 0 || Assets?.Get(lib, index) is not Sprite sprite) return;
+        if (index < 0 || MapSpriteDrawing.SkipFront(lib, Document.SourceFormat) || Assets?.Get(lib, index) is not Sprite sprite) return;
         var bounds=MapSpriteDrawing.Bounds(sprite,x,y,lib,index,anchored,front,blend,Document.SourceFormat);
         if(blend&&!bounds.Intersects(detailCoverage))return;
         MapSpriteDrawing.Append(scene,sprite,bounds,blend,detailEffects,background);drawn++;
@@ -375,7 +375,7 @@ public sealed partial class MapViewport : SceneControl
     private void DrawSprite(SceneContext dc, int x, int y, int lib, int index, bool anchored) => DrawSprite(dc, x, y, lib, index, anchored, false);
     private void DrawSprite(SceneContext dc, int x, int y, int lib, int index, bool anchored, bool front, bool blend = false)
     {
-        if (index < 0) return; var s = Assets?.Get(lib, index); if (s == null) return;
+        if (index < 0 || MapSpriteDrawing.SkipFront(lib, Document.SourceFormat)) return; var s = Assets?.Get(lib, index); if (s == null) return;
         var bounds = MapSpriteDrawing.Bounds(s, x, y, lib, index, anchored, front, blend, Document.SourceFormat);
         dc.DrawImage(blend ? MapSpriteDrawing.Additive(s, bounds, new SceneGroup()) : s.Bitmap, bounds); drawn++;
     }
