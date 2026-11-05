@@ -16,7 +16,7 @@ public partial class MainWindow
             {
                 categoryIndex=StampCategories.Read(index);selectedStampPath=null;selectedStampPreview=null;
                 _=DiscoverStampsAsync();if(CategoryPalette)BuildPage();UpdateLabels();UpdateMapTabLabels();
-            }){Owner=this};
+            },settings.AssetFormat){Owner=this};
         extractionWindow.Closed+=(_,_)=>extractionWindow=null;extractionWindow.Show();
     }
 }

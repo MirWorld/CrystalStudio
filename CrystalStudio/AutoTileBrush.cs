@@ -16,7 +16,13 @@ public sealed class AutoTileBrush
     private readonly TilePatternLayout layout;
     public AutoTileBrush(MapDocument document, EditHistory edits, MapLayer layer, int library, int spriteIndex, int spriteCount, TilePatternLayout layout, Action<int, int> invalidate, int? seed = null, Func<int, int, Cell>? readCell = null) { random = seed.HasValue ? new Random(seed.Value) : new Random(); Document = document; this.readCell = readCell ?? document.Get; history = edits; this.layer = layer; this.library = library; this.spriteCount = spriteCount; this.layout = layout; this.invalidate = invalidate; selectTilesIndex = spriteIndex / BlockSize(layout); if (layout == TilePatternLayout.Mir3 && spriteIndex % 30 is >= 5 and <= 9) selectTilesIndex += (spriteCount + (spriteCount % 10 == 0 ? 0 : 1)) / 30; }
     public static int BlockSize(TilePatternLayout layout) => layout switch { TilePatternLayout.Mir2 => 50, TilePatternLayout.Mir3 => 30, TilePatternLayout.Mir3Mini => 5, TilePatternLayout.Small => 60, _ => 1 };
-    public static TilePatternLayout Layout(int library, MapLayer layer) => layer switch
+    public static TilePatternLayout Layout(int library, MapLayer layer, AssetSourceFormat format = AssetSourceFormat.Default) =>
+        format == AssetSourceFormat.Sanxiu ? layer switch
+        {
+            MapLayer.Ground when library is >= 0 and < 1000 => TilePatternLayout.Mir2,
+            MapLayer.Middle when library is >= 1000 and < 2000 => TilePatternLayout.Small,
+            _ => TilePatternLayout.None
+        } : layer switch
     {
         MapLayer.Ground when library == 0 || library is >= 100 and <= 109 => TilePatternLayout.Mir2,
         MapLayer.Ground when library >= 200 && ((library % 100) % 15) == 1 => TilePatternLayout.Mir3,

@@ -16,9 +16,51 @@ public sealed class CrystalLibrary
     public string Path { get; }
     public int Count => offsets.Length;
     private readonly int[] offsets;
-    public CrystalLibrary(string path)
+    private readonly ModernImage[]? modernImages;
+    private readonly record struct ModernImage(SpriteHeader Header, int Length, byte FileType);
+
+    public CrystalLibrary(string path, bool allowSanxiu = false)
     {
-        Path = System.IO.Path.GetFullPath(path); using var r = new BinaryReader(File.OpenRead(Path)); int version = r.ReadInt32(), count = r.ReadInt32();
+        Path = System.IO.Path.GetFullPath(path);
+        using var r = new BinaryReader(File.OpenRead(Path));
+        int version = r.ReadInt32();
+        if (allowSanxiu && version is 5 or 6)
+        {
+            if (r.ReadByte() != 0) throw new InvalidDataException("Only unencrypted Sanxiu v5/v6 libraries are supported: " + Path);
+            int headerLength = r.ReadInt32();
+            if (headerLength < 4 || headerLength > r.BaseStream.Length - r.BaseStream.Position || headerLength > 128 * 1024 * 1024)
+                throw new InvalidDataException("Invalid Sanxiu library header.");
+            byte[] header = r.ReadBytes(headerLength);
+            using var metadata = new BinaryReader(new MemoryStream(header));
+            int imageCount = metadata.ReadInt32();
+            if (imageCount < 0 || imageCount > 2_000_000 || (long)imageCount * (version == 6 ? 18 : 17) > header.Length - 4)
+                throw new InvalidDataException("Invalid Sanxiu image count.");
+            offsets = new int[imageCount];
+            modernImages = new ModernImage[imageCount];
+            long offset = r.BaseStream.Position;
+            for (int i = 0; i < imageCount; i++)
+            {
+                int width = metadata.ReadInt16(), height = metadata.ReadInt16();
+                int x = metadata.ReadInt16(), y = metadata.ReadInt16();
+                metadata.ReadInt16(); metadata.ReadInt16();
+                byte shadow = metadata.ReadByte();
+                byte fileType = version == 6 ? metadata.ReadByte() : (byte)0;
+                int length = metadata.ReadInt32(), maskLength = 0;
+                if ((shadow & 0x80) != 0)
+                {
+                    metadata.ReadInt16(); metadata.ReadInt16(); metadata.ReadInt16(); metadata.ReadInt16();
+                    maskLength = metadata.ReadInt32();
+                }
+                if (length < 0 || maskLength < 0 || offset > int.MaxValue || offset + length + maskLength > r.BaseStream.Length)
+                    throw new InvalidDataException("Invalid Sanxiu sprite offset or length.");
+                offsets[i] = (int)offset;
+                modernImages[i] = new(new(width, height, x, y), length, fileType);
+                offset += (long)length + maskLength;
+            }
+            return;
+        }
+        if (allowSanxiu && version != 3) throw new InvalidDataException("Expected a Sanxiu v3, v5, or v6 library: " + Path);
+        int count = r.ReadInt32();
         if ((version != 2 && version != 3) || count < 0 || count > 2_000_000 || (version == 3 ? 12L : 8L) + count * 4L > r.BaseStream.Length) throw new InvalidDataException("Expected a Crystal version 2 or 3 library.");
         if (version == 3) r.ReadInt32();
         offsets = new int[count]; for (int i = 0; i < count; i++) { offsets[i] = r.ReadInt32(); if (offsets[i] < 0 || offsets[i] >= r.BaseStream.Length) throw new InvalidDataException("Invalid sprite offset."); }
@@ -26,6 +68,20 @@ public sealed class CrystalLibrary
     public SpriteHeader? ReadHeader(int index)
     {
         if (index < 0 || index >= Count) return null;
+        if (modernImages is { } images)
+        {
+            var header = images[index].Header;
+            if (images[index].FileType == 1 && (header.Width <= 0 || header.Height <= 0) && images[index].Length >= 10)
+            {
+                using var stream = File.OpenRead(Path);
+                stream.Position = offsets[index];
+                Span<byte> gifHeader = stackalloc byte[10];
+                stream.ReadExactly(gifHeader);
+                if (gifHeader[..3].SequenceEqual("GIF"u8))
+                    header = new(gifHeader[6] | gifHeader[7] << 8, gifHeader[8] | gifHeader[9] << 8, header.X, header.Y);
+            }
+            return header.Width is > 0 and <= 8192 && header.Height is > 0 and <= 8192 ? header : null;
+        }
         using var r = new BinaryReader(File.OpenRead(Path)); r.BaseStream.Position = offsets[index];
         int w = r.ReadInt16(), h = r.ReadInt16(), x = r.ReadInt16(), y = r.ReadInt16();
         r.ReadInt16(); r.ReadInt16(); r.ReadByte(); int length = r.ReadInt32();
@@ -37,6 +93,11 @@ public sealed class CrystalLibrary
     public Sprite? Decode(int index)
     {
         if (index < 0 || index >= Count) return null;
+        if (modernImages != null)
+        {
+            using var reader = new BinaryReader(File.OpenRead(Path));
+            return DecodeModern(reader, index, offsets[index]);
+        }
         using var r = new BinaryReader(File.OpenRead(Path)); r.BaseStream.Position = offsets[index];
         int w = r.ReadInt16(), h = r.ReadInt16(), x = r.ReadInt16(), y = r.ReadInt16(); r.ReadInt16(); r.ReadInt16(); r.ReadByte(); int length = r.ReadInt32();
         if (w <= 0 || h <= 0) return null;
@@ -48,6 +109,7 @@ public sealed class CrystalLibrary
     {
         cancellation.ThrowIfCancellationRequested();
         if (index < 0 || index >= Count) return null;
+        if (modernImages != null) return DecodeModernOverview(reader, index, offsets[index], level, cancellation);
         reader.BaseStream.Position = offsets[index];
         int w = reader.ReadInt16(), h = reader.ReadInt16(), x = reader.ReadInt16(), y = reader.ReadInt16();
         reader.ReadInt16(); reader.ReadInt16(); reader.ReadByte(); int length = reader.ReadInt32();
@@ -76,10 +138,74 @@ public sealed class CrystalLibrary
         }
         finally { ArrayPool<byte>.Shared.Return(compressed); ArrayPool<byte>.Shared.Return(raw); }
     }
+
+    private byte[]? ReadModernBytes(BinaryReader reader, int index, long offset)
+    {
+        var image = modernImages![index];
+        if (image.Length == 0 || offset < 0 || image.Length > reader.BaseStream.Length - offset) return null;
+        reader.BaseStream.Position = offset;
+        return reader.ReadBytes(image.Length);
+    }
+
+    private Sprite? DecodeModern(BinaryReader reader, int index, long offset)
+    {
+        var image = modernImages![index];
+        var header = image.Header;
+        if (ReadHeader(index) == null) return null;
+        byte[]? compressed = ReadModernBytes(reader, index, offset);
+        if (compressed == null) return null;
+        if (image.FileType == 1)
+            return new(RasterImage.Load(new MemoryStream(compressed)), header.X, header.Y);
+        if (image.FileType != 0) throw new InvalidDataException($"Unsupported Sanxiu image type {image.FileType} at {Path}/{index}.");
+        byte[] raw = new byte[checked(header.Width * header.Height * 4)];
+        using (var gzip = new GZipStream(new MemoryStream(compressed), CompressionMode.Decompress))
+        { gzip.ReadExactly(raw); if (gzip.ReadByte() != -1) throw new InvalidDataException("Unexpected sprite pixel length."); }
+        return new(RasterImage.Create(header.Width, header.Height, 96, 96, RasterFormats.Bgra32, null, raw, header.Width * 4), header.X, header.Y);
+    }
+
+    private Sprite? DecodeModernOverview(BinaryReader reader, int index, long offset, int level, CancellationToken cancellation)
+    {
+        var image = modernImages![index];
+        var header = image.Header;
+        if (ReadHeader(index) == null) return null;
+        byte[]? compressed = ReadModernBytes(reader, index, offset);
+        if (compressed == null) return null;
+        int width = Math.Max(1, (header.Width + (1 << level) - 1) >> level);
+        int height = Math.Max(1, (header.Height + (1 << level) - 1) >> level);
+        if (image.FileType == 1)
+        {
+            using var bitmap = RasterImage.Load(new MemoryStream(compressed));
+            byte[] pixels = new byte[checked(bitmap.PixelWidth * bitmap.PixelHeight * 4)];
+            bitmap.CopyPixels(pixels, bitmap.PixelWidth * 4, 0);
+            width = Math.Max(1, (bitmap.PixelWidth + (1 << level) - 1) >> level);
+            height = Math.Max(1, (bitmap.PixelHeight + (1 << level) - 1) >> level);
+            return new(RasterImage.Create(width, height, 96, 96, bitmap.Format, null,
+                OverviewPixels.Reduce(pixels, bitmap.PixelWidth, bitmap.PixelHeight, width, height, cancellation), width * 4),
+                header.X, header.Y, bitmap.PixelWidth, bitmap.PixelHeight);
+        }
+        if (image.FileType != 0) throw new InvalidDataException($"Unsupported Sanxiu image type {image.FileType} at {Path}/{index}.");
+        byte[] raw = ArrayPool<byte>.Shared.Rent(checked(header.Width * header.Height * 4));
+        try
+        {
+            using var gzip = new GZipStream(new MemoryStream(compressed), CompressionMode.Decompress);
+            int pixelBytes = header.Width * header.Height * 4;
+            for (int start = 0; start < pixelBytes; start += 65536)
+            {
+                cancellation.ThrowIfCancellationRequested();
+                gzip.ReadExactly(raw.AsSpan(start, Math.Min(65536, pixelBytes - start)));
+            }
+            if (gzip.ReadByte() != -1) throw new InvalidDataException("Unexpected sprite pixel length.");
+            byte[] pixels = OverviewPixels.Reduce(raw, header.Width, header.Height, width, height, cancellation);
+            return new(RasterImage.Create(width, height, 96, 96, RasterFormats.Bgra32, null, pixels, width * 4),
+                header.X, header.Y, header.Width, header.Height);
+        }
+        finally { ArrayPool<byte>.Shared.Return(raw); }
+    }
 }
 public sealed class AssetStore : IDisposable
 {
     public Dictionary<int, CrystalLibrary> Libraries { get; } = [];
+    public AssetSourceFormat Format { get; }
     private readonly ConcurrentDictionary<(int, int), Sprite> cache = [];
     private readonly ConcurrentDictionary<(int, int), byte> pending = [];
     private readonly ConcurrentDictionary<(int, int, int), Sprite> overviewCache = [];
@@ -99,8 +225,9 @@ public sealed class AssetStore : IDisposable
     public long OverviewBytes => Interlocked.Read(ref overviewBytes);
     public int OverviewCached => overviewCache.Count;
     public bool IsResolved(int library, int index) => Volatile.Read(ref disposed) != 0 || cache.ContainsKey((library, index)) || failed.ContainsKey((library, index)) || !Libraries.TryGetValue(library, out var atlas) || index < 0 || index >= atlas.Count;
-    public AssetStore()
+    public AssetStore(AssetSourceFormat format = AssetSourceFormat.Default)
     {
+        Format = format;
         stopToken = stop.Token;
         workers = [Task.Run(Worker), Task.Run(Worker)];
     }
@@ -207,10 +334,12 @@ public sealed class AssetStore : IDisposable
             stop.Dispose();
         }, CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
     }
-    public static AssetStore Load(string root) { var store = new AssetStore(); try { store.Register(root); return store; } catch { store.Dispose(); throw; } }
+    public static AssetStore Load(string root, AssetSourceFormat format = AssetSourceFormat.Default)
+    { var store = new AssetStore(format); try { store.Register(root); return store; } catch { store.Dispose(); throw; } }
     private void Add(int id, string root, string relative) { string path = System.IO.Path.Combine(root, relative.Replace('\\', System.IO.Path.DirectorySeparatorChar) + ".lib"); if (File.Exists(path)) Libraries[id] = new(path); }
     private void Register(string root)
     {
+        if (Format == AssetSourceFormat.Sanxiu) { RegisterSanxiu(root); return; }
         // IDs follow the reference editor's Crystal library table.
         string map = Directory.Exists(System.IO.Path.Combine(root, "Map")) ? System.IO.Path.Combine(root, "Map") : root;
         Add(0, map, @"WemadeMir2\Tiles"); Add(1, map, @"WemadeMir2\Smtiles"); Add(2, map, @"WemadeMir2\Objects");
@@ -228,6 +357,34 @@ public sealed class AssetStore : IDisposable
         // Flat folders are accepted for the original Mir2 libraries too.
         if (Libraries.Count == 0) { Add(0, map, "Tiles"); Add(1, map, "SmTiles"); Add(2, map, "Objects"); for (int i = 2; i < 99; i++) Add(i + 1, map, "Objects" + i); }
         if (Libraries.Count == 0) throw new InvalidDataException("No Crystal .lib files found. Select Data, Data/Map, or a flat Mir2 library folder.");
+    }
+
+    private void RegisterSanxiu(string root)
+    {
+        string map = Directory.Exists(System.IO.Path.Combine(root, "Map")) ? System.IO.Path.Combine(root, "Map") :
+            Directory.Exists(System.IO.Path.Combine(root, "Data", "Map")) ? System.IO.Path.Combine(root, "Data", "Map") : root;
+        foreach (string path in Directory.EnumerateFiles(map))
+        {
+            string file = System.IO.Path.GetFileName(path);
+            if (!file.EndsWith(".lib", StringComparison.OrdinalIgnoreCase)) continue;
+            string name = System.IO.Path.GetFileNameWithoutExtension(file);
+            int id;
+            if (TryMapId(name, "Tiles", 0, out id) ||
+                TryMapId(name, "SmTiles", 1000, out id) ||
+                TryMapId(name, "Objects", 2000, out id)) Libraries[id] = new CrystalLibrary(path, allowSanxiu: true);
+        }
+        if (Libraries.Count == 0)
+            throw new InvalidDataException("No Sanxiu map libraries found. Select the Data folder or its Map folder.");
+    }
+
+    private static bool TryMapId(string name, string prefix, int baseId, out int id)
+    {
+        id = -1;
+        if (name.Equals(prefix, StringComparison.OrdinalIgnoreCase)) { id = baseId; return true; }
+        if (!name.StartsWith(prefix, StringComparison.OrdinalIgnoreCase) ||
+            !int.TryParse(name.AsSpan(prefix.Length), out int number) || number is < 2 or > 1000) return false;
+        id = baseId + number - 1;
+        return true;
     }
 }
 

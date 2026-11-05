@@ -1,4 +1,12 @@
 {
+  "AssetFormat_Sanxiu_20261105": {
+    "English": "Asset format",
+    "Chinese": "素材格式"
+  },
+  "DefaultCrystalLibraries_Sanxiu_20261105": {
+    "English": "Default (Crystal libraries)",
+    "Chinese": "默认（现有素材读取规则）"
+  },
   "00cells_F1D92C48": {
     "English": "{0:0} cells",
     "Chinese": "{0:0} 格"
