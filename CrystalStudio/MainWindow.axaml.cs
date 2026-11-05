@@ -452,7 +452,7 @@ public partial class MainWindow : EditorWindow
         panel.Children.Add(create);
         dialog.Content = panel;
 
-        create.Click += (_, _) => { if (!int.TryParse(width.Text, out int w) || !int.TryParse(height.Text, out int h) || w < 16 || h < 16 || w > 4096 || h > 4096) { MessageBox.Show(dialog, "Enter dimensions between 16 and 4096."); return; } AddMapTab(new(w, h)); Status.Text = LocalText.T("New map created"); dialog.DialogResult = true; }; dialog.ShowDialog();
+        create.Click += (_, _) => { if (!int.TryParse(width.Text, out int w) || !int.TryParse(height.Text, out int h) || !MapLimits.CanCreate(w, h)) { MessageBox.Show(dialog, LocalText.T("Use dimensions from 16 to 4096, with at most 16,000,000 cells.")); return; } AddMapTab(new(w, h)); Status.Text = LocalText.T("New map created"); dialog.DialogResult = true; }; dialog.ShowDialog();
 
     }
 

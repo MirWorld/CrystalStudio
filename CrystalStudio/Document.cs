@@ -56,7 +56,7 @@ public sealed partial class MapDocument(int width, int height)
     {
         if (!File.Exists(path)) throw new FileNotFoundException("Map file not found.", path);
         var legacy = new MapReader(path);
-        if (legacy.Width <= 0 || legacy.Height <= 0 || (long)legacy.Width * legacy.Height > 16_000_000) throw new InvalidDataException("Invalid map dimensions.");
+        if (!MapLimits.CanRead(legacy.Width, legacy.Height)) throw new InvalidDataException("Invalid map dimensions.");
         var d = new MapDocument(legacy.Width, legacy.Height) { SourceFormat = format };
         bool sanxiuIds = format == AssetSourceFormat.Sanxiu && legacy.IsCrystalVersion1;
         for (int x = 0; x < d.Width; x++) for (int y = 0; y < d.Height; y++)
@@ -77,6 +77,7 @@ public sealed partial class MapDocument(int width, int height)
     }
     public void Save(string path)
     {
+        if (!MapLimits.CanRead(Width, Height)) throw new InvalidDataException("Invalid map dimensions.");
         AtomicFile.Write(path, stream =>
         {
             using var w = new BinaryWriter(stream, System.Text.Encoding.UTF8, leaveOpen: true);
