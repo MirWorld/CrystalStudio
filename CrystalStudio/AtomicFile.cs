@@ -5,7 +5,7 @@ namespace CrystalStudio;
 
 internal static class AtomicFile
 {
-    public static void Write(string path, Action<Stream> write)
+    public static void Write(string path, Action<Stream> write, bool overwrite = true)
     {
         path = Path.GetFullPath(path);
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
@@ -17,7 +17,7 @@ internal static class AtomicFile
                 write(stream);
                 stream.Flush(flushToDisk: true);
             }
-            File.Move(temporary, path, overwrite: true);
+            File.Move(temporary, path, overwrite);
         }
         finally
         {

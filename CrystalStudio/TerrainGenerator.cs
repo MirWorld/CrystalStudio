@@ -40,7 +40,7 @@ public static class TerrainGenerator
         var area = AlignArea(document, requested);
         int width = (area.Width + 1) / 2, height = (area.Height + 1) / 2, stride = width + 1;
         if (width < 3 || height < 3) throw new ArgumentException("Select at least 6×6 cells for terrain generation.");
-        if ((long)width * height > 300_000) throw new ArgumentException("Generate at most 300,000 ground tiles at once. Select a smaller area.");
+        if ((long)width * height > MapDimensions.MaximumGroundTiles) throw new ArgumentException("Generate at most 300,000 ground tiles at once. Select a smaller area.");
         if (!catalogue.Sets.Contains(options.Base) || !options.Base.Base || options.Patches != null && (!catalogue.Sets.Contains(options.Patches) || !catalogue.CanGenerate(options.Base, options.Patches)) || options.Path != null && (!catalogue.Sets.Contains(options.Path) || !catalogue.CanGenerate(options.Base, options.Path))) throw new ArgumentException("Choose a reviewed base and compatible terrain transitions.");
         if (!double.IsFinite(options.Coverage) || options.Coverage is < 0 or > 1 || !double.IsFinite(options.PatchScale) || options.PatchScale is < 2 or > 100 || !double.IsFinite(options.PathWidth) || options.PathWidth is < 1 or > 20 || options.PathCount is < 1 or > 3) throw new ArgumentException("Invalid terrain generation settings.");
         if(options.BridgeCrossing&&options.WaterMode is not (TerrainWaterMode.River or TerrainWaterMode.Waterways or TerrainWaterMode.RiverToSea))

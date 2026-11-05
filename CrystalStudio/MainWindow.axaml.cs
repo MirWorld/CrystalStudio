@@ -167,12 +167,14 @@ public partial class MainWindow : EditorWindow
             });
 
             if (Environment.GetCommandLineArgs().Skip(1).FirstOrDefault() is string path && File.Exists(path)) await Run(() => OpenMap(path));
+            StartRecovery();
 
         };
 
         InitializeDocking();
 
         InitializeMapTabs();
+        InitializeMapCreation();
         InitializeRecentMaps();
 
         InitializeCellMenu();
@@ -452,7 +454,7 @@ public partial class MainWindow : EditorWindow
         panel.Children.Add(create);
         dialog.Content = panel;
 
-        create.Click += (_, _) => { if (!int.TryParse(width.Text, out int w) || !int.TryParse(height.Text, out int h) || w < 16 || h < 16 || w > 4096 || h > 4096) { MessageBox.Show(dialog, "Enter dimensions between 16 and 4096."); return; } AddMapTab(new(w, h)); Status.Text = LocalText.T("New map created"); dialog.DialogResult = true; }; dialog.ShowDialog();
+        create.Click += (_, _) => { if (!int.TryParse(width.Text, out int w) || !int.TryParse(height.Text, out int h)) { MessageBox.Show(dialog, "Enter dimensions between 16 and 4096."); return; } if (MapDimensions.CreationError(w, h, MapCreationKind.Blank) is { } error) { MessageBox.Show(dialog, LocalText.T(error)); return; } AddMapTab(new(w, h)); Status.Text = LocalText.T("New map created"); dialog.DialogResult = true; }; dialog.ShowDialog();
 
     }
 
@@ -467,6 +469,8 @@ public partial class MainWindow : EditorWindow
         Status.Text = LocalText.T("Reading map\u2026");
         var d = await Task.Run(() => MapDocument.Load(path, settings.AssetFormat));
         AddMapTab(d, path);
+        try { activeMap!.Recipe = MapCreationStore.LoadRecipe(path, d); }
+        catch (Exception exception) { StudioLog.Error("MapCreation.LoadRecipe", exception, $"Path={path}"); }
         StudioLog.Info("Map.Open",$"Loaded; Path={path}; Size={d.Width}x{d.Height}; Stamps={d.PlacedStamps.Count}");
         RememberMap(path);
         Status.Text = (d.MetadataWarning ?? LocalText.Format("Map loaded · {0:N0} remembered stamps", d.PlacedStamps.Count));
@@ -505,10 +509,30 @@ public partial class MainWindow : EditorWindow
     {
 
         if (activeMap?.IsStamp == true) return SaveStampEditor(saveAs);
-        string? target = saveAs ? null : mapPath; if (target == null) { var picker = new SaveFileDialog { Filter = "Crystal map (*.map)|*.map", FileName = mapPath == null ? "Untitled.map" : Path.GetFileName(mapPath), InitialDirectory = mapPath == null ? "" : Path.GetDirectoryName(mapPath), DefaultExt = ".map", AddExtension = true, OverwritePrompt = true }; if (picker.ShowDialog(this) != true) return false; target = picker.FileName; }
+        string? target = saveAs ? null : mapPath; if (target == null) { var picker = new SaveFileDialog { Filter = "Crystal map (*.map)|*.map", FileName = mapPath == null ? MapCreationPaths.FileName(activeMap?.Name.StartsWith("Untitled ", StringComparison.Ordinal) == false ? activeMap.Name : "Untitled") : Path.GetFileName(mapPath), InitialDirectory = mapPath == null ? MapCreationPaths.DefaultDirectory(settings.LibraryFolder) : Path.GetDirectoryName(mapPath), DefaultExt = ".map", AddExtension = true, OverwritePrompt = true }; if (picker.ShowDialog(this) != true) return false; target = picker.FileName; }
 
-        try { if (mapPath == null) Viewport.Document.SourceFormat = settings.AssetFormat; Viewport.Document.Save(target); mapPath = target; RememberMap(target); Viewport.History.Saved(); UpdateLabels(); UpdateMapTabLabels(); Status.Text = LocalText.Format("Saved {0}",Path.GetFileName(target)); return true; } catch (Exception ex) { StudioLog.Error("Map.Save",ex,$"Path={target}"); MessageBox.Show(this, ex.Message, "Save failed"); return false; }
+        return SaveMapTo(target);
 
+    }
+
+    private bool SaveMapTo(string target, bool overwrite = true)
+    {
+        try
+        {
+            if (mapPath == null && activeMap?.KeepSourceFormat != true) Viewport.Document.SourceFormat = settings.AssetFormat;
+            if (overwrite) Viewport.Document.Save(target); else Viewport.Document.SaveNew(target);
+            mapPath = target; RememberMap(target); Viewport.History.Saved();
+            if (activeMap != null) ForgetRecovery(activeMap);
+            UpdateLabels(); UpdateMapTabLabels(); Status.Text = LocalText.Format("Saved {0}", Path.GetFileName(target));
+            if (activeMap?.Recipe is { } recipe)
+            {
+                try { activeMap.Recipe = recipe with { AssetFormat = Viewport.Document.SourceFormat }; MapCreationStore.SaveRecipe(target, activeMap.Recipe); }
+                catch (Exception exception) { StudioLog.Error("MapCreation.SaveRecipe", exception, $"Path={target}"); Status.Text = LocalText.T("Map saved, but its creation recipe could not be saved."); }
+            }
+            _ = RefreshSavedMapAsync(target); return true;
+        }
+        catch (Exception exception)
+        { StudioLog.Error("Map.Save", exception, $"Path={target}"); MessageBox.Show(this, exception.Message, "Save failed"); return false; }
     }
 
     private void SettingsClick(object s, RoutedEventArgs e) { if (!busy) OpenSettings(); }
@@ -855,6 +879,8 @@ public partial class MainWindow : EditorWindow
     private void KeyDownHandler(object s, KeyEventArgs e)
 
     {
+        if (!busy && FocusManager?.GetFocusedElement() is not TextBox && e.Key == Key.N && e.KeyModifiers == (KeyModifiers.Control | KeyModifiers.Alt))
+        { QuickCreateClick(s, e); e.Handled = true; return; }
 
         if (FocusManager?.GetFocusedElement() is TextBox or MenuItem || mapFileList.IsKeyboardFocusWithin || InputState.Modifiers.HasFlag(KeyModifiers.Alt) || busy) return; bool ctrl = InputState.Modifiers.HasFlag(KeyModifiers.Control);
 

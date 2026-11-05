@@ -17,15 +17,16 @@ public partial class TempleGeneratorWindow : EditorWindow
     private TemplePlan? cached;
     private RasterImage? overview, detailPreview;
     public TemplePlan? Plan { get; private set; }
+    private readonly IReadOnlyDictionary<string, string>? savedParameters;
 
-    public TempleGeneratorWindow(MapDocument document, AssetStore assets, WallCatalogue walls, TerrainCatalogue terrain)
+    public TempleGeneratorWindow(MapDocument document, AssetStore assets, WallCatalogue walls, TerrainCatalogue terrain, IReadOnlyDictionary<string, string>? parameters = null)
     {
-        this.document = document; this.assets = assets; this.walls = walls; this.terrain = terrain;
+        this.document = document; this.assets = assets; this.walls = walls; this.terrain = terrain; savedParameters = parameters;
         InitializeComponent();
         WidthList.SelectedIndex = 1; TempleList.ItemsSource = TempleDefinition.All; TempleList.SelectedIndex = 0;
         DungeonTypeList.ItemsSource = Enum.GetValues<DungeonType>(); DungeonTypeList.SelectedIndex = 0;
         timer.Tick += GeneratePreview;
-        Loaded += (_, _) => { ready = true; Schedule(); };
+        Loaded += (_, _) => { ready = true; GeneratorPreferences.Restore(this, savedParameters); Schedule(); };
         Closed += (_, _) => { closed = true; timer.Stop(); pending?.Cancel(); };
     }
 
