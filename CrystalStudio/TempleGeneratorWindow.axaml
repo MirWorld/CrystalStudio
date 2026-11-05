@@ -6,6 +6,14 @@
         <Grid>
             <Grid.RowDefinitions><RowDefinition /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
             <ScrollViewer VerticalScrollBarVisibility="Auto"><StackPanel>
+                <TextBlock Text="{local:Loc FantasyDungeonTheme}" FontWeight="SemiBold" />
+                <ComboBox x:Name="ThemeList" SelectionChanged="ThemeChanged" Margin="0,6,0,12" AutomationProperties.Name="{local:Loc FantasyDungeonTheme}">
+                    <ComboBoxItem Content="{local:Loc ClassicDungeonTheme}" />
+                    <ComboBoxItem Content="{local:Loc CelestialPalaceTheme}" />
+                    <ComboBoxItem Content="{local:Loc AbyssalReefTheme}" />
+                    <ComboBoxItem Content="{local:Loc AlienPlanetTheme}" />
+                </ComboBox>
+                <TextBlock x:Name="ThemeDescription" TextWrapping="Wrap" Foreground="{DynamicResource Muted}" Margin="0,0,0,14" />
                 <TextBlock Text="{local:Loc DungeonType_34009401}" FontWeight="SemiBold" />
                 <ComboBox x:Name="DungeonTypeList" SelectionChanged="SettingsChanged" Margin="0,6,0,18" AutomationProperties.Name="{local:Loc DungeonType_34009401}" />
                 <TextBlock Text="{local:Loc Style_7E744141}" FontWeight="SemiBold" />

@@ -3906,5 +3906,16 @@
   "MineCount": { "English": "Mining yards: ", "Chinese": "采掘场数量：" },
   "MiningYards": { "English": "{0} mining and quarry yards", "Chinese": "{0} 处矿区与采石场" },
   "MiningArtworkUnavailable": { "English": "Mining yard artwork is unavailable in the selected libraries.", "Chinese": "当前素材库缺少完整矿区所需的素材。" },
-  "MiningDetailsUnavailable": { "English": "Some mining yard details are unavailable; only complete visible objects were used.", "Chinese": "部分矿区细节素材不可用，已仅使用完整可见物件。" }
+  "MiningDetailsUnavailable": { "English": "Some mining yard details are unavailable; only complete visible objects were used.", "Chinese": "部分矿区细节素材不可用，已仅使用完整可见物件。" },
+  "FantasyDungeonTheme": {"English": "World theme", "Chinese": "世界主题"},
+  "ClassicDungeonTheme": {"English": "Classic dungeon / cave", "Chinese": "经典地牢 / 洞穴"},
+  "CelestialPalaceTheme": {"English": "Celestial palace", "Chinese": "天宫 · 云上宫阙"},
+  "AbyssalReefTheme": {"English": "Abyssal reef", "Chinese": "海底 · 深渊珊瑚宫"},
+  "AlienPlanetTheme": {"English": "Alien planet", "Chinese": "异星 · 裂隙晶巢"},
+  "CelestialThemeDescription": {"English": "Axial halls, paired courts and bridges above a white cloud sea", "Chinese": "中轴殿堂、对称院落、云海桥廊"},
+  "AbyssalThemeDescription": {"English": "Coral chambers, tidal loops and a submerged central sanctuary", "Chinese": "珊瑚洞群、潮汐环路、海底中庭"},
+  "AlienThemeDescription": {"English": "Offset impact basins, fractured routes and crystalline life", "Chinese": "偏心环坑、断裂通道、异形晶体生态"},
+  "ClassicThemeDescription": {"English": "Classic dungeon and cave layouts", "Chinese": "经典房间与自然洞穴布局"},
+  "ThemeDetailsCount": {"English": " · {0} scene details", "Chinese": " · {0} 处主题细节"},
+  "ThemeObjectsUnavailable": {"English": "No reviewed visible objects are available for this dungeon theme.", "Chinese": "当前素材库没有此主题所需的已审查可见物件。"}
 }

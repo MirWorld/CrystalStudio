@@ -93,7 +93,7 @@ public sealed class MiningSceneTests
         GeneratorPreferences.Restore(window, settings);
         Assert.Equal(3, theme.SelectedIndex); Assert.Equal(3, window.FindControl<Slider>("MineCountSlider")!.Value);
         var recipe = MapCreationStore.Recipe(new(320, 320), MapCreationKind.Province, settings, new());
-        Assert.Contains("quick-map-v4", recipe.GeneratorVersion);
+        Assert.Contains("quick-map-v5", recipe.GeneratorVersion);
         Assert.Equal("index:3", recipe.Parameters["SceneList"]);
         window.Close();
         using var unavailable = AssetStore.Load(Path.Combine(TestApplication.Root, "Data"));
