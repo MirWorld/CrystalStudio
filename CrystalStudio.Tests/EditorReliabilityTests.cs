@@ -20,8 +20,8 @@ public sealed class EditorReliabilityTests
     [InlineData(4097, 100, false)]
     public void NewMapSizeMustAlsoBeReadable(int width, int height, bool allowed)
     {
-        Assert.Equal(allowed, MapLimits.CanCreate(width, height));
-        if (allowed) Assert.True(MapLimits.CanRead(width, height));
+        Assert.Equal(allowed, (MapDimensions.CreationError(width, height, MapCreationKind.Blank) == null));
+        if (allowed) Assert.True(MapDimensions.CanRoundTrip(width, height));
     }
 
     [Fact]
@@ -31,7 +31,7 @@ public sealed class EditorReliabilityTests
         try
         {
             File.WriteAllText(path, "original");
-            Assert.Throws<InvalidDataException>(() => new MapDocument(4096, 4096).Save(path));
+            Assert.Throws<ArgumentOutOfRangeException>(() => new MapDocument(4096, 4096).Save(path));
             Assert.Equal("original", File.ReadAllText(path));
             using (var stream = File.Create(path))
             using (var writer = new BinaryWriter(stream))
@@ -99,24 +99,51 @@ public sealed class EditorReliabilityTests
         string directory = TemporaryFile();
         try
         {
-            var cells = new List<StampCell> { new(0, 0, new Cell { Foreground = new(2, 1), Light = 119, Door = 1 }) };
+            var cells = new List<StampCell> { new(0, 0, new Cell { Foreground = new(2002, 1), Light = 119, Door = 1 }) };
             var document = new MapDocument(4, 4);
             document.PlaceStamp(cells, 1, 1, "Test", new EditHistory(), (_, _) => { });
             var data = new MapRecoveryData(Guid.NewGuid(), "Unsaved", null, DateTime.UtcNow, 4, 4, AssetSourceFormat.Sanxiu,
                 document.Cells.Select(p => new StampCell(p.Key % 4, p.Key / 4, p.Value.Copy())).ToList(), document.PlacedStamps.ToList(), true, -2, -2);
             using var reader = new MapRecoveryStore(directory);
             var writer = new MapRecoveryStore(directory);
-            writer.Write(data, writer.Version(data.Id));
-            Assert.Empty(reader.Available());
-            writer.Close(clean: false); // Simulate process termination without normal cleanup.
-            var entry = Assert.Single(reader.Available());
-            var restored = entry.Data.Restore();
+            document.SourceFormat = AssetSourceFormat.Sanxiu;
+            var metadata = new MapRecoveryEntry(1, writer.SessionId, data.Id, "", null, data.Name, data.SavedUtc,
+                data.Format, null, IsStamp: true, OriginX: -2, OriginY: -2);
+            writer.Write(data.Id, MapRecoveryStore.Capture(document), null, data.Name, null, metadata, writer.Version(data.Id));
+            Assert.Empty(reader.List());
+            writer.Dispose(); // Simulate process termination without normal cleanup.
+            var entry = Assert.Single(reader.List());
+            var restored = reader.Load(entry);
             Assert.Equal(document.Get(1, 1), restored.Get(1, 1));
             Assert.Equal(document.PlacedStamps[0].Id, Assert.Single(restored.PlacedStamps).Id);
             Assert.Equal(AssetSourceFormat.Sanxiu, restored.SourceFormat);
-            Assert.True(entry.Data.IsStamp); Assert.Equal(-2, entry.Data.OriginX);
-            MapRecoveryStore.Dismiss(entry);
-            Assert.Empty(reader.Available());
+            Assert.True(entry.IsStamp); Assert.Equal(-2, entry.OriginX);
+            reader.Delete(entry);
+            Assert.Empty(reader.List());
+        }
+        finally { if (Directory.Exists(directory)) Directory.Delete(directory, true); }
+    }
+
+    [Fact]
+    public void PreviousJsonRecoverySnapshotsRemainReadable()
+    {
+        string directory = TemporaryFile();
+        try
+        {
+            string session = Path.Combine(directory, Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(session);
+            var data = new MapRecoveryData(Guid.NewGuid(), "Legacy stamp", "original.X", DateTime.UtcNow,
+                2, 2, AssetSourceFormat.Sanxiu, [new(1, 1, new Cell { Light = 119 })], [], true, -2, -4);
+            AtomicFile.WriteJson(Path.Combine(session, data.Id.ToString("N") + ".json"), data);
+            using var reader = new MapRecoveryStore(directory);
+            var entry = Assert.Single(reader.List());
+            Assert.True(entry.LegacyJson); Assert.True(entry.IsStamp);
+            Assert.Equal(-2, entry.OriginX); Assert.Equal(-4, entry.OriginY);
+            Assert.Equal("original.X", entry.OriginalPath);
+            var restored = reader.Load(entry);
+            Assert.Equal(119, restored.Get(1, 1).Light);
+            Assert.Equal(AssetSourceFormat.Sanxiu, restored.SourceFormat);
+            reader.Delete(entry); Assert.Empty(reader.List());
         }
         finally { if (Directory.Exists(directory)) Directory.Delete(directory, true); }
     }
@@ -131,12 +158,16 @@ public sealed class EditorReliabilityTests
             var writer = new MapRecoveryStore(directory);
             var data = new MapRecoveryData(Guid.NewGuid(), "Test", "original.map", DateTime.UtcNow, 2, 2, AssetSourceFormat.Default, [], []);
             int version = writer.Version(data.Id);
-            writer.Remove(data.Id);
-            writer.Write(data, version);
-            writer.Close(clean: false);
-            Assert.Empty(reader.Available());
-            using (var clean = new MapRecoveryStore(directory)) clean.Write(data, clean.Version(data.Id));
-            Assert.Empty(reader.Available());
+            writer.Delete(data.Id);
+            writer.Write(data.Id, new MapDocument(2, 2), data.OriginalPath, data.Name, null, version: version);
+            writer.Dispose();
+            Assert.Empty(reader.List());
+            using (var clean = new MapRecoveryStore(directory))
+            {
+                clean.Write(data.Id, new MapDocument(2, 2), data.OriginalPath, data.Name, null);
+                clean.ClearSession();
+            }
+            Assert.Empty(reader.List());
             Assert.Throws<InvalidDataException>(() => (data with { Width = 4096, Height = 4096 }).Restore());
             Assert.Throws<InvalidDataException>(() => (data with { Cells = [new(9, 0, new Cell())] }).Restore());
         }
@@ -148,7 +179,7 @@ public sealed class EditorReliabilityTests
     {
         var document = new MapDocument(2, 2);
         document.Set(0, 0, new Cell { Light = 119 });
-        var history = new EditHistory(); history.MarkRecovered();
+        var history = new EditHistory(); history.MarkUnsaved();
         Assert.True(history.Dirty); Assert.False(history.CanUndo);
         history.Undo(document);
         Assert.True(history.Dirty); Assert.Equal(119, document.Get(0, 0).Light);
@@ -263,8 +294,8 @@ public sealed class EditorReliabilityTests
     {
         string directory = TemporaryFile();
         var window = new MainWindow();
-        var field = typeof(MainWindow).GetField("recovery", BindingFlags.NonPublic | BindingFlags.Instance)!;
-        ((MapRecoveryStore?)field.GetValue(window))?.Dispose();
+        var field = typeof(MainWindow).GetField("recoveryStore", BindingFlags.NonPublic | BindingFlags.Instance)!;
+        ((MapRecoveryStore?)field.GetValue(window))?.ClearSession();
         var store = new MapRecoveryStore(directory); field.SetValue(window, store);
         var viewport = window.FindControl<MapViewport>("Viewport")!;
         var tabs = (TabControl)typeof(MainWindow).GetField("mapTabs", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(window)!;
@@ -276,19 +307,18 @@ public sealed class EditorReliabilityTests
             viewport.ApplyMetadata(100, null, null, new Rect(1, 1, 1, 1));
             add.Invoke(window, [new MapDocument(3, 3), null]);
             viewport.ApplyMetadata(119, null, null, new Rect(2, 2, 1, 1));
-            await window.SaveRecoveryAsync();
+            await window.SaveRecoverySnapshotsAsync();
             using var reader = new MapRecoveryStore(directory);
-            Assert.Empty(reader.Available());
-            store.Close(clean: false);
-            var entries = reader.Available();
+            Assert.Empty(reader.List());
+            store.Dispose();
+            var entries = reader.List();
             Assert.Equal(2, entries.Count);
-            Assert.All(entries, entry => Assert.Equal(AssetSourceFormat.Sanxiu, entry.Data.Format));
-            Assert.Equal(100, entries.Single(e => e.Data.Width == 4).Data.Restore().Get(1, 1).Light);
-            Assert.Equal(119, entries.Single(e => e.Data.Width == 3).Data.Restore().Get(2, 2).Light);
+            Assert.All(entries, entry => Assert.Equal(AssetSourceFormat.Sanxiu, entry.AssetFormat));
+            Assert.Equal(100, entries.Select(reader.Load).Single(d => d.Width == 4).Get(1, 1).Light);
+            Assert.Equal(119, entries.Select(reader.Load).Single(d => d.Width == 3).Get(2, 2).Light);
         }
         finally
         {
-            field.SetValue(window, null);
             foreach (var tab in tabs.Items.Cast<TabItem>()) { tabs.SelectedItem = tab; viewport.History.Saved(); }
             window.Close(); store.Dispose();
             if (Directory.Exists(directory)) Directory.Delete(directory, true);

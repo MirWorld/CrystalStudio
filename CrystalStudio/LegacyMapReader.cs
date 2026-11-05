@@ -49,7 +49,7 @@ namespace CrystalStudio.Formats
         private void ValidateDimensions(int headerBytes, int minimumCellBytes)
         {
             long count = (long)Width * Height;
-            if (!MapLimits.CanRead(Width, Height))
+            if (!MapDimensions.CanRoundTrip(Width, Height))
                 throw new InvalidDataException("Invalid or excessive map dimensions.");
             if (headerBytes + count * minimumCellBytes > Bytes.LongLength)
                 throw new InvalidDataException("Map cell data is truncated.");

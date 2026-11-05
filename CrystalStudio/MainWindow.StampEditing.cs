@@ -42,7 +42,7 @@ public partial class MainWindow
         if (busy) return;
         var copied = Viewport.CopiedRegionSize;
         int width = Math.Max(64, (int)copied.Width + 16), height = Math.Max(64, (int)copied.Height + 16);
-        if (width > 4096 || height > 4096 || !MapLimits.CanRead(width, height)) { MessageBox.Show(this, "The copied region exceeds the stamp editor limit."); return; }
+        if (width > 4096 || height > 4096 || !MapDimensions.CanRoundTrip(width, height)) { MessageBox.Show(this, "The copied region exceeds the stamp editor limit."); return; }
         AddMapTab(new MapDocument(width, height));
         var map = activeMap!;
         map.IsStamp = true;
@@ -65,7 +65,7 @@ public partial class MainWindow
             int minX = cells.Count == 0 ? 0 : cells.Min(c => c.X), minY = cells.Count == 0 ? 0 : cells.Min(c => c.Y);
             int width = cells.Count == 0 ? 32 : checked(cells.Max(c => c.X) - minX + 17);
             int height = cells.Count == 0 ? 32 : checked(cells.Max(c => c.Y) - minY + 17);
-            if (width > 4096 || height > 4096 || !MapLimits.CanRead(width, height)) throw new InvalidDataException("Stamp bounds exceed the editor limit.");
+            if (width > 4096 || height > 4096 || !MapDimensions.CanRoundTrip(width, height)) throw new InvalidDataException("Stamp bounds exceed the editor limit.");
             var document = new MapDocument(width, height);
             foreach (var cell in cells) document.Set(cell.X - minX + 8, cell.Y - minY + 8, cell.Cell.Copy());
             AddMapTab(document, path);
@@ -191,7 +191,7 @@ public partial class MainWindow
                 if (separateCopy) { if (catalogueOriginal != null) AtomicFile.Write(catalogueTarget, stream => stream.Write(catalogueOriginal)); else if (File.Exists(catalogueTarget)) File.Delete(catalogueTarget); }
                 throw;
             }
-            map.Path = target; map.Category = category; map.CategoryDirty = false; Viewport.History.Saved(); RemoveRecovery(map);
+            map.Path = target; map.Category = category; map.CategoryDirty = false; Viewport.History.Saved(); ForgetRecovery(map);
             categoryIndex = StampCategories.Read(indexPath);
             selectedStampPath = null; selectedStampPreview = null;
             _ = DiscoverStampsAsync();

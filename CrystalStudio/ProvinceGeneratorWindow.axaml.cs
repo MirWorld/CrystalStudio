@@ -20,10 +20,11 @@ public partial class ProvinceGeneratorWindow : EditorWindow
     private bool ready, closed, changingSettings;
     private int revision;
     public ProvincePlan? Plan { get; private set; }
+    private readonly IReadOnlyDictionary<string, string>? savedParameters;
 
-    public ProvinceGeneratorWindow(MapDocument document, AssetStore assets, WallCatalogue? wallCatalogue = null)
+    public ProvinceGeneratorWindow(MapDocument document, AssetStore assets, WallCatalogue? wallCatalogue = null, IReadOnlyDictionary<string, string>? parameters = null)
     {
-        this.document = document; this.assets = assets; suppliedWalls = wallCatalogue;
+        this.document = document; this.assets = assets; suppliedWalls = wallCatalogue; savedParameters = parameters;
         InitializeComponent();
         TownCountSlider.Maximum = Math.Clamp(document.Width * document.Height / (128 * 128), 1, 8);
         StyleList.ItemsSource = ProvinceStyle.All; StyleList.SelectedIndex = 0;
@@ -40,7 +41,7 @@ public partial class ProvinceGeneratorWindow : EditorWindow
                 ProvinceGenerator.LoadScenery(assets, lifetime.Token)), lifetime.Token);
             water = await TerrainWaterResources.Load(assets, lifetime.Token);
             if (closed) return;
-            ready = true; RandomizeButton.IsEnabled = true; UpdateDoorOptions(); Schedule();
+            ready = true; RandomizeButton.IsEnabled = true; GeneratorPreferences.Restore(this, savedParameters); UpdateDoorOptions(); Schedule();
         }
         catch (OperationCanceledException) { }
         catch (Exception ex) { if (!closed) { PreviewHint.Text = LocalText.T("Province artwork unavailable"); FeedbackText.Text = (ex.Message); } }

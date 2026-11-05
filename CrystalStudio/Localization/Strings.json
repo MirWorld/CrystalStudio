@@ -3702,5 +3702,181 @@
   "DockResizeHeight": {
     "English": "Drag to resize panel height",
     "Chinese": "拖动调整面板高度"
+  },
+  "QuickMap_0": {
+    "English": "Quick Create Map",
+    "Chinese": "快速创建地图"
+  },
+  "QuickMap_1": {
+    "English": "Quick Create Map…",
+    "Chinese": "快速创建地图…"
+  },
+  "QuickMap_2": {
+    "English": "Choose a map type, preview it, then create.",
+    "Chinese": "选择地图类型，预览后创建。"
+  },
+  "QuickMap_3": {
+    "English": "Map type",
+    "Chinese": "地图类型"
+  },
+  "QuickMap_4": {
+    "English": "Blank",
+    "Chinese": "空白地图"
+  },
+  "QuickMap_5": {
+    "English": "Width × height in cells",
+    "Chinese": "宽 × 高（单元格）"
+  },
+  "QuickMap_6": {
+    "English": "Map name",
+    "Chinese": "地图名称"
+  },
+  "QuickMap_7": {
+    "English": "Output folder",
+    "Chinese": "输出目录"
+  },
+  "QuickMap_8": {
+    "English": "Save the map after creation",
+    "Chinese": "创建后保存地图"
+  },
+  "QuickMap_9": {
+    "English": "Choose an output folder.",
+    "Chinese": "请选择输出目录。"
+  },
+  "QuickMap_10": {
+    "English": "Enter a valid map filename without a folder path.",
+    "Chinese": "请输入有效的地图文件名，不要包含目录路径。"
+  },
+  "QuickMap_11": {
+    "English": "A map with this name already exists. Choose another name.",
+    "Chinese": "已存在同名地图，请更换名称。"
+  },
+  "QuickMap_12": {
+    "English": "Next: Preview",
+    "Chinese": "下一步：预览"
+  },
+  "QuickMap_13": {
+    "English": "A blank map needs no game artwork.",
+    "Chinese": "空白地图无需游戏素材即可创建。"
+  },
+  "QuickMap_14": {
+    "English": "The next window checks artwork and previews the result. Cancelling leaves your maps unchanged.",
+    "Chinese": "下一步将检查素材并预览结果；取消不会改动现有地图。"
+  },
+  "QuickMap_15": {
+    "English": "Choose a map type.",
+    "Chinese": "请选择地图类型。"
+  },
+  "QuickMap_16": {
+    "English": "A map supports at most 16,000,000 cells.",
+    "Chinese": "地图最多支持 16,000,000 个单元格。"
+  },
+  "QuickMap_17": {
+    "English": "Province generation needs at least 128×128 cells and supports up to 1,000,000 cells.",
+    "Chinese": "省域生成要求宽高至少 128 格，总格数不超过 1,000,000。"
+  },
+  "QuickMap_18": {
+    "English": "Dungeon generation needs at least 64×64 cells and supports up to 1,000,000 cells.",
+    "Chinese": "地牢生成要求宽高至少 64 格，总格数不超过 1,000,000。"
+  },
+  "QuickMap_19": {
+    "English": "Generate at most 300,000 ground tiles at once. Choose a smaller map.",
+    "Chinese": "单次最多生成 300,000 个地表图块，请选择较小的地图。"
+  },
+  "QuickMap_20": {
+    "English": "Load game libraries in Settings before generating a map.",
+    "Chinese": "请先在设置中加载游戏素材，再生成地图。"
+  },
+  "QuickMap_21": {
+    "English": "Required generator catalogues are missing. Restore catalogue and Objects beside the editor.",
+    "Chinese": "缺少生成目录，请恢复编辑器旁的 catalogue 和 Objects 文件夹。"
+  },
+  "QuickMap_22": {
+    "English": "The output path now exists. The map remains unsaved; use Save As.",
+    "Chinese": "输出路径已存在；地图保留为未保存状态，请使用另存为。"
+  },
+  "QuickMap_23": {
+    "English": "Map saved, but its creation recipe could not be saved.",
+    "Chinese": "地图已保存，但创建配方保存失败。"
+  },
+  "QuickMap_24": {
+    "English": "Preset",
+    "Chinese": "预设"
+  },
+  "QuickMap_25": {
+    "English": "Last used settings",
+    "Chinese": "上次使用的设置"
+  },
+  "QuickMap_26": {
+    "English": "Optional preset name",
+    "Chinese": "可选：预设名称"
+  },
+  "QuickMap_27": {
+    "English": "Save/update preset after creation (optional)",
+    "Chinese": "创建后保存／更新预设（可选）"
+  },
+  "QuickMap_28": {
+    "English": "Enter a preset name (1–80 characters).",
+    "Chinese": "请输入 1～80 个字符的预设名称。"
+  },
+  "QuickMap_29": {
+    "English": "At most 50 map presets can be saved.",
+    "Chinese": "最多可保存 50 个地图预设。"
+  },
+  "QuickMap_30": {
+    "English": "Replace the existing preset after creating this map?",
+    "Chinese": "创建这张地图后，替换已有的同名预设吗？"
+  },
+  "QuickMap_31": {
+    "English": "Map preset",
+    "Chinese": "地图预设"
+  },
+  "QuickMap_32": {
+    "English": "Recover Unsaved Maps…",
+    "Chinese": "恢复未保存地图…"
+  },
+  "QuickMap_33": {
+    "English": "Recover Unsaved Maps",
+    "Chinese": "恢复未保存地图"
+  },
+  "QuickMap_34": {
+    "English": "{0} recovery snapshot(s) available. Use File → Recover Unsaved Maps.",
+    "Chinese": "发现 {0} 份恢复快照，请使用“文件 → 恢复未保存地图”。"
+  },
+  "QuickMap_35": {
+    "English": "Recovery snapshot failed. Save your map manually.",
+    "Chinese": "恢复快照保存失败，请手动保存地图。"
+  },
+  "QuickMap_36": {
+    "English": "Could not read recovery snapshots.",
+    "Chinese": "无法读取恢复快照。"
+  },
+  "QuickMap_37": {
+    "English": "No recovery snapshots are available.",
+    "Chinese": "没有可用的恢复快照。"
+  },
+  "QuickMap_38": {
+    "English": "Recovery opens an unsaved copy. Original map files are never overwritten.",
+    "Chinese": "恢复操作会打开未保存的副本，不会覆盖原始地图文件。"
+  },
+  "QuickMap_39": {
+    "English": "Recover selected map",
+    "Chinese": "恢复选中地图"
+  },
+  "QuickMap_40": {
+    "English": "Discard snapshot",
+    "Chinese": "丢弃快照"
+  },
+  "QuickMap_41": {
+    "English": "Permanently discard this recovery snapshot?",
+    "Chinese": "永久丢弃这份恢复快照吗？"
+  },
+  "QuickMap_42": {
+    "English": " (recovered)",
+    "Chinese": "（已恢复）"
+  },
+  "QuickMap_43": {
+    "English": "Recovered an unsaved copy. Use Save As to choose its destination.",
+    "Chinese": "已恢复为未保存副本，请使用另存为选择保存位置。"
   }
 }

@@ -4,12 +4,16 @@ public partial class MainWindow
 {
     private sealed class OpenMapTab(MapEditorState state, string? path, string name)
     {
-        public Guid RecoveryId = Guid.NewGuid();
-        public bool Recovered;
         public MapEditorState State = state;
         public string? Path = path;
         public string Name = name;
         public bool FitOnFirstDisplay = true;
+        public bool KeepSourceFormat;
+        public MapCreationRecipe? Recipe;
+        public readonly Guid RecoveryId = Guid.NewGuid();
+        public long RecoveryRevision = -1;
+        public int RecoveryVersion;
+        public MapRecoveryEntry? RecoveryOrigin;
         public TextBlock Label = new(); public bool IsStamp; public int StampOriginX, StampOriginY; public CategorizedStamp? Category; public bool CategoryDirty;
     }
 
@@ -94,7 +98,7 @@ public partial class MainWindow
         if (busy || !mapTabs.Items.Contains(tab)) return false;
         mapTabs.SelectedItem = tab;
         if (!ConfirmDiscard()) return false;
-        RemoveRecovery((OpenMapTab)tab.Tag!);
+        ForgetRecovery((OpenMapTab)tab.Tag!);
         switchingMap = true;
         try { activeMap = null; mapTabs.Items.Remove(tab); }
         finally { switchingMap = false; }

@@ -4,128 +4,127 @@ namespace CrystalStudio;
 
 public partial class MainWindow
 {
-    private MapRecoveryStore? recovery;
-    private readonly DispatcherTimer recoveryTimer = new() { Interval = TimeSpan.FromMinutes(1) };
-    private readonly Dictionary<Guid, long> recoveredRevisions = [];
-    private bool recoveryWriting;
+    private MapRecoveryStore recoveryStore = null!;
+    private readonly DispatcherTimer recoveryTimer = new() { Interval = TimeSpan.FromSeconds(60) };
+    private bool recoveryRunning;
+    private readonly MenuItem recoveryMenu = new() { Header = LocalText.T("Recover Unsaved Maps…"), Name = "RecoverUnsavedMaps" };
 
-    private void InitializeRecovery()
+    private void InitializeRecovery(MenuItem? fileMenu)
     {
-        try { recovery = new MapRecoveryStore(); }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        { StudioLog.Error("Recovery.Initialize", ex); Status.Text = LocalText.T("Automatic recovery is unavailable."); }
-        recoveryTimer.Tick += async (_, _) => await SaveRecoveryAsync();
-        Loaded += (_, _) => recoveryTimer.Start();
+        recoveryStore = new(Path.Combine(Path.GetDirectoryName(settingsStore.FilePath)!, "recovery"));
+        recoveryMenu.Click += RecoverMapsClick; fileMenu?.Items.Insert(2, recoveryMenu);
+        recoveryTimer.Tick += async (_, _) => await SaveRecoverySnapshotsAsync();
         Closed += (_, _) =>
         {
             recoveryTimer.Stop();
-            try { recovery?.Dispose(); }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { StudioLog.Error("Recovery.Close", ex); }
+            foreach (var map in mapTabs.Items.Cast<TabItem>().Select(tab => (OpenMapTab)tab.Tag!)) ForgetRecovery(map);
+            recoveryStore.ClearSession();
         };
     }
 
-    private MapRecoveryData CaptureRecovery(OpenMapTab map)
+    private void StartRecovery()
     {
-        var document = ReferenceEquals(map, activeMap) ? Viewport.Document : map.State.Document;
-        var format = map.Path == null && !map.Recovered && !map.IsStamp ? settings.AssetFormat : document.SourceFormat;
-        return new(map.RecoveryId, MapDisplayName(map), map.Path, DateTime.UtcNow, document.Width, document.Height,
-            format, document.Cells.Select(pair => new StampCell(pair.Key % document.Width, pair.Key / document.Width, pair.Value.Copy())).ToList(),
-            document.PlacedStamps.ToList(), map.IsStamp, map.StampOriginX, map.StampOriginY, map.Category, map.CategoryDirty);
-    }
-
-    internal async Task SaveRecoveryAsync()
-    {
-        if (busy || closed || recoveryWriting || recovery == null) return;
-        recoveryWriting = true;
+        if (closed) return;
+        recoveryTimer.Start();
         try
         {
-            foreach (var map in mapTabs.Items.Cast<TabItem>().Select(t => (OpenMapTab)t.Tag!).ToArray())
+            int count = recoveryStore.List().Count;
+            if (count > 0) Status.Text = LocalText.Format("{0} recovery snapshot(s) available. Use File → Recover Unsaved Maps.", count);
+        }
+        catch (Exception exception) { StudioLog.Error("Recovery.Startup", exception); }
+    }
+
+    internal async Task SaveRecoverySnapshotsAsync()
+    {
+        if (closed || busy || recoveryRunning) return;
+        recoveryRunning = true;
+        try
+        {
+            foreach (var map in mapTabs.Items.Cast<TabItem>().Select(tab => (OpenMapTab)tab.Tag!).ToArray())
             {
                 if (!mapTabs.Items.Cast<TabItem>().Any(tab => ReferenceEquals(tab.Tag, map))) continue;
-                var history = ReferenceEquals(map, activeMap) ? Viewport.History : map.State.History;
-                if (!history.Dirty && !map.CategoryDirty) { RemoveRecovery(map); continue; }
                 var document = ReferenceEquals(map, activeMap) ? Viewport.Document : map.State.Document;
-                long revision = document.PickupRevision;
-                if (!map.CategoryDirty && recoveredRevisions.TryGetValue(map.RecoveryId, out var saved) && saved == revision) continue;
-                var snapshot = CaptureRecovery(map);
-                int version = recovery.Version(map.RecoveryId);
-                await Task.Run(() => recovery.Write(snapshot, version));
-                if (closed) return;
-                recoveredRevisions[map.RecoveryId] = revision;
+                var history = ReferenceEquals(map, activeMap) ? Viewport.History : map.State.History;
+                if (!history.Dirty && !map.CategoryDirty)
+                {
+                    if (map.RecoveryRevision >= 0) ForgetRecovery(map);
+                    continue;
+                }
+                if (map.RecoveryRevision == document.PickupRevision && !map.CategoryDirty) continue;
+                long revision = document.PickupRevision; int version = map.RecoveryVersion;
+                var snapshot = MapRecoveryStore.Capture(document);
+                if (map.Path == null && !map.KeepSourceFormat && !map.IsStamp) snapshot.SourceFormat = settings.AssetFormat;
+                string? path = map.Path; string name = MapDisplayName(map); var recipe = map.Recipe;
+                var metadata = new MapRecoveryEntry(1, recoveryStore.SessionId, map.RecoveryId, "", path, name, DateTime.UtcNow,
+                    snapshot.SourceFormat, recipe, map.IsStamp, map.StampOriginX, map.StampOriginY, map.Category, map.CategoryDirty);
+                int storeVersion = recoveryStore.Version(map.RecoveryId);
+                await Task.Run(() => recoveryStore.Write(map.RecoveryId, snapshot, path, name, recipe, metadata, storeVersion));
+                if (closed || map.RecoveryVersion != version)
+                { recoveryStore.Delete(map.RecoveryId); if (closed) break; continue; }
+                map.RecoveryRevision = revision;
+                if (map.RecoveryOrigin is { } origin) { recoveryStore.Delete(origin); map.RecoveryOrigin = null; }
+                if (closed) break;
             }
         }
-        catch (Exception ex)
-        { StudioLog.Error("Recovery.Save", ex); Status.Text = LocalText.T("Could not write the automatic recovery snapshot."); }
-        finally { recoveryWriting = false; }
+        catch (Exception exception)
+        {
+            StudioLog.Error("Recovery.Snapshot", exception);
+            if (!closed) Status.Text = LocalText.T("Recovery snapshot failed. Save your map manually.");
+        }
+        finally { recoveryRunning = false; }
     }
 
-    private void RemoveRecovery(OpenMapTab map)
+    private void ForgetRecovery(OpenMapTab map)
     {
-        recoveredRevisions.Remove(map.RecoveryId);
-        try { recovery?.Remove(map.RecoveryId); }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { StudioLog.Error("Recovery.Remove", ex); }
+        map.RecoveryVersion++; map.RecoveryRevision = -1;
+        try
+        {
+            recoveryStore.Delete(map.RecoveryId);
+            if (map.RecoveryOrigin is { } origin) recoveryStore.Delete(origin);
+            map.RecoveryOrigin = null;
+        }
+        catch (Exception exception) { StudioLog.Error("Recovery.Forget", exception); }
     }
 
-    private async void RecoverMapsClick(object sender, RoutedEventArgs e) => await OfferRecoveryAsync(showEmpty: true);
-
-    private async Task OfferRecoveryAsync(bool showEmpty = false)
+    private async void RecoverMapsClick(object? sender, RoutedEventArgs args)
     {
-        if (busy || closed || recovery == null) return;
+        if (busy) return;
+        IReadOnlyList<MapRecoveryEntry> entries;
+        try { entries = recoveryStore.List(); }
+        catch (Exception exception) { StudioLog.Error("Recovery.List", exception); Status.Text = LocalText.T("Could not read recovery snapshots."); return; }
+        if (entries.Count == 0) { Status.Text = LocalText.T("No recovery snapshots are available."); return; }
+        var dialog = new EditorWindow { Title = LocalText.T("Recover Unsaved Maps"), Width = 640, Height = 430,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner, Owner = this };
+        var panel = new Grid { Margin = new Thickness(20), RowDefinitions = new RowDefinitions("Auto,*,Auto") };
+        panel.Children.Add(new TextBlock { Text = LocalText.T("Recovery opens an unsaved copy. Original map files are never overwritten."), TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 12) });
+        var list = new ListBox { ItemsSource = entries, SelectedIndex = 0, ItemTemplate = new FuncDataTemplate<MapRecoveryEntry>((entry, _) =>
+            new TextBlock { Text = entry == null ? "" : $"{entry.DisplayName} · {entry.SavedAtUtc.ToLocalTime():g}\n{entry.OriginalPath}", Margin = new Thickness(6), TextWrapping = TextWrapping.Wrap }) };
+        Grid.SetRow(list, 1); panel.Children.Add(list);
+        var actions = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Spacing = 8, Margin = new Thickness(0, 12, 0, 0) };
+        var recover = new Button { Content = LocalText.T("Recover selected map"), IsDefault = true };
+        recover.Click += (_, _) => { if (list.SelectedItem != null) dialog.DialogResult = true; };
+        var discard = new Button { Content = LocalText.T("Discard snapshot") };
+        discard.Click += (_, _) =>
+        {
+            if (list.SelectedItem is not MapRecoveryEntry selected || MessageBox.Show(dialog, "Permanently discard this recovery snapshot?", "Discard snapshot", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
+            try { recoveryStore.Delete(selected); list.ItemsSource = recoveryStore.List(); list.SelectedIndex = 0; }
+            catch (Exception exception) { StudioLog.Error("Recovery.Discard", exception); }
+        };
+        actions.Children.Add(discard); actions.Children.Add(new Button { Content = LocalText.T("Cancel"), IsCancel = true }); actions.Children.Add(recover);
+        Grid.SetRow(actions, 2); panel.Children.Add(actions); dialog.Content = panel;
+        if (dialog.ShowDialog() != true || list.SelectedItem is not MapRecoveryEntry entry) return;
+        if (mapTabs.Items.Cast<TabItem>().Any(tab => ((OpenMapTab)tab.Tag!).RecoveryOrigin is { } existing && existing.SessionId == entry.SessionId && existing.Id == entry.Id)) return;
         await Run(async () =>
         {
-            var entries = await Task.Run(recovery.Available);
+            var document = await Task.Run(() => recoveryStore.Load(entry));
             if (closed) return;
-            if (entries.Count == 0)
-            {
-                if (showEmpty) MessageBox.Show(this, LocalText.T("No recovery snapshots are available."));
-                return;
-            }
-            var dialog = new EditorWindow { Title = LocalText.T("Recover Maps"), Width = 720, Height = 380, Owner = this, WindowStartupLocation = WindowStartupLocation.CenterOwner };
-            var panel = new DockPanel { Margin = new(18) };
-            var actions = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 10, Margin = new(0, 12, 0, 0) };
-            DockPanel.SetDock(actions, Dock.Bottom); panel.Children.Add(actions);
-            var list = new ListBox { ItemsSource = entries, SelectedIndex = 0 };
-            panel.Children.Add(list); dialog.Content = panel;
-            var open = new Button { Content = LocalText.T("Open Recovered Copy") };
-            var dismiss = new Button { Content = LocalText.T("Delete Snapshot") };
-            var close = new Button { Content = LocalText.T("Close"), IsCancel = true };
-            actions.Children.Add(open); actions.Children.Add(dismiss); actions.Children.Add(close);
-            open.Click += async (_, _) =>
-            {
-                if (list.SelectedItem is not MapRecoveryEntry entry) return;
-                open.IsEnabled = dismiss.IsEnabled = false;
-                try
-                {
-                    var document = await Task.Run(entry.Data.Restore);
-                    if (closed || !dialog.IsVisible) return;
-                    AddMapTab(document);
-                    var map = activeMap!;
-                    map.Recovered = true;
-                    map.Name = LocalText.Format("Recovered — {0}", entry.Data.Name);
-                    map.IsStamp = entry.Data.IsStamp; map.StampOriginX = entry.Data.OriginX; map.StampOriginY = entry.Data.OriginY;
-                    map.Category = entry.Data.Category; map.CategoryDirty = entry.Data.CategoryDirty;
-                    // A recovered copy must require saving, even if no further edits are made.
-                    Viewport.History.MarkRecovered();
-                    stampProperties.IsVisible = map.IsStamp;
-                    var snapshot = CaptureRecovery(map);
-                    int version = recovery.Version(map.RecoveryId);
-                    await Task.Run(() => recovery.Write(snapshot, version));
-                    MapRecoveryStore.Dismiss(entry);
-                    entries.Remove(entry); list.ItemsSource = entries.ToArray();
-                    UpdateLabels(); UpdateMapTabLabels();
-                    if (entries.Count == 0) dialog.DialogResult = true;
-                }
-                catch (Exception ex) { StudioLog.Error("Recovery.Restore", ex); MessageBox.Show(dialog, ex.Message); }
-                finally { open.IsEnabled = dismiss.IsEnabled = true; }
-            };
-            dismiss.Click += (_, _) =>
-            {
-                if (list.SelectedItem is not MapRecoveryEntry entry) return;
-                if (MessageBox.Show(dialog, LocalText.T("Delete this recovery snapshot?"), LocalText.T("Recover Maps"), MessageBoxButton.YesNo) != MessageBoxResult.Yes) return;
-                try { MapRecoveryStore.Dismiss(entry); entries.Remove(entry); list.ItemsSource = entries.ToArray(); }
-                catch (Exception ex) { MessageBox.Show(dialog, ex.Message); }
-            };
-            dialog.ShowDialog();
+            AddMapTab(document); activeMap!.Name = Path.GetFileNameWithoutExtension(entry.DisplayName) + LocalText.T(" (recovered)");
+            activeMap.KeepSourceFormat = true; activeMap.Recipe = entry.Recipe; activeMap.RecoveryOrigin = entry;
+            activeMap.IsStamp = entry.IsStamp; activeMap.StampOriginX = entry.OriginX; activeMap.StampOriginY = entry.OriginY;
+            activeMap.Category = entry.Category; activeMap.CategoryDirty = entry.CategoryDirty;
+            stampProperties.IsVisible = entry.IsStamp;
+            Viewport.History.MarkUnsaved(); UpdateLabels(); UpdateMapTabLabels();
+            Status.Text = LocalText.T("Recovered an unsaved copy. Use Save As to choose its destination.");
         });
     }
 }
