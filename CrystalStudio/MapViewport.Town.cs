@@ -12,6 +12,7 @@ public sealed partial class MapViewport
     }
     public bool PlaceTownAt(int x, int y)
     {
+        if (!AllowEdit()) return false;
         if (Town == null) return false;
         x &= ~1; y &= ~1;
         var check = TownPlacement.Check(Document, Town, x, y);

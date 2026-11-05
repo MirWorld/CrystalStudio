@@ -178,6 +178,7 @@ public partial class MainWindow : EditorWindow
         InitializeRecentMaps();
 
         InitializeCellMenu();
+        InitializeLayerLocks();
 
         ThemeService.Changed += ThemeChanged;
 
@@ -726,18 +727,44 @@ public partial class MainWindow : EditorWindow
     {
 
         if (busy || !Viewport.Document.Contains(point.X, point.Y)) return;
-
-        var c = Viewport.Document.Get(point.X, point.Y);
+        if (Viewport.IsLayerLocked(MapLayer.Objects)) { Status.Text = LocalText.T("This layer is locked."); return; }
 
         var dialog = new EditorWindow { Title = LocalText.T("Cell Properties"), Width = 340, SizeToContent = SizeToContent.Height, Owner = this, WindowStartupLocation = WindowStartupLocation.CenterOwner, CanResize = false }; var panel = new StackPanel { Margin = new(24) }; dialog.Content = panel;
 
         panel.Children.Add(new TextBlock { Text = (area.Width == 1 && area.Height == 1 ? LocalText.Format("Cell {0}, {1}",point.X,point.Y) : LocalText.T("Apply to Selected Cells")), FontSize = 18, Margin = new(0, 0, 0, 14) });
 
-        TextBox Field(string label, string value) { panel.Children.Add(new TextBlock { Text = LocalText.T(label)}); var box = new TextBox { Text = value }; panel.Children.Add(box); return box; }
-
-        var light = Field("Light (0\u2013255)", c.Light.ToString()); var door = Field("Door Index (0\u2013255)", c.Door.ToString()); var offset = Field("Door Offset (0\u2013255)", c.DoorOffset.ToString()); var apply = new Button { Content = LocalText.T("Apply Properties")}; panel.Children.Add(apply);
-
-        apply.Click += (_, _) => { if (!byte.TryParse(light.Text, out var l) || !byte.TryParse(door.Text, out var d) || !byte.TryParse(offset.Text, out var o)) { MessageBox.Show(dialog, "One or more values are outside the supported range."); return; } Viewport.ApplyMetadata(l, d, o, area); dialog.DialogResult = true; }; dialog.ShowDialog();
+        var initialValues = new Dictionary<TextBox, string>();
+        TextBox Field(string label, Func<Cell, byte> read)
+        {
+            panel.Children.Add(new TextBlock { Text = LocalText.T(label) });
+            byte? common = Viewport.CommonMetadata(area, read);
+            var box = new TextBox { Text = common?.ToString() ?? "", Watermark = LocalText.T("Mixed — leave unchanged") };
+            initialValues[box] = box.Text ?? "";
+            panel.Children.Add(box);
+            return box;
+        }
+        var light = Field("Light (0\u2013255)", cell => cell.Light);
+        var door = Field("Door Index (0\u2013255)", cell => cell.Door);
+        var offset = Field("Door Offset (0\u2013255)", cell => cell.DoorOffset);
+        var apply = new Button { Content = LocalText.T("Apply Properties") }; panel.Children.Add(apply);
+        apply.Click += (_, _) =>
+        {
+            bool Parse(TextBox box, out byte? value)
+            {
+                value = null;
+                if (string.IsNullOrWhiteSpace(box.Text)) return true;
+                if (!byte.TryParse(box.Text, out var parsed)) return false;
+                value = parsed; return true;
+            }
+            if (!Parse(light, out var l) || !Parse(door, out var d) || !Parse(offset, out var o))
+            { MessageBox.Show(dialog, "One or more values are outside the supported range."); return; }
+            // Unchanged fields must not flatten mixed values in a selection.
+            Viewport.ApplyMetadata(light.Text == initialValues[light] ? null : l,
+                door.Text == initialValues[door] ? null : d,
+                offset.Text == initialValues[offset] ? null : o, area);
+            dialog.DialogResult = true;
+        };
+        dialog.ShowDialog();
 
     }
 

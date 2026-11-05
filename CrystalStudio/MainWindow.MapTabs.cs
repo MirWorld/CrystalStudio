@@ -74,6 +74,7 @@ public partial class MainWindow
             if (activeMap != null) activeMap.State = Viewport.CaptureEditorState();
             activeMap = map; stampProperties.IsVisible = map.IsStamp ? true : false;
             Viewport.RestoreEditorState(map.State);
+            SyncLayerLocks();
             FitNewMap();
             inspectorCell = null;
             UpdateCellInspector(-1, -1);
@@ -97,7 +98,7 @@ public partial class MainWindow
         if (busy || !mapTabs.Items.Contains(tab)) return false;
         mapTabs.SelectedItem = tab;
         if (!ConfirmDiscard()) return false;
-        ForgetRecovery((OpenMapTab)tab.Tag);
+        ForgetRecovery((OpenMapTab)tab.Tag!);
         switchingMap = true;
         try { activeMap = null; mapTabs.Items.Remove(tab); }
         finally { switchingMap = false; }

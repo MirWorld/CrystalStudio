@@ -10,9 +10,9 @@
                 <ComboBox x:Name="DungeonTypeList" SelectionChanged="SettingsChanged" Margin="0,6,0,18" AutomationProperties.Name="{local:Loc DungeonType_34009401}" />
                 <TextBlock Text="{local:Loc Style_7E744141}" FontWeight="SemiBold" />
                 <ComboBox x:Name="TempleList" SelectionChanged="SettingsChanged" Margin="0,6,0,18" AutomationProperties.Name="{local:Loc DungeonStyle_142FF938}" />
-                <TextBlock />
+                <TextBlock><Run Text="{local:Loc RoomCount_1C861272}" /><Run Text=": " /><Run Text="{Binding ElementName=RoomsSlider, Path=Value, StringFormat={}{0:0}}" /></TextBlock>
                 <Slider x:Name="RoomsSlider" Minimum="1" Maximum="30" Value="12" TickFrequency="1" IsSnapToTickEnabled="True" ValueChanged="SettingsChanged" Margin="0,6,0,18" AutomationProperties.Name="{local:Loc RoomCount_1C861272}" />
-                <TextBlock x:Name="RoomSizeText" />
+                <TextBlock x:Name="RoomSizeText"><Run Text="{local:Loc RoomSize_05364AD8}" /><Run Text=": " /><Run Text="{Binding ElementName=SizeSlider, Path=Value, StringFormat={}{0:0}}" /></TextBlock>
                 <Slider x:Name="SizeSlider" Minimum="0" Maximum="5" Value="5" Ticks="0,3,4,5" IsSnapToTickEnabled="True" ValueChanged="SettingsChanged" Margin="0,6,0,18" AutomationProperties.Name="{local:Loc RoomSize_05364AD8}" />
                 <TextBlock Text="{local:Loc CorridorWidth_6B297440}" />
                 <ComboBox x:Name="WidthList" SelectionChanged="SettingsChanged" Margin="0,6,0,18" AutomationProperties.Name="{local:Loc CorridorWidth_6B297440}"><ComboBoxItem Content="{local:Loc Narrow_BA227109}" /><ComboBoxItem Content="{local:Loc Wide_147170E7}" /></ComboBox>

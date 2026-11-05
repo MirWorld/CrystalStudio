@@ -122,6 +122,7 @@ public sealed partial class MapViewport
 
     public bool PaintWall(int x, int y, bool erase = false)
     {
+        if (!AllowEdit()) return false;
         if (WallFamily is not { } family) { CancelWallDraft(); Message?.Invoke((WallCatalogueError ?? LocalText.T("Choose a wall type in Wall settings (W)"))); return false; }
         var availabilityKey = (family, Assets);
         if (wallAvailabilityKey != availabilityKey)
@@ -140,6 +141,7 @@ public sealed partial class MapViewport
 
     private void PaintWallStroke(int x, int y)
     {
+        if (!AllowEdit()) return;
         if (!Document.Contains(x,y)) { lastWall=null; return; }
         if (WallFamily is not { } family) { PaintWall(x, y, WallErasing); return; }
         if (family.PaintsAreas)

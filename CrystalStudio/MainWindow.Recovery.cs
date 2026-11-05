@@ -42,19 +42,23 @@ public partial class MainWindow
         {
             foreach (var map in mapTabs.Items.Cast<TabItem>().Select(tab => (OpenMapTab)tab.Tag!).ToArray())
             {
-                var state = ReferenceEquals(map, activeMap) ? Viewport.CaptureEditorState() : map.State;
-                if (map.IsStamp) continue;
-                if (!state.History.Dirty)
+                if (!mapTabs.Items.Cast<TabItem>().Any(tab => ReferenceEquals(tab.Tag, map))) continue;
+                var document = ReferenceEquals(map, activeMap) ? Viewport.Document : map.State.Document;
+                var history = ReferenceEquals(map, activeMap) ? Viewport.History : map.State.History;
+                if (!history.Dirty && !map.CategoryDirty)
                 {
                     if (map.RecoveryRevision >= 0) ForgetRecovery(map);
                     continue;
                 }
-                if (map.RecoveryRevision == state.Document.PickupRevision) continue;
-                long revision = state.Document.PickupRevision; int version = map.RecoveryVersion;
-                var snapshot = MapRecoveryStore.Capture(state.Document);
-                if (map.Path == null && !map.KeepSourceFormat) snapshot.SourceFormat = settings.AssetFormat;
+                if (map.RecoveryRevision == document.PickupRevision && !map.CategoryDirty) continue;
+                long revision = document.PickupRevision; int version = map.RecoveryVersion;
+                var snapshot = MapRecoveryStore.Capture(document);
+                if (map.Path == null && !map.KeepSourceFormat && !map.IsStamp) snapshot.SourceFormat = settings.AssetFormat;
                 string? path = map.Path; string name = MapDisplayName(map); var recipe = map.Recipe;
-                await Task.Run(() => recoveryStore.Write(map.RecoveryId, snapshot, path, name, recipe));
+                var metadata = new MapRecoveryEntry(1, recoveryStore.SessionId, map.RecoveryId, "", path, name, DateTime.UtcNow,
+                    snapshot.SourceFormat, recipe, map.IsStamp, map.StampOriginX, map.StampOriginY, map.Category, map.CategoryDirty);
+                int storeVersion = recoveryStore.Version(map.RecoveryId);
+                await Task.Run(() => recoveryStore.Write(map.RecoveryId, snapshot, path, name, recipe, metadata, storeVersion));
                 if (closed || map.RecoveryVersion != version)
                 { recoveryStore.Delete(map.RecoveryId); if (closed) break; continue; }
                 map.RecoveryRevision = revision;
@@ -116,6 +120,9 @@ public partial class MainWindow
             if (closed) return;
             AddMapTab(document); activeMap!.Name = Path.GetFileNameWithoutExtension(entry.DisplayName) + LocalText.T(" (recovered)");
             activeMap.KeepSourceFormat = true; activeMap.Recipe = entry.Recipe; activeMap.RecoveryOrigin = entry;
+            activeMap.IsStamp = entry.IsStamp; activeMap.StampOriginX = entry.OriginX; activeMap.StampOriginY = entry.OriginY;
+            activeMap.Category = entry.Category; activeMap.CategoryDirty = entry.CategoryDirty;
+            stampProperties.IsVisible = entry.IsStamp;
             Viewport.History.MarkUnsaved(); UpdateLabels(); UpdateMapTabLabels();
             Status.Text = LocalText.T("Recovered an unsaved copy. Use Save As to choose its destination.");
         });

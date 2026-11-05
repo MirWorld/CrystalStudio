@@ -5,7 +5,7 @@ namespace CrystalStudio;
 
 internal static class AtomicFile
 {
-    public static void Write(string path, Action<Stream> write, bool overwrite = true)
+    public static void Write(string path, Action<Stream> write, bool overwrite = true, bool backup = false)
     {
         path = Path.GetFullPath(path);
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
@@ -17,7 +17,8 @@ internal static class AtomicFile
                 write(stream);
                 stream.Flush(flushToDisk: true);
             }
-            File.Move(temporary, path, overwrite);
+            if (overwrite && backup && File.Exists(path)) File.Replace(temporary, path, path + ".bak");
+            else File.Move(temporary, path, overwrite);
         }
         finally
         {
