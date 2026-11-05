@@ -22,8 +22,10 @@ public sealed record ProvinceStyle(string Name, string WallId, string Region, st
     public override string ToString() => Name;
 }
 
+public enum ProvinceScene { Wilderness, VillageCountryside }
 public sealed record ProvinceOptions(int Seed = 1, ProvinceStyle? Style = null, int ForestChance = 85,
-    int CliffChance = 70, int BeachChance = 35, int RiverChance = 55, int Vegetation = 55, int TownCount = 0, int DoorCount = 0);
+    int CliffChance = 70, int BeachChance = 35, int RiverChance = 55, int Vegetation = 55, int TownCount = 0, int DoorCount = 0,
+    ProvinceScene Scene = ProvinceScene.Wilderness);
 public sealed record ProvinceScenery(BrushTree Tree, SpecialBrushKind Kind, IReadOnlyList<string> Regions)
 {
     public string? CatalogueId { get; init; }
@@ -78,7 +80,7 @@ public static class ProvinceGenerator
             throw new ArgumentException("Province generation needs at least 128×128 cells and supports up to 1,000,000 cells. Larger maps give rivers and borders more room.");
         if (new[] { options.ForestChance, options.CliffChance, options.BeachChance, options.RiverChance, options.Vegetation }.Any(v => v is < 0 or > 100) ||
             options.TownCount is < 0 or > 8 || options.DoorCount is < 0 or > WallEntrances.MaximumCount ||
-            options.Style != null && !ProvinceStyle.All.Contains(options.Style)) throw new ArgumentException("Invalid province settings.");
+            !Enum.IsDefined(options.Scene) || options.Style != null && !ProvinceStyle.All.Contains(options.Style)) throw new ArgumentException("Invalid province settings.");
         long revision = source.PickupRevision;
         var random = new Random(options.Seed);
         var style = options.Style ?? ProvinceStyle.All[random.Next(ProvinceStyle.All.Count)];
@@ -191,8 +193,13 @@ public static class ProvinceGenerator
         Mark("Boundary scenery");
         var groves = ProvinceLandmarks.PlantGroves(generated, scenery, style, reserved, options.Seed, options.Vegetation, cancellation, sceneryGround);
         if (groves.Groves > 0) features.Add($"{groves.Groves} dense inland groves");
+        var roads = ground.PathCells.Concat(settlements?.Towns.SelectMany(t =>
+            t.Plan.Roads.Select(p => (X: t.X + p.X, Y: t.Y + p.Y)).Concat(t.Approach)) ?? []);
+        int edgePlants = ProvinceEcology.PlantEdges(generated, terrain, scenery, style, reserved, coastReserved,
+            roads, options.Seed, options.Vegetation, cancellation);
+        if (edgePlants > 0) features.Add(LocalText.Format("{0} woodland, trail and shore edge plants", edgePlants));
         int trees = (style.Arid ? 0 : perimeterObjects) + groves.Trees + Scatter(SpecialBrushKind.Tree, 4);
-        int bushes = Scatter(SpecialBrushKind.Bush, 3);
+        int bushes = edgePlants + Scatter(SpecialBrushKind.Bush, 3);
         int rocks = (style.Arid ? perimeterObjects : 0) + Scatter(SpecialBrushKind.Rock, 6);
         Mark("Interior scenery");
         if (perimeterObjects > 0) features.Add(style.Arid ? "Rocky desert borders" : "Thick woodland borders");

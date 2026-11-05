@@ -5,6 +5,11 @@
         <Grid><Grid.RowDefinitions><RowDefinition /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
         <ScrollViewer VerticalScrollBarVisibility="Auto"><StackPanel>
             <TextBlock Text="{local:Loc OutdoorProvince_EB80CC30}" FontSize="20" FontWeight="SemiBold" />
+            <TextBlock Text="{local:Loc SceneTheme}" />
+            <ComboBox x:Name="SceneList" SelectionChanged="SceneChanged" Margin="0,6,0,14" AutomationProperties.Name="{local:Loc SceneTheme}">
+                <ComboBoxItem Content="{local:Loc WildernessScene}" />
+                <ComboBoxItem Content="{local:Loc VillageCountrysideScene}" />
+            </ComboBox>
             <TextBlock Text="{local:Loc LandscapeStyle_95397827}" />
             <ComboBox x:Name="StyleList" SelectionChanged="SettingsChanged" Margin="0,6,0,18" AutomationProperties.Name="{local:Loc ProvinceLandscapeStyle_84104B72}" />
             <TextBlock Text="{local:Loc ChanceperGeneratedMap_482493D3}" FontWeight="SemiBold" Margin="0,0,0,12" />

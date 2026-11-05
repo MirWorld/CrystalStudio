@@ -3878,5 +3878,25 @@
   "QuickMap_43": {
     "English": "Recovered an unsaved copy. Use Save As to choose its destination.",
     "Chinese": "已恢复为未保存副本，请使用另存为选择保存位置。"
+  },
+  "SceneTheme": {
+    "English": "Scene theme",
+    "Chinese": "场景主题"
+  },
+  "WildernessScene": {
+    "English": "Wilderness",
+    "Chinese": "自然荒野"
+  },
+  "VillageCountrysideScene": {
+    "English": "Village and countryside",
+    "Chinese": "村镇与郊野"
+  },
+  "DetailedScenes": {
+    "English": "Detailed living scenes",
+    "Chinese": "丰富生活场景"
+  },
+  "EcologyEdgePlants": {
+    "English": "{0} woodland, trail and shore edge plants",
+    "Chinese": "{0} 处林缘、路旁与岸边植被"
   }
 }

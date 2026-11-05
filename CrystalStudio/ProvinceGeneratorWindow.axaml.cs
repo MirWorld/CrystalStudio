@@ -28,6 +28,7 @@ public partial class ProvinceGeneratorWindow : EditorWindow
         InitializeComponent();
         TownCountSlider.Maximum = Math.Clamp(document.Width * document.Height / (128 * 128), 1, 8);
         StyleList.ItemsSource = ProvinceStyle.All; StyleList.SelectedIndex = 0;
+        SceneList.SelectedIndex = parameters is { Count: > 0 } && !parameters.ContainsKey("SceneList") ? 0 : 1;
         timer.Tick += Generate;
         Loaded += Load;
         Closed += (_, _) => { closed = true; timer.Stop(); pending?.Cancel(); lifetime.Cancel(); };
@@ -45,6 +46,19 @@ public partial class ProvinceGeneratorWindow : EditorWindow
         }
         catch (OperationCanceledException) { }
         catch (Exception ex) { if (!closed) { PreviewHint.Text = LocalText.T("Province artwork unavailable"); FeedbackText.Text = (ex.Message); } }
+    }
+    private void SceneChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (TownCountSlider == null) return;
+        bool village = SceneList.SelectedIndex == (int)ProvinceScene.VillageCountryside;
+        TownCountSlider.Minimum = village ? 1 : 0;
+        TownCountSlider.Value = village ? Math.Min(TownCountSlider.Maximum, Math.Max(1, document.Width * document.Height / 90000)) : 0;
+        if (village)
+        {
+            ForestSlider.Value = 65; CliffSlider.Value = 35; BeachSlider.Value = 20;
+            RiverSlider.Value = 45; VegetationSlider.Value = 70;
+        }
+        UpdateDoorOptions(); Schedule();
     }
     private void SettingsChanged(object sender, RoutedEventArgs e) { UpdateDoorOptions(); Schedule(); }
     private void UpdateDoorOptions()
@@ -83,7 +97,7 @@ public partial class ProvinceGeneratorWindow : EditorWindow
         if (!int.TryParse(SeedBox.Text, out int seed)) { PreviewHint.Text = ((FeedbackText.Text = LocalText.T("Enter a whole-number seed."))); return; }
         var options = new ProvinceOptions(seed, StyleList.SelectedItem as ProvinceStyle, (int)ForestSlider.Value,
             (int)CliffSlider.Value, (int)BeachSlider.Value, (int)RiverSlider.Value, (int)VegetationSlider.Value, (int)TownCountSlider.Value,
-            DoorCountSlider.IsEnabled ? (int)DoorCountSlider.Value : 0);
+            DoorCountSlider.IsEnabled ? (int)DoorCountSlider.Value : 0, (ProvinceScene)SceneList.SelectedIndex);
         int request = revision; bool detail = DetailToggle.IsChecked == true;
         var job = CancellationTokenSource.CreateLinkedTokenSource(lifetime.Token); pending = job;
         try

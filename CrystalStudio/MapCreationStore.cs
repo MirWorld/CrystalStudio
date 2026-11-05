@@ -55,7 +55,7 @@ internal sealed class MapCreationStore
     public static MapCreationRecipe Recipe(MapDocument document, MapCreationKind kind, IReadOnlyDictionary<string, string> parameters, LibrarySettings settings, AssetStore? assets = null)
     {
         var hashes = new Dictionary<string, string>();
-        foreach (string name in new[] { "terrain.json", "walls.json", "palette.json" })
+        foreach (string name in new[] { "terrain.json", "walls.json", "palette.json", "towns.json", "province-decoration-ground.json" })
         {
             string path = DataPaths.ResolveEditor("catalogue", name);
             if (File.Exists(path)) { using var stream = File.OpenRead(path); hashes[name] = Convert.ToHexString(SHA256.HashData(stream)); }
@@ -67,7 +67,7 @@ internal sealed class MapCreationStore
             libraries[pair.Key.ToString(System.Globalization.CultureInfo.InvariantCulture)] = file.FullName + "|" + file.Length + "|" + file.LastWriteTimeUtc.Ticks;
         }
         return new(1, DateTime.UtcNow, kind, document.Width, document.Height, document.SourceFormat,
-            settings.LibraryFolder, "CrystalStudio/" + typeof(MainWindow).Assembly.GetName().Version + "/quick-map-v1", new(parameters), hashes) { LibraryVersions = libraries };
+            settings.LibraryFolder, "CrystalStudio/" + typeof(MainWindow).Assembly.GetName().Version + "/quick-map-v2", new(parameters), hashes) { LibraryVersions = libraries };
     }
 
     public static void SaveRecipe(string mapPath, MapCreationRecipe recipe) => AtomicFile.WriteJson(mapPath + ".creation.json", recipe);
