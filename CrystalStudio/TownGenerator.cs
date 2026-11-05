@@ -2,7 +2,7 @@ using System.IO;
 
 namespace CrystalStudio;
 
-public enum TownDecorations { None, Sparse, Moderate }
+public enum TownDecorations { None, Sparse, Moderate, Detailed }
 // Retain retired IDs so old settings cannot silently select a different surface.
 public enum TownPathStyle { Native, StoneTiles, DarkTiles, Mud, StonyDirt, CrackedDirt, Sand }
 public sealed record TownGroundChoice(TownPathStyle Style, string Name, TerrainSet Base, TerrainSet Path)
@@ -173,7 +173,9 @@ public static class TownGenerator
         if (buildings.Count(p => p.Piece.Role == "house") < 3) throw new InvalidDataException($"Too few houses fit {layout.Name} ({buildings.Count} buildings). Reduce spacing or increase town size.");
         if (size < 90) FitMarkets();
         var walls = enclosure == null ? new List<TownWallRun>() : [enclosure];
-        if (options.Decorations != TownDecorations.None)
+        if (options.Decorations == TownDecorations.Detailed)
+            TownSceneDetails.Place(family, buildings, roads, layout.Centres, options, Place, cancellationToken);
+        else if (options.Decorations != TownDecorations.None)
         {
             var homes = buildings.Where(b => b.Piece.Role is "house" or "market" or "landmark").ToArray();
             var decorRandom = GroundRandom(unchecked(options.Seed + 137));
