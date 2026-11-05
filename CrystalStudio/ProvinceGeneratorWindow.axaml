@@ -10,6 +10,7 @@
                 <ComboBoxItem Content="{local:Loc WildernessScene}" />
                 <ComboBoxItem Content="{local:Loc VillageCountrysideScene}" />
                 <ComboBoxItem Content="{local:Loc ForestRuinsScene}" />
+                <ComboBoxItem Content="{local:Loc MiningQuarryScene}" />
             </ComboBox>
             <TextBlock Text="{local:Loc LandscapeStyle_95397827}" />
             <ComboBox x:Name="StyleList" SelectionChanged="SettingsChanged" Margin="0,6,0,18" AutomationProperties.Name="{local:Loc ProvinceLandscapeStyle_84104B72}" />
@@ -32,6 +33,10 @@
             <StackPanel x:Name="RuinOptions" IsVisible="False">
                 <TextBlock><Run Text="{local:Loc RuinCount}" /><Run Text="{Binding ElementName=RuinCountSlider, Path=Value, StringFormat={}{0:0}}" /></TextBlock>
                 <Slider x:Name="RuinCountSlider" Minimum="1" Maximum="4" TickFrequency="1" IsSnapToTickEnabled="True" Value="2" ValueChanged="SettingsChanged" Margin="0,4,0,12" AutomationProperties.Name="{local:Loc RuinCount}" />
+            </StackPanel>
+            <StackPanel x:Name="MineOptions" IsVisible="False">
+                <TextBlock><Run Text="{local:Loc MineCount}" /><Run Text="{Binding ElementName=MineCountSlider, Path=Value, StringFormat={}{0:0}}" /></TextBlock>
+                <Slider x:Name="MineCountSlider" Minimum="1" Maximum="4" TickFrequency="1" IsSnapToTickEnabled="True" Value="2" ValueChanged="SettingsChanged" Margin="0,4,0,12" AutomationProperties.Name="{local:Loc MineCount}" />
             </StackPanel>
         </StackPanel></ScrollViewer>
         <StackPanel Grid.Row="1" Margin="0,12,0,0">

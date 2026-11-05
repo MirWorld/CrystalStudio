@@ -3901,5 +3901,10 @@
   },
   "ForestRuinsScene": { "English": "Forest ruins", "Chinese": "森林遗迹" },
   "RuinCount": { "English": "Ruin clearings: ", "Chinese": "遗迹空地数量：" },
-  "ForestRuinClearings": { "English": "{0} forest ruin clearings", "Chinese": "{0} 处森林遗迹空地" }
+  "ForestRuinClearings": { "English": "{0} forest ruin clearings", "Chinese": "{0} 处森林遗迹空地" },
+  "MiningQuarryScene": { "English": "Mining and quarry", "Chinese": "矿区与采石场" },
+  "MineCount": { "English": "Mining yards: ", "Chinese": "采掘场数量：" },
+  "MiningYards": { "English": "{0} mining and quarry yards", "Chinese": "{0} 处矿区与采石场" },
+  "MiningArtworkUnavailable": { "English": "Mining yard artwork is unavailable in the selected libraries.", "Chinese": "当前素材库缺少完整矿区所需的素材。" },
+  "MiningDetailsUnavailable": { "English": "Some mining yard details are unavailable; only complete visible objects were used.", "Chinese": "部分矿区细节素材不可用，已仅使用完整可见物件。" }
 }

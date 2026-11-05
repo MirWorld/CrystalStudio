@@ -109,7 +109,7 @@ public sealed class ProvinceSceneTests
         var parameters = new Dictionary<string, string> { ["SceneList"] = "index:1", ["SeedBox"] = "27" };
         var recipe = MapCreationStore.Recipe(new MapDocument(320, 320), MapCreationKind.Province, parameters, new());
         Assert.Equal("index:1", recipe.Parameters["SceneList"]);
-        Assert.Contains("quick-map-v3", recipe.GeneratorVersion);
+        Assert.Contains("quick-map-v4", recipe.GeneratorVersion);
         Assert.Contains("towns.json", recipe.CatalogueHashes.Keys);
         Assert.Contains("province-decoration-ground.json", recipe.CatalogueHashes.Keys);
     }

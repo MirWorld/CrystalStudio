@@ -73,7 +73,7 @@
     {
       "id": "mir/mir_00170",
       "status": "freestanding",
-      "evidence": "Rendered native foreground inspected: no baked terrain card; framed crop bed and stone plinth are self-contained props."
+      "evidence": "Mining-yard native artwork audit (matching client libraries): transparent surroundings; complete self-contained mine mouth, cart, rock spoil, timber or storage prop; no baked terrain card."
     },
     {
       "id": "mir/mir_00172",
@@ -841,6 +841,91 @@
       "id": "mir/mir_06404",
       "status": "freestanding",
       "evidence": "Native foreground rendered from matching libraries and visually inspected in forest-ruins artwork audit: transparent surroundings; self-contained rubble, plinth or timber; no baked terrain card."
+    },
+    {
+      "id": "mir/mir_01275",
+      "status": "freestanding",
+      "evidence": "Mining-yard native artwork audit (matching client libraries): transparent surroundings; complete self-contained mine mouth, cart, rock spoil, timber or storage prop; no baked terrain card."
+    },
+    {
+      "id": "mir/mir_00918",
+      "status": "freestanding",
+      "evidence": "Mining-yard native artwork audit (matching client libraries): transparent surroundings; complete self-contained mine mouth, cart, rock spoil, timber or storage prop; no baked terrain card."
+    },
+    {
+      "id": "mir/mir_00919",
+      "status": "freestanding",
+      "evidence": "Mining-yard native artwork audit (matching client libraries): transparent surroundings; complete self-contained mine mouth, cart, rock spoil, timber or storage prop; no baked terrain card."
+    },
+    {
+      "id": "mir/mir_00920",
+      "status": "freestanding",
+      "evidence": "Mining-yard native artwork audit (matching client libraries): transparent surroundings; complete self-contained mine mouth, cart, rock spoil, timber or storage prop; no baked terrain card."
+    },
+    {
+      "id": "mir/mir_00921",
+      "status": "freestanding",
+      "evidence": "Mining-yard native artwork audit (matching client libraries): transparent surroundings; complete self-contained mine mouth, cart, rock spoil, timber or storage prop; no baked terrain card."
+    },
+    {
+      "id": "mir/mir_00102",
+      "status": "freestanding",
+      "evidence": "Mining-yard native artwork audit (matching client libraries): transparent surroundings; complete self-contained mine mouth, cart, rock spoil, timber or storage prop; no baked terrain card."
+    },
+    {
+      "id": "mir/mir_00103",
+      "status": "freestanding",
+      "evidence": "Mining-yard native artwork audit (matching client libraries): transparent surroundings; complete self-contained mine mouth, cart, rock spoil, timber or storage prop; no baked terrain card."
+    },
+    {
+      "id": "mir/mir_00171",
+      "status": "freestanding",
+      "evidence": "Mining-yard native artwork audit (matching client libraries): transparent surroundings; complete self-contained mine mouth, cart, rock spoil, timber or storage prop; no baked terrain card."
+    },
+    {
+      "id": "mir/mir_00817",
+      "status": "freestanding",
+      "evidence": "Mining-yard native artwork audit (matching client libraries): transparent surroundings; complete self-contained mine mouth, cart, rock spoil, timber or storage prop; no baked terrain card."
+    },
+    {
+      "id": "mir/mir_01166",
+      "status": "freestanding",
+      "evidence": "Mining-yard native artwork audit (matching client libraries): transparent surroundings; complete self-contained mine mouth, cart, rock spoil, timber or storage prop; no baked terrain card."
+    },
+    {
+      "id": "mir/mir_02035",
+      "status": "freestanding",
+      "evidence": "Mining-yard native artwork audit (matching client libraries): transparent surroundings; complete self-contained mine mouth, cart, rock spoil, timber or storage prop; no baked terrain card."
+    },
+    {
+      "id": "mir/mir_02037",
+      "status": "freestanding",
+      "evidence": "Mining-yard native artwork audit (matching client libraries): transparent surroundings; complete self-contained mine mouth, cart, rock spoil, timber or storage prop; no baked terrain card."
+    },
+    {
+      "id": "mir/mir_02038",
+      "status": "freestanding",
+      "evidence": "Mining-yard native artwork audit (matching client libraries): transparent surroundings; complete self-contained mine mouth, cart, rock spoil, timber or storage prop; no baked terrain card."
+    },
+    {
+      "id": "mir/mir_00818",
+      "status": "freestanding",
+      "evidence": "Mining-yard native artwork audit (matching client libraries): transparent surroundings; complete self-contained mine mouth, cart, rock spoil, timber or storage prop; no baked terrain card."
+    },
+    {
+      "id": "mir/mir_00975",
+      "status": "freestanding",
+      "evidence": "Mining-yard native artwork audit (matching client libraries): transparent surroundings; complete self-contained mine mouth, cart, rock spoil, timber or storage prop; no baked terrain card."
+    },
+    {
+      "id": "mir/mir_00976",
+      "status": "freestanding",
+      "evidence": "Mining-yard native artwork audit (matching client libraries): transparent surroundings; complete self-contained mine mouth, cart, rock spoil, timber or storage prop; no baked terrain card."
+    },
+    {
+      "id": "mir/mir_00977",
+      "status": "freestanding",
+      "evidence": "Mining-yard native artwork audit (matching client libraries): transparent surroundings; complete self-contained mine mouth, cart, rock spoil, timber or storage prop; no baked terrain card."
     }
   ]
 }
