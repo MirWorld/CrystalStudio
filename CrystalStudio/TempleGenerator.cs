@@ -48,7 +48,7 @@ public static class TempleGenerator
         if (options.Rooms is < 1 or > 30 || options.RoomSize is not (0 or 3 or 4 or 5) || options.CorridorWidth is < 1 or > 2 ||
             options.DoorCount is < 0 or > WallEntrances.MaximumCount || !Enum.IsDefined(options.Type))
             throw new ArgumentOutOfRangeException(nameof(options));
-        if (source.Width < 64 || source.Height < 64 || (long)source.Width * source.Height > 1_000_000)
+        if (source.Width < 64 || source.Height < 64 || (long)source.Width * source.Height > MapDimensions.MaximumGeneratedCells)
             throw new ArgumentException("Dungeon generation needs at least 64×64 cells and supports up to 1,000,000 cells.");
         long revision = source.PickupRevision;
         walls=walls.WithMode(true);

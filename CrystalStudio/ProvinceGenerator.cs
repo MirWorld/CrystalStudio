@@ -74,7 +74,7 @@ public static class ProvinceGenerator
         var watch = timing == null ? null : System.Diagnostics.Stopwatch.StartNew();
         void Mark(string stage) { if (watch != null) { timing!(stage, watch.Elapsed); watch.Restart(); } }
         cancellation.ThrowIfCancellationRequested();
-        if (source.Width < 128 || source.Height < 128 || (long)source.Width * source.Height > 1_000_000)
+        if (source.Width < 128 || source.Height < 128 || (long)source.Width * source.Height > MapDimensions.MaximumGeneratedCells)
             throw new ArgumentException("Province generation needs at least 128×128 cells and supports up to 1,000,000 cells. Larger maps give rivers and borders more room.");
         if (new[] { options.ForestChance, options.CliffChance, options.BeachChance, options.RiverChance, options.Vegetation }.Any(v => v is < 0 or > 100) ||
             options.TownCount is < 0 or > 8 || options.DoorCount is < 0 or > WallEntrances.MaximumCount ||
