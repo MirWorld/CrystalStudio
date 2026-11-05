@@ -96,7 +96,7 @@ public sealed partial class MapDocument(int width, int height)
                 CellCodec.Write(w, cell, true);
             }
             StampMetadata.Write(w, d: this);
-        });
+        }, backup: true);
     }
 }
 public record StampCell(int X, int Y, Cell Cell);
@@ -164,7 +164,7 @@ public static class CellCodec
             using var w = new BinaryWriter(stream, System.Text.Encoding.UTF8, leaveOpen: true);
             w.Write((byte)'C'); w.Write((byte)'#'); w.Write((byte)2); w.Write(list.Count);
             foreach (var c in list) { w.Write(c.X); w.Write(c.Y); Write(w, c.Cell, false); }
-        });
+        }, backup: true);
     }
 }
 public sealed class EditHistory
@@ -222,5 +222,6 @@ public sealed class EditHistory
     public void Undo(MapDocument d, Action<int, int>? changed = null) => Swap(d, undo, redo, changed);
     public void Redo(MapDocument d, Action<int, int>? changed = null) => Swap(d, redo, undo, changed);
     public void Saved() { Commit(); savedState = currentState; }
+    internal void MarkRecovered() => savedState = -1;
 }
 

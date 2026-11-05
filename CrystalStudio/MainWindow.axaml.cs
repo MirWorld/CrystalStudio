@@ -166,6 +166,8 @@ public partial class MainWindow : EditorWindow
 
             });
 
+            await OfferRecoveryAsync();
+
             if (Environment.GetCommandLineArgs().Skip(1).FirstOrDefault() is string path && File.Exists(path)) await Run(() => OpenMap(path));
 
         };
@@ -174,6 +176,7 @@ public partial class MainWindow : EditorWindow
 
         InitializeMapTabs();
         InitializeRecentMaps();
+        InitializeRecovery();
 
         InitializeCellMenu();
 
@@ -507,7 +510,7 @@ public partial class MainWindow : EditorWindow
         if (activeMap?.IsStamp == true) return SaveStampEditor(saveAs);
         string? target = saveAs ? null : mapPath; if (target == null) { var picker = new SaveFileDialog { Filter = "Crystal map (*.map)|*.map", FileName = mapPath == null ? "Untitled.map" : Path.GetFileName(mapPath), InitialDirectory = mapPath == null ? "" : Path.GetDirectoryName(mapPath), DefaultExt = ".map", AddExtension = true, OverwritePrompt = true }; if (picker.ShowDialog(this) != true) return false; target = picker.FileName; }
 
-        try { if (mapPath == null) Viewport.Document.SourceFormat = settings.AssetFormat; Viewport.Document.Save(target); mapPath = target; RememberMap(target); Viewport.History.Saved(); UpdateLabels(); UpdateMapTabLabels(); Status.Text = LocalText.Format("Saved {0}",Path.GetFileName(target)); return true; } catch (Exception ex) { StudioLog.Error("Map.Save",ex,$"Path={target}"); MessageBox.Show(this, ex.Message, "Save failed"); return false; }
+        try { if (mapPath == null && activeMap?.Recovered != true) Viewport.Document.SourceFormat = settings.AssetFormat; Viewport.Document.Save(target); mapPath = target; RememberMap(target); Viewport.History.Saved(); if (activeMap != null) RemoveRecovery(activeMap); UpdateLabels(); UpdateMapTabLabels(); Status.Text = LocalText.Format("Saved {0}",Path.GetFileName(target)); return true; } catch (Exception ex) { StudioLog.Error("Map.Save",ex,$"Path={target}"); MessageBox.Show(this, ex.Message, "Save failed"); return false; }
 
     }
 

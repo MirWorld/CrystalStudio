@@ -191,7 +191,7 @@ public partial class MainWindow
                 if (separateCopy) { if (catalogueOriginal != null) AtomicFile.Write(catalogueTarget, stream => stream.Write(catalogueOriginal)); else if (File.Exists(catalogueTarget)) File.Delete(catalogueTarget); }
                 throw;
             }
-            map.Path = target; map.Category = category; map.CategoryDirty = false; Viewport.History.Saved();
+            map.Path = target; map.Category = category; map.CategoryDirty = false; Viewport.History.Saved(); RemoveRecovery(map);
             categoryIndex = StampCategories.Read(indexPath);
             selectedStampPath = null; selectedStampPreview = null;
             _ = DiscoverStampsAsync();

@@ -1,6 +1,14 @@
 {
+  "RecoverMaps": {"English": "Recover Maps", "Chinese": "恢复地图"},
   "DimensionsTotalLimit": {"English": "Use dimensions from 16 to 4096, with at most 16,000,000 cells.", "Chinese": "宽高须为 16～4096，且总格数不能超过 1600 万。"},
   "MixedUnchanged": {"English": "Mixed — leave unchanged", "Chinese": "混合值 — 留空不修改"},
+  "AutomaticRecoveryUnavailable": {"English": "Automatic recovery is unavailable.", "Chinese": "自动恢复不可用。"},
+  "RecoveryWriteFailed": {"English": "Could not write the automatic recovery snapshot.", "Chinese": "自动恢复快照写入失败。"},
+  "NoRecoverySnapshots": {"English": "No recovery snapshots are available.", "Chinese": "没有可恢复的快照。"},
+  "OpenRecoveredCopy": {"English": "Open Recovered Copy", "Chinese": "打开恢复副本"},
+  "DeleteSnapshot": {"English": "Delete Snapshot", "Chinese": "删除快照"},
+  "RecoveredMapName": {"English": "Recovered — {0}", "Chinese": "恢复 — {0}"},
+  "DeleteRecoveryQuestion": {"English": "Delete this recovery snapshot?", "Chinese": "删除此恢复快照？"},
   "OriginalSize_20261105": {
     "English": "Original Size",
     "Chinese": "原始大小"
