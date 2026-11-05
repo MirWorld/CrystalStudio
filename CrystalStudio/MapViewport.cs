@@ -50,6 +50,7 @@ public sealed partial class MapViewport : SceneControl
     }
     public bool MovePickedTo(int x,int y)
     {
+        if (!AllowEdit()) return false;
         if(PickedStampId is not Guid id)return false;
         if(PickedStamp is not PlacedStamp picked)return false;
         var target=PickedTarget(x,y);
@@ -60,12 +61,14 @@ public sealed partial class MapViewport : SceneControl
     }
     public bool DeletePicked()
     {
+        if (!AllowEdit()) return false;
         if(Tool==EditorTool.Clone)return false;
         if(PickedStampId is not Guid id)return false;
         bool deleted=Document.DeleteStamp(id,History,InvalidateCell);History.Commit();CancelPickup();Changed?.Invoke();Message?.Invoke(LocalText.T("Stamp deleted"));return deleted;
     }
     public bool ClonePickedTo(int x,int y)
     {
+        if (!AllowEdit()) return false;
         if(PickedStamp is not PlacedStamp picked)return false;
         var target=PickedTarget(x,y);int targetX=target.X,targetY=target.Y;
         var placement=GetStampPreviewPlacement(picked.Cells,targetX,targetY);
@@ -137,19 +140,20 @@ public sealed partial class MapViewport : SceneControl
     private static Brush paper => ThemeService.Brush("CanvasPaper");
     private static ScenePen cursor => new(ThemeService.Brush("Accent"),1.5);
     public MapViewport() { InitializeScene(); Focusable = true; ClipToBounds = true; RenderOptions.SetBitmapInterpolationMode(this, Avalonia.Media.Imaging.BitmapInterpolationMode.None); animationTimer.Tick += (_, _) => AdvanceAnimation(); Loaded += (_, _) => { animationTimer.Start(); sceneDirty = true; InvalidateVisual(); }; Unloaded += (_, _) => { PauseOverview(); animationTimer.Stop(); NavigationCancelled?.Invoke(); if (dragging) End(); }; }
-    public void SetDocument(MapDocument d, bool preserveZoom = false) { NavigationCancelled?.Invoke(); if (dragging) End(); ResetOverview(); ResetPresentation(); ResetDetailScene(); ResetPickupHints(); ResetStampDrawing(); CancelPickup(); CancelPaste(); CancelWallDraft(); Document = d; History = new(); Selection = null; brushPreviewKey = null; chunks.Clear(); frontRows.Clear(); origin = new(60, 70); Zoom = preserveZoom ? LimitZoom(Zoom) : 1; WarmOverview(); InvalidateVisual(); Changed?.Invoke(); }
+    public void SetDocument(MapDocument d, bool preserveZoom = false) { NavigationCancelled?.Invoke(); if (dragging) End(); ResetOverview(); ResetPresentation(); ResetDetailScene(); ResetPickupHints(); ResetStampDrawing(); CancelPickup(); CancelPaste(); CancelWallDraft(); Document = d; Array.Clear(layerLocks); History = new(); Selection = null; brushPreviewKey = null; chunks.Clear(); frontRows.Clear(); origin = new(60, 70); Zoom = preserveZoom ? LimitZoom(Zoom) : 1; WarmOverview(); InvalidateVisual(); Changed?.Invoke(); }
     internal void StopBackgroundWork() { ResetOverview(); animationTimer.Stop(); }
     internal MapEditorState CaptureEditorState()
     {
         NavigationCancelled?.Invoke();
         if (dragging) End();
         CancelWallDraft(true); CancelPaste(); CancelPickup();
-        return new(Document, History, Zoom, origin, Selection);
+        return new(Document, History, Zoom, origin, Selection, (bool[])layerLocks.Clone());
     }
     internal void RestoreEditorState(MapEditorState state)
     {
         SetDocument(state.Document);
         History = state.History; Zoom = state.Zoom; origin = state.Origin; Selection = state.Selection;
+        for (int i = 0; i < layerLocks.Length; i++) layerLocks[i] = state.LayerLocks?[i] ?? false;
         hover = (-1, -1);
         MinimapInvalidated?.Invoke(); InvalidateVisual(); Changed?.Invoke();
     }
@@ -447,6 +451,7 @@ public sealed partial class MapViewport : SceneControl
     protected override void OnPointerWheelChanged(PointerWheelEventArgs e) { base.OnPointerWheelChanged(e); var p = e.GetPosition(this); var world = (p - origin) / Zoom; Zoom = LimitZoom(Zoom * (e.Delta.Y > 0 ? 1.15 : 1 / 1.15)); origin = p - world * Zoom; InvalidateVisual(); Changed?.Invoke(); e.Handled = true; }
     private void Apply(int x, int y)
     {
+        if (!AllowEdit(Tool is EditorTool.Stamp or EditorTool.SpecialBrush or EditorTool.Wall ? null : Layer)) return;
         if (Tool == EditorTool.Wall) { PaintWallStroke(x, y); return; }
         if ((x, y) == lastPaint) return;
         if(Tool==EditorTool.Stamp&&Stamp!=null)
@@ -484,6 +489,7 @@ public sealed partial class MapViewport : SceneControl
     }
     public int BucketFill(int x, int y)
     {
+        if (!AllowEdit(Layer)) return 0;
         bool collision = IsCollisionLayer;
         if (!collision && Layer is not (MapLayer.Ground or MapLayer.Middle))
         {
@@ -537,7 +543,7 @@ public sealed partial class MapViewport : SceneControl
         Message?.Invoke(((collision ? (LocalText.Format("Applied {0} collision to {1:N0} cells", LocalText.T(Layer == MapLayer.LowCollision ? "low" : "high"), count)) : (LocalText.Format("Filled {0:N0} tiles", count)))));
         return count;
     }
-    public void FillSelection() { if (Selection is not Rect r || SpriteIndex < 0 && !IsCollisionLayer) return; History.Begin(); var previous = Tool; Tool = EditorTool.Pencil; lastPaint = (-999, -999); for (int y = (int)r.Y; y < r.Bottom; y++) for (int x = (int)r.X; x < r.Right; x++) Apply(x, y); Tool = previous; History.Commit(); Changed?.Invoke(); }
+    public void FillSelection() { if (!AllowEdit(Layer)) return; if (Selection is not Rect r || SpriteIndex < 0 && !IsCollisionLayer) return; History.Begin(); var previous = Tool; Tool = EditorTool.Pencil; lastPaint = (-999, -999); for (int y = (int)r.Y; y < r.Bottom; y++) for (int x = (int)r.X; x < r.Right; x++) Apply(x, y); Tool = previous; History.Commit(); Changed?.Invoke(); }
     internal byte? CommonMetadata(Rect area, Func<Cell, byte> read)
     {
         byte? value = null;
@@ -552,6 +558,7 @@ public sealed partial class MapViewport : SceneControl
     }
     public void ApplyMetadata(byte? light, byte? door, byte? offset, Rect? areaOverride = null)
     {
+        if (!AllowEdit(MapLayer.Objects)) return;
         if (light == null && door == null && offset == null) return;
         Rect area = areaOverride ?? Selection ?? new Rect(hover.X, hover.Y, 1, 1);
         History.Begin();
@@ -568,7 +575,7 @@ public sealed partial class MapViewport : SceneControl
         }
         History.Commit(); RefreshAssets(); Changed?.Invoke();
     }
-    public void ClearSelection() { brushPreviewKey = null; if (Selection is not Rect r) return; History.Begin(); for (int y = (int)r.Y; y < r.Bottom; y++) for (int x = (int)r.X; x < r.Right; x++) { History.Record(Document, x, y); var c = Document.Get(x, y).Copy(); switch (Layer) { case MapLayer.Ground: c.BackImage &= 0x60000000; break; case MapLayer.Middle: c.MiddleImage = 0; c.MiddleFrames = 0; c.MiddleTick = 0; break; case MapLayer.Objects: c.Foreground = null; break; case MapLayer.LowCollision: case MapLayer.HighCollision: c.BackImage &= ~ActiveCollisionMask; break; } Document.Set(x, y, c); InvalidateCell(x,y); } History.Commit(); chunks.Clear(); frontRows.Clear(); InvalidateVisual(); Changed?.Invoke(); }
+    public void ClearSelection() { if (!AllowEdit(Layer)) return; brushPreviewKey = null; if (Selection is not Rect r) return; History.Begin(); for (int y = (int)r.Y; y < r.Bottom; y++) for (int x = (int)r.X; x < r.Right; x++) { History.Record(Document, x, y); var c = Document.Get(x, y).Copy(); switch (Layer) { case MapLayer.Ground: c.BackImage &= 0x60000000; break; case MapLayer.Middle: c.MiddleImage = 0; c.MiddleFrames = 0; c.MiddleTick = 0; break; case MapLayer.Objects: c.Foreground = null; break; case MapLayer.LowCollision: case MapLayer.HighCollision: c.BackImage &= ~ActiveCollisionMask; break; } Document.Set(x, y, c); InvalidateCell(x,y); } History.Commit(); chunks.Clear(); frontRows.Clear(); InvalidateVisual(); Changed?.Invoke(); }
 }
 
 

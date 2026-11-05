@@ -70,6 +70,7 @@ public partial class MainWindow
             if (activeMap != null) activeMap.State = Viewport.CaptureEditorState();
             activeMap = map; stampProperties.IsVisible = map.IsStamp ? true : false;
             Viewport.RestoreEditorState(map.State);
+            SyncLayerLocks();
             FitNewMap();
             inspectorCell = null;
             UpdateCellInspector(-1, -1);

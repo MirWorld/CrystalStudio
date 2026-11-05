@@ -4,6 +4,7 @@ public sealed partial class MapViewport
 {
     public void ApplyTemple(TemplePlan plan)
     {
+        RequireAllLayersEditable();
         if (!ReferenceEquals(Document, plan.Source) || Document.PickupRevision != plan.SourceRevision)
             throw new InvalidOperationException("The map changed after the dungeon preview. Generate a fresh preview.");
         if (dragging) End();

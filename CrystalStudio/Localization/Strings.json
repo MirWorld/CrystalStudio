@@ -24,6 +24,9 @@
   "DoorNoForeground": {"English": "Door has no foreground image", "Chinese": "门属性没有对应的前景图像"},
   "DoorNoNeighbour": {"English": "Door has no walkable neighbouring cell", "Chinese": "门周围没有可行走单元格"},
   "DisconnectedArea": {"English": "Disconnected walkable area: {0:N0} cells", "Chinese": "独立可行走区域：{0:N0} 格"},
+  "LayerIsLocked": {"English": "This layer is locked.", "Chinese": "当前图层已锁定。"},
+  "UnlockAllLayers": {"English": "Unlock all layers before editing multiple layers.", "Chinese": "请先解锁所有图层，再执行跨图层操作。"},
+  "LockLayer": {"English": "Lock {0}", "Chinese": "锁定{0}"},
   "OriginalSize_20261105": {
     "English": "Original Size",
     "Chinese": "原始大小"

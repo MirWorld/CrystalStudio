@@ -4,6 +4,7 @@ public sealed partial class MapViewport
 {
     public int ApplyTerrain(TerrainPlan plan)
     {
+        RequireAllLayersEditable();
         if (!ReferenceEquals(Document, plan.Source) || Document.PickupRevision != plan.SourceRevision) throw new InvalidOperationException("The map changed after the terrain preview. Generate a fresh preview.");
         var replaced = TerrainCoastObjects.Replaced(Document, plan.Area).ToArray();
         MapDocument? checkDocument = null;

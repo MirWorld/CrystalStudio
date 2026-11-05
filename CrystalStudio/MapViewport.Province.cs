@@ -4,6 +4,7 @@ public sealed partial class MapViewport
 {
     public void ApplyProvince(ProvincePlan plan)
     {
+        RequireAllLayersEditable();
         if (!ReferenceEquals(Document, plan.Source) || Document.PickupRevision != plan.SourceRevision)
             throw new InvalidOperationException("The map changed after the province preview. Generate a fresh preview.");
         if (dragging) End();

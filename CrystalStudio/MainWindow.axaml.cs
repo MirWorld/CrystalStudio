@@ -179,6 +179,7 @@ public partial class MainWindow : EditorWindow
         InitializeRecovery();
 
         InitializeCellMenu();
+        InitializeLayerLocks();
 
         ThemeService.Changed += ThemeChanged;
 
@@ -705,6 +706,7 @@ public partial class MainWindow : EditorWindow
     {
 
         if (busy || !Viewport.Document.Contains(point.X, point.Y)) return;
+        if (Viewport.IsLayerLocked(MapLayer.Objects)) { Status.Text = LocalText.T("This layer is locked."); return; }
 
         var dialog = new EditorWindow { Title = LocalText.T("Cell Properties"), Width = 340, SizeToContent = SizeToContent.Height, Owner = this, WindowStartupLocation = WindowStartupLocation.CenterOwner, CanResize = false }; var panel = new StackPanel { Margin = new(24) }; dialog.Content = panel;
 

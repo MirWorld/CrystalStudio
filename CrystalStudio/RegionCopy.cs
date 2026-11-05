@@ -102,6 +102,7 @@ public sealed partial class MapViewport
     public void CutSelection() => CaptureSelection(true);
     private void CaptureSelection(bool cut)
     {
+        if (cut && !AllowEdit()) return;
         if (Selection is not Rect r) { Message?.Invoke(LocalText.T("Select a region with M first")); return; }
         if (!VisibleLayers.Any(v => v) && !CollisionVisible) { Message?.Invoke(LocalText.T("Show at least one layer to copy")); return; }
         copiedRegion = new(Document, (int)r.X, (int)r.Y, (int)r.Width, (int)r.Height, VisibleLayers[0], VisibleLayers[1], VisibleLayers[2], LowCollisionVisible, HighCollisionVisible);
@@ -115,6 +116,7 @@ public sealed partial class MapViewport
     }
     private void PlaceRegion()
     {
+        if (!AllowEdit()) return;
         if (copiedRegion == null) return;
         var (x, y) = copiedRegion.Anchor(hover.X, hover.Y);
         if (!copiedRegion.Paste(Document, History, x, y, InvalidateCell)) { Message?.Invoke(LocalText.T("Region extends outside the map")); return; }
