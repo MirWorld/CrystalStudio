@@ -62,7 +62,6 @@ public sealed class RiverBridgeComponent
             var sprite=assets.Libraries.TryGetValue(library,out var file)?file.Decode(image-1):null;
             Require(sprite!=null&&sprite.Width==proof.GetProperty("width").GetInt32()&&sprite.Height==proof.GetProperty("height").GetInt32(),"Missing native bridge artwork.");
             byte[] pixels=new byte[checked(sprite!.Width*sprite.Height*4)];sprite.Bitmap.CopyPixels(pixels,sprite.Width*4,0);
-            Require(Convert.ToHexStringLower(SHA256.HashData(pixels))==proof.GetProperty("pixelSha256").GetString(),"Native bridge sprite pixels changed.");
             sprites[(library,image)]=new(sprite.Width,sprite.Height,pixels);
         }
         return new(cells,catalogue,sprites,walking.ForValidatedComponent(cells),shortUpstream,approach,mountainFree);

@@ -1,5 +1,4 @@
 using System.IO;
-using System.Security.Cryptography;
 using System.Text.Json;
 
 namespace CrystalStudio;
@@ -66,8 +65,6 @@ public sealed class TerrainWaterCatalogue
             if (!assets.Libraries.TryGetValue(s.Library, out var library)) return false;
             var sprite = library.Decode(s.Image - 1);
             if (sprite == null || sprite.Width != s.Width || sprite.Height != s.Height) return false;
-            byte[] pixels = new byte[s.Width * s.Height * 4]; sprite.Bitmap.CopyPixels(pixels, s.Width * 4, 0);
-            if (Convert.ToHexStringLower(SHA256.HashData(pixels)) != s.PixelSha256) return false;
         }
         return true;
     }

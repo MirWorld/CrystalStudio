@@ -32,9 +32,8 @@ internal sealed class NativeCoastSupport
                 var sprite=assets.Libraries.TryGetValue(library,out var lib)?lib.Decode(image-1):null;
                 Require(library==0&&(image is >=1 and <=5 or >=1801 and <=1805 or >=2301 and <=2400)
                     &&sprite!=null&&sprite.Width==96&&sprite.Height==64,"Unverified native bank ground family or dimensions.");
-                byte[] pixels=new byte[sprite!.Width*sprite.Height*4];sprite.Bitmap.CopyPixels(pixels,sprite.Width*4,0);
-                Require(Convert.ToHexStringLower(SHA256.HashData(pixels))==Text(spriteProof,"pixelSha256")&&references.Add((library,image)),
-                    "Native bank ground artwork changed.");
+                Require(references.Add((library,image)),
+                    "Duplicate native bank ground reference.");
             }
             foreach(var cell in bankGround.GetProperty("supportCells").EnumerateArray())
             {
@@ -81,8 +80,7 @@ internal sealed class NativeCoastSupport
                     cancellation.ThrowIfCancellationRequested();int library=Number(spriteProof,"library"),image=Number(spriteProof,"image");
                     var sprite=assets.Libraries.TryGetValue(library,out var lib)?lib.Decode(image-1):null;
                     Require(sprite!=null&&sprite.Width==Number(spriteProof,"width")&&sprite.Height==Number(spriteProof,"height"),"Missing native crossing sprite.");
-                    byte[] pixels=new byte[sprite!.Width*sprite.Height*4];sprite.Bitmap.CopyPixels(pixels,sprite.Width*4,0);
-                    Require(Convert.ToHexStringLower(SHA256.HashData(pixels))==Text(spriteProof,"pixelSha256")&&references.Add((library,image)),"Native crossing artwork changed.");
+                    Require(references.Add((library,image)),"Duplicate native crossing reference.");
                 }
                 foreach(var (point,cell) in cells)
                 {

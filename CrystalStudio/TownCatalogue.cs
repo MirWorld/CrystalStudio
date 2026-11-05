@@ -1,5 +1,4 @@
 using System.IO;
-using System.Security.Cryptography;
 using System.Text.Json;
 
 namespace CrystalStudio;
@@ -40,7 +39,7 @@ public sealed record TownCatalogue(int SchemaVersion, List<TownFamily> Families)
         return catalogue;
     }
 
-    // Artwork, not numeric bank IDs, establishes a compatible town family.
+    // 允许替换素材；房屋引用的库和图片编号仍须可读取。
     public static TownFamily Prepare(TownFamily family, AssetStore assets, Dictionary<(int Library, int Image), Sprite> sprites, out int skipped,
         CancellationToken cancellationToken = default)
     {
@@ -55,14 +54,12 @@ public sealed record TownCatalogue(int SchemaVersion, List<TownFamily> Families)
                 if (sprite != null) sprites[key] = sprite;
             }
             if (sprite == null) continue;
-            byte[] pixels = new byte[sprite.Bitmap.PixelWidth * sprite.Bitmap.PixelHeight * 4];
-            sprite.Bitmap.CopyPixels(pixels, sprite.Bitmap.PixelWidth * 4, 0);
-            if (Convert.ToHexStringLower(SHA256.HashData(pixels)) == proof.PixelSha256) valid.Add(key);
+            valid.Add(key);
         }
         var available = family.Pieces.Where(p => p.Cells.SelectMany(c => c.Cell.ForegroundImages).All(f => valid.Contains((f.Library, f.Image & 0x7FFF)))).ToList();
         skipped = family.Pieces.Count - available.Count;
         if (!available.Any(p => p.Role == "house" && p.Direction == "SE") || !available.Any(p => p.Role == "house" && p.Direction == "SW"))
-            throw new InvalidDataException($"{family.Name} needs matching house artwork for both SE and SW. Load the matching game libraries in Settings.");
+            throw new InvalidDataException(LocalText.Format("{0} is missing readable SE or SW house images. Check the library files and image indices.", family.Name));
         return family with { Pieces = available };
     }
 }

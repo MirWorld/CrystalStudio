@@ -99,8 +99,19 @@ public sealed class MigrationTests
             Assert.Equal("Market stall", Assert.IsType<StampCategoryNode>(list.Items[1]).ShortLabel);
             var content = first.GetVisualDescendants().OfType<StackPanel>().Single(p => ToolTip.GetTip(p) is TextBlock);
             var tip = Assert.IsType<TextBlock>(ToolTip.GetTip(content));
-            ToolTip.SetIsOpen(content, true);
-            await PumpUntil(() => !string.IsNullOrEmpty(tip.Text));
+            // Initial sprite decoding can replace virtualized cards while the tooltip opens.
+            // Reacquire the live card instead of inspecting a detached container after an await.
+            for (int attempt = 0; attempt < 150; attempt++)
+            {
+                first = Assert.IsType<ListBoxItem>(list.ContainerFromIndex(0));
+                node = Assert.IsType<StampCategoryNode>(list.Items[0]);
+                content = first.GetVisualDescendants().OfType<StackPanel>().Single(p => ToolTip.GetTip(p) is TextBlock);
+                tip = Assert.IsType<TextBlock>(ToolTip.GetTip(content));
+                ToolTip.SetIsOpen(content, true);
+                Dispatcher.UIThread.RunJobs();
+                if (content.GetVisualRoot() != null && !string.IsNullOrEmpty(tip.Text)) break;
+                await Task.Delay(20);
+            }
             Assert.Contains(node.Label, tip.Text);
             Assert.Contains(node.Detail, tip.Text);
             Assert.Contains(node.Stamp!.File, tip.Text);

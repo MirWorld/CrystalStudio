@@ -3578,5 +3578,81 @@
   "Invalidextractionoccurrencerecordsincatalogue_702E7E6B": {
     "English": "Invalid extraction occurrence records in catalogue.",
     "Chinese": "目录索引中的提取来源记录无效。"
+  },
+  "MapBrowser_0": {
+    "English": "Search map files…",
+    "Chinese": "搜索地图文件…"
+  },
+  "MapBrowser_1": {
+    "English": "Folder settings…",
+    "Chinese": "目录设置…"
+  },
+  "MapBrowser_2": {
+    "English": "Refresh",
+    "Chinese": "刷新"
+  },
+  "MapBrowser_3": {
+    "English": "No game folder selected",
+    "Chinese": "尚未选择游戏目录"
+  },
+  "MapBrowser_4": {
+    "English": "Choose a game folder containing Data and Map.",
+    "Chinese": "请选择包含 Data、Map 的游戏根目录。"
+  },
+  "MapBrowser_5": {
+    "English": "Map file list",
+    "Chinese": "地图文件列表"
+  },
+  "MapBrowser_6": {
+    "English": "Select a game folder containing Data and Map",
+    "Chinese": "选择包含 Data 和 Map 的游戏根目录"
+  },
+  "MapBrowser_7": {
+    "English": "Scanning maps…",
+    "Chinese": "正在扫描地图…"
+  },
+  "MapBrowser_8": {
+    "English": "Map folder not found",
+    "Chinese": "未找到 Map 目录"
+  },
+  "MapBrowser_9": {
+    "English": "Could not read map folder",
+    "Chinese": "无法读取地图目录"
+  },
+  "MapBrowser_10": {
+    "English": "No .map files in the Map folder.",
+    "Chinese": "Map 目录中没有 .map 文件。"
+  },
+  "MapBrowser_11": {
+    "English": "Maps",
+    "Chinese": "地图列表"
+  },
+  "MapBrowser_12": {
+    "English": "{0:N0} maps",
+    "Chinese": "共 {0:N0} 张地图"
+  },
+  "MapBrowser_13": {
+    "English": "{0:N0} / {1:N0} maps",
+    "Chinese": "匹配 {0:N0} / {1:N0} 张地图"
+  },
+  "MapBrowser_14": {
+    "English": "Game folder (Data and Map)",
+    "Chinese": "游戏目录（包含 Data 和 Map）"
+  },
+  "MapBrowser_15": {
+    "English": "Load libraries from Data and list .map files from Map. Existing Data and library folder selections are also supported.",
+    "Chinese": "从 Data 加载素材，在左侧列出 Map 中的 .map 文件。也支持原有的 Data 或素材目录选择。"
+  },
+  "MapBrowser_16": {
+    "English": "{0} is missing readable SE or SW house images. Check the library files and image indices.",
+    "Chinese": "{0} 缺少可读取的东南或西南朝向房屋图片，请检查素材文件和图片编号。"
+  },
+  "DockResizeWidth": {
+    "English": "Drag to resize sidebar width",
+    "Chinese": "拖动调整侧栏宽度"
+  },
+  "DockResizeHeight": {
+    "English": "Drag to resize panel height",
+    "Chinese": "拖动调整面板高度"
   }
 }

@@ -117,8 +117,10 @@ public sealed class DockWorkspace : Grid
         header.PointerReleased += (_, e) =>
         {
             if (!pressed) return;
+            // 释放捕获会同步触发 PointerCaptureLost，先保留本次拖动状态。
+            bool wasMoved = moved;
             pressed = false; e.Pointer.Capture(null); dropOverlay.IsVisible = false;
-            if (!moved || IsLayoutLocked) return;
+            if (!wasMoved || IsLayoutLocked) return;
             var at = this.PointToClient(header.PointToScreen(e.GetPosition(header)));
             if (new Rect(Bounds.Size).Contains(at)) { var target = DropTarget(at); Move(p, target.side, target.before); }
             else Float(p);
@@ -144,7 +146,7 @@ public sealed class DockWorkspace : Grid
             dockSizes[side] = Math.Max(dockSizes[side], p.Title == "Palette" ? 230 : p.Title == "Cell Inspector" ? 160 : 112);
         int index = before is null ? -1 : panes.IndexOf(before);
         if (index < 0) panes.Add(p); else panes.Insert(index, p);
-        Rebuild();
+        Rebuild(); Save();
     }
     private void Float(Pane p, LayoutEntry? saved = null)
     {
@@ -206,10 +208,12 @@ public sealed class DockWorkspace : Grid
                 split.SetResource(BackgroundProperty, "Theme1C2028");
                 split.IsEnabled = !IsLayoutLocked; split.IsHitTestVisible = !IsLayoutLocked;
                 SetRow(split, vertical ? index + 1 : 0); SetColumn(split, vertical ? 0 : index + 1); zone.Children.Add(split);
-                split.DragCompleted += (_, _) => { for (int j = 0; j < items.Length; j++) items[j].Size = vertical ? zone.RowDefinitions[j * 2].Height.Value : zone.ColumnDefinitions[j * 2].Width.Value; };
+                split.DragCompleted += (_, _) => { for (int j = 0; j < items.Length; j++) items[j].Size = vertical ? zone.RowDefinitions[j * 2].Height.Value : zone.ColumnDefinitions[j * 2].Width.Value; Save(); };
             }
             // Resize the whole dock without restricting the canvas to a fixed sidebar width.
-            var grip = new Thumb { Width = vertical ? 5 : double.NaN, Height = vertical ? double.NaN : 5, Background = Brushes.Transparent, Cursor = vertical ? EditorCursors.SizeWE : EditorCursors.SizeNS, Template = ResizeGripTemplate(), HorizontalAlignment = vertical ? (side == Dock.Left ? HorizontalAlignment.Right : HorizontalAlignment.Left) : HorizontalAlignment.Stretch, VerticalAlignment = vertical ? VerticalAlignment.Stretch : (side == Dock.Top ? VerticalAlignment.Bottom : VerticalAlignment.Top) };
+            var grip = new Thumb { Name = "DockResize" + side, Width = vertical ? 7 : double.NaN, Height = vertical ? double.NaN : 7, Background = Brushes.Transparent, Cursor = vertical ? EditorCursors.SizeWE : EditorCursors.SizeNS, Template = ResizeGripTemplate(vertical), HorizontalAlignment = vertical ? (side == Dock.Left ? HorizontalAlignment.Right : HorizontalAlignment.Left) : HorizontalAlignment.Stretch, VerticalAlignment = vertical ? VerticalAlignment.Stretch : (side == Dock.Top ? VerticalAlignment.Bottom : VerticalAlignment.Top) };
+            ToolTip.SetTip(grip, LocalText.T(vertical ? "Drag to resize sidebar width" : "Drag to resize panel height"));
+            grip.DragCompleted += (_, _) => Save();
             // Dock size is adjusted directly so automatic outer grid dimensions remain valid.
             grip.IsEnabled = !IsLayoutLocked; grip.IsHitTestVisible = !IsLayoutLocked;
             grip.DragDelta += (_, e) => { if (IsLayoutLocked) return; if (vertical) zone.Width = Math.Clamp(zone.Bounds.Width + (side == Dock.Left ? e.Vector.X : -e.Vector.X), 90, Math.Max(90, Bounds.Width * 0.45)); else zone.Height = Math.Clamp(zone.Bounds.Height + (side == Dock.Top ? e.Vector.Y : -e.Vector.Y), 50, Math.Max(50, Bounds.Height * 0.4)); dockSizes[side] = vertical ? zone.Width : zone.Height; e.Handled = true; };
@@ -262,9 +266,9 @@ public sealed class DockWorkspace : Grid
                 Float(p, e);
         }
     }
-    private static IControlTemplate ResizeGripTemplate()
+    private static IControlTemplate ResizeGripTemplate(bool vertical)
     {
-        return new FuncControlTemplate<Thumb>((_, _) => new Border { Background = Brushes.Transparent });
+        return new FuncControlTemplate<Thumb>((_, _) => new Border { Background = Line, Margin = vertical ? new Thickness(3, 0) : new Thickness(0, 3) });
     }
     public void AddSectionMenu(MenuItem view)
     {
