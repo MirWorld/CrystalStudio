@@ -5,7 +5,11 @@
 The Crystal map editor based on Avalonia 11 and .net 10 retains the original compact interface, map editing, object classification, panel docking, and generator.
 
 > 原作者: https://github.com/Lilcooldoode
+
 > author: https://github.com/Lilcooldoode
+
+> rust版本: https://github.com/lxf505226/CrystalStudio-Rust
+
 
 ## Build from Source
 
