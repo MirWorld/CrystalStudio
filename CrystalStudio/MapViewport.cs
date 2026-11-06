@@ -161,8 +161,8 @@ public sealed partial class MapViewport : SceneControl
     }
     public void RefreshAssets() { detailAssetRevision++; RefreshStampDrawing(); if (Zoom >= 0.25 || DarknessVisible) sceneDirty = true; RefreshOverviewAssets(); brushPreviewKey = null; chunks.Clear(); frontRows.Clear(); if (sceneDirty) InvalidateVisual(); else UpdateInteractionScene(); }
     public void InvalidateCell(int x, int y) { sceneDirty = true; InvalidateOverviewCell(x, y); editRevision++; for (int l = 0; l < 2; l++) chunks.Remove((x / 16, y / 16, l)); frontRows.Remove((x / 16, y)); InvalidateVisual(); }
-    public void Undo() { if (pendingWall.Count > 0) { CancelWallDraft(true); InvalidateVisual(); return; } CancelWallDraft(); CancelPickup(); brushPreviewKey = null; int width = Document.Width, height = Document.Height; History.Undo(Document, InvalidateCell); if (width != Document.Width || height != Document.Height) { RefreshAfterResize(); return; } chunks.Clear(); frontRows.Clear(); InvalidateVisual(); Changed?.Invoke(); }
-    public void Redo() { CancelWallDraft(); CancelPickup(); brushPreviewKey = null; int width = Document.Width, height = Document.Height; History.Redo(Document, InvalidateCell); if (width != Document.Width || height != Document.Height) { RefreshAfterResize(); return; } chunks.Clear(); frontRows.Clear(); InvalidateVisual(); Changed?.Invoke(); }
+    public void Undo() { if (movingSelection != null) { CancelInteraction(); return; } if (pendingWall.Count > 0) { CancelWallDraft(true); InvalidateVisual(); return; } CancelWallDraft(); CancelPickup(); brushPreviewKey = null; int width = Document.Width, height = Document.Height; History.Undo(Document, InvalidateCell); if (width != Document.Width || height != Document.Height) { RefreshAfterResize(); return; } chunks.Clear(); frontRows.Clear(); InvalidateVisual(); Changed?.Invoke(); }
+    public void Redo() { if (movingSelection != null) { CancelInteraction(); return; } CancelWallDraft(); CancelPickup(); brushPreviewKey = null; int width = Document.Width, height = Document.Height; History.Redo(Document, InvalidateCell); if (width != Document.Width || height != Document.Height) { RefreshAfterResize(); return; } chunks.Clear(); frontRows.Clear(); InvalidateVisual(); Changed?.Invoke(); }
     private double FitZoom => Math.Min(1, Math.Min(Math.Max(1, ActualWidth - 80) / (Document.Width * 48.0), Math.Max(1, ActualHeight - 80) / (Document.Height * 32.0)));
     public void Fit() { Zoom = FitZoom; origin = new((ActualWidth - Document.Width * 48 * Zoom) / 2, (ActualHeight - Document.Height * 32 * Zoom) / 2); InvalidateVisual(); Changed?.Invoke(); }
     private double LimitZoom(double zoom) => Math.Clamp(double.IsFinite(zoom) && zoom > 0 ? zoom : Zoom, FitZoom, 1);
@@ -298,6 +298,7 @@ public sealed partial class MapViewport : SceneControl
         dc.PushTransform(new SceneTranslation(origin.X, origin.Y)); dc.PushTransform(new SceneScale(Zoom, Zoom));
         if(IsStampPickingTool&&!PastingRegion)DrawPickupHints(dc);
         DrawRegionPreview(dc);
+        DrawSelectionMove(dc);
         if (Selection is Rect selection) dc.DrawRectangle(new ImmutableSolidColorBrush(Color.FromArgb(30, 110, 150, 255)), cursor, new(selection.X * 48, selection.Y * 32, selection.Width * 48, selection.Height * 32));
         bool stampPointer=(Tool is EditorTool.Stamp or EditorTool.TownStamp||IsStampPickingTool&&PickedStampId!=null)&&(IsPointerOver||hover!=(-1,-1));
         if ((Document.Contains(hover.X, hover.Y)||stampPointer) && !panning && !PastingRegion)
@@ -392,6 +393,7 @@ public sealed partial class MapViewport : SceneControl
     }
     private bool BeginSelection(int x, int y)
     {
+        if (SelectionContains(x, y)) return BeginSelectionMove(x, y);
         if (!SelectionContains(x, y)) Deselect();
         if (!Document.Contains(x, y)) return false;
         selectionStart = (x, y); selectionDragged = false;
@@ -412,6 +414,7 @@ public sealed partial class MapViewport : SceneControl
     }
     private void UpdateSelection(int x, int y)
     {
+        if (movingSelection != null) { UpdateSelectionMove(x, y); return; }
         if ((x, y) != selectionStart) selectionDragged = true;
         if (!selectionDragged) return;
         int ax = selectionStart.X, ay = selectionStart.Y;
@@ -461,9 +464,9 @@ public sealed partial class MapViewport : SceneControl
         base.OnPointerExited(e);
         if(!dragging){hover=(-1,-1);RefreshPointerScene();}
     }
-    protected override void OnPointerReleased(PointerReleasedEventArgs e) { base.OnPointerReleased(e); if(e.InitialPressMouseButton != MouseButton.Right) End(); }
-    protected override void OnPointerCaptureLost(PointerCaptureLostEventArgs e) { base.OnPointerCaptureLost(e); NavigationCancelled?.Invoke(); lastWall = null; wallStrokePath.Clear(); if (dragging) { dragging = false; panning = false; History.Commit(); Changed?.Invoke(); } }
-    private void End() { History.Commit(); dragging = false; panning = false; lastWall = null; wallStrokePath.Clear(); ReleasePointer(); Changed?.Invoke(); InvalidateVisual(); }
+    protected override void OnPointerReleased(PointerReleasedEventArgs e) { base.OnPointerReleased(e); if(e.InitialPressMouseButton != MouseButton.Right) { if (movingSelection != null && e.InitialPressMouseButton == MouseButton.Left) { var cell = CellAt(e.GetPosition(this)); UpdateSelectionMove(cell.X, cell.Y); FinishSelectionMove(); } End(); } }
+    protected override void OnPointerCaptureLost(PointerCaptureLostEventArgs e) { base.OnPointerCaptureLost(e); NavigationCancelled?.Invoke(); CancelSelectionMove(); lastWall = null; wallStrokePath.Clear(); if (dragging) { dragging = false; panning = false; History.Commit(); Changed?.Invoke(); } }
+    private void End() { CancelSelectionMove(); History.Commit(); dragging = false; panning = false; lastWall = null; wallStrokePath.Clear(); ReleasePointer(); Changed?.Invoke(); InvalidateVisual(); }
     protected override void OnPointerWheelChanged(PointerWheelEventArgs e) { base.OnPointerWheelChanged(e); var p = e.GetPosition(this); var world = (p - origin) / Zoom; Zoom = LimitZoom(Zoom * (e.Delta.Y > 0 ? 1.15 : 1 / 1.15)); origin = p - world * Zoom; InvalidateVisual(); Changed?.Invoke(); e.Handled = true; }
     private void Apply(int x, int y)
     {

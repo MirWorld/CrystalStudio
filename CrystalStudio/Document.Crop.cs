@@ -4,12 +4,9 @@ public sealed partial class MapDocument
 {
     internal MapDocument Crop(Rect selection)
     {
-        int left = Math.Max(0, (int)Math.Floor(selection.Left)) & ~1;
-        int top = Math.Max(0, (int)Math.Floor(selection.Top)) & ~1;
-        int right = Math.Min(Width, ((int)Math.Ceiling(selection.Right) + 1) & ~1);
-        int bottom = Math.Min(Height, ((int)Math.Ceiling(selection.Bottom) + 1) & ~1);
-        if (left >= right || top >= bottom) throw new ArgumentException("Select an area inside the map before cropping.");
-        var result = new MapDocument(right - left, bottom - top) { SourceFormat = SourceFormat };
+        var area = AlignSelection(selection);
+        int left = (int)area.X, top = (int)area.Y, right = (int)area.Right, bottom = (int)area.Bottom;
+        var result = new MapDocument((int)area.Width, (int)area.Height) { SourceFormat = SourceFormat };
         foreach (var pair in cells)
         {
             int x = pair.Key % Width, y = pair.Key / Width;
@@ -23,6 +20,16 @@ public sealed partial class MapDocument
         return result;
 
         bool Inside(int x, int y) => x >= left && x < right && y >= top && y < bottom;
+    }
+
+    internal Rect AlignSelection(Rect selection)
+    {
+        int left = Math.Max(0, (int)Math.Floor(selection.Left)) & ~1;
+        int top = Math.Max(0, (int)Math.Floor(selection.Top)) & ~1;
+        int right = Math.Min(Width, ((int)Math.Ceiling(selection.Right) + 1) & ~1);
+        int bottom = Math.Min(Height, ((int)Math.Ceiling(selection.Bottom) + 1) & ~1);
+        if (left >= right || top >= bottom) throw new ArgumentException("Select an area inside the map before cropping.");
+        return new(left, top, right - left, bottom - top);
     }
 
     internal void ReplaceContents(MapDocument replacement)
