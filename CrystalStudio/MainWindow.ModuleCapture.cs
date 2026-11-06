@@ -7,7 +7,7 @@ public partial class MainWindow
     private async void CaptureModuleClick(object sender, RoutedEventArgs e)
     {
         if (busy) return;
-        if (activeMap is { IsStamp: true }) { Status.Text = LocalText.T("Open a map tab to join modules."); return; }
+        if (activeMap is { IsStamp: true }) { Status.Text = LocalText.T("Open a map tab to work with modules."); return; }
         if (Viewport.Selection is not { } selection)
         { Status.Text = LocalText.T("Press M and drag a rectangular map selection, then use Tools → Create module from selection."); return; }
         var area = new ModuleArea((int)selection.X, (int)selection.Y, (int)selection.Width, (int)selection.Height);

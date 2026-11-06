@@ -88,11 +88,15 @@ internal static class ModuleCapture
         CancellationToken token = default)
     {
         token.ThrowIfCancellationRequested(); EnsureCurrent(draft);
-        if (string.IsNullOrWhiteSpace(name) || name.Trim().Length > 128 || name.Any(char.IsControl))
-            throw new InvalidDataException(LocalText.T("Enter a module name of 1–128 characters without control characters."));
+        ValidateName(name);
         var reviewed = connections with { Footprint = draft.Connections.Footprint };
         ModuleGeneration.ValidateModule(new(name.Trim(), draft.Cells, reviewed), token);
         return ModuleConnectionRules.PrepareSave(draft.Cells, reviewed);
+    }
+    internal static void ValidateName(string name)
+    {
+        if (string.IsNullOrWhiteSpace(name) || name.Trim().Length > 128 || name.Any(char.IsControl))
+            throw new InvalidDataException(LocalText.T("Enter a module name of 1–128 characters without control characters."));
     }
 }
 

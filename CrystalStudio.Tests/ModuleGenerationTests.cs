@@ -302,7 +302,7 @@ public sealed class ModuleGenerationTests
             using var image = RasterImage.Load(stream); byte[] pixels = Fixture.Pixels(image);
             Assert.Contains(Enumerable.Range(0, pixels.Length / 4), i => pixels[i * 4] == 80 && pixels[i * 4 + 1] == 160 && pixels[i * 4 + 2] == 20);
             if (Environment.GetEnvironmentVariable("CRYSTALSTUDIO_AUTO_MODULE_SCREENSHOT") is { Length: > 0 } path) frame.Save(path);
-            dialog.GetVisualDescendants().OfType<TabControl>().Single().SelectedIndex = 1; Dispatcher.UIThread.RunJobs();
+            Assert.Empty(dialog.GetVisualDescendants().OfType<TabControl>());
             var diagram = dialog.GetVisualDescendants().OfType<ModuleConnectionCanvas>().Single();
             Assert.Equal(22, diagram.Points.Count); Assert.True(diagram.Bounds.Width > 0);
         }
@@ -328,6 +328,7 @@ public sealed class ModuleGenerationTests
                 opened = true; dialog.DialogResult = false;
             }));
             var button = window.FindControl<MenuItem>("GenerateModulesButton")!;
+            Assert.Null(window.FindControl<MenuItem>("JoinModulesButton"));
             Assert.True(button.IsEnabled); button.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent, button));
             for (int i = 0; i < 500 && !opened; i++) { await Task.Delay(20); Dispatcher.UIThread.RunJobs(); }
             Assert.True(opened); Assert.False(viewport.History.Dirty);

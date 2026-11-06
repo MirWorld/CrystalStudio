@@ -32,10 +32,11 @@ internal static class ModuleGeneration
                 total += ((long)bounds.Right - bounds.Left + 1) * (bounds.Bottom - bounds.Top + 1);
                 if (total > 4_000_000)
                     throw new InvalidDataException(LocalText.T("The selected module pool is too large. Select fewer modules."));
+                ValidateModule(module, cancellation);
                 modules.Add(module);
             }
             catch (Exception exception) when (exception is IOException or InvalidDataException or UnauthorizedAccessException)
-            { throw new InvalidDataException(LocalText.Format("Module {0}: {1}", entry.Name, exception.Message), exception); }
+            { ModuleDiagnostics.Identify(exception, entry.Id); throw new InvalidDataException(LocalText.Format("Module {0}: {1}", entry.Name, exception.Message), exception); }
         }
         return modules;
     }
@@ -254,7 +255,7 @@ internal static class ModuleGeneration
             }
             int walkable = mask.Count(value => value != 0);
             if (walkable == 0 || Flood(mask, width, cancellation) != walkable)
-                throw new InvalidDataException(LocalText.T("All walkable cells and connections inside a module must be connected without leaving its footprint."));
+                throw ModuleDiagnostics.Error("connectivity", LocalText.T("All walkable cells and connections inside a module must be connected without leaving its footprint."));
             var copy = new JoinModule(module.Name, module.Cells.Where(c => !c.Cell.Empty).Select(c => c with { Cell = c.Cell.Copy() }).ToArray(),
                 module.Connections with { Points = module.Connections.Points.ToList() });
             return new(copy, bounds, walkable, gx, gy);

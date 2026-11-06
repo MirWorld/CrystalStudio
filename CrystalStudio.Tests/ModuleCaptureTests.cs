@@ -237,7 +237,7 @@ public sealed class ModuleCaptureTests
             dialog.SelectConnections([]); Assert.False(dialog.SaveButton.IsEnabled);
             Assert.False(await dialog.SaveAsync()); Assert.Null(dialog.Saved); Assert.Empty(StampCategories.Read(fixture.IndexPath).Objects);
             dialog.SelectConnections(["north-1", "south-1"]); Assert.True(dialog.SaveButton.IsEnabled);
-            Assert.Equal(2, diagram.Points.Count); dialog.NameBox.Text = "Reviewed";
+            Assert.Equal(2, diagram.Disabled.Count); Assert.Equal(4, diagram.Points.Count); dialog.NameBox.Text = "Reviewed";
             Assert.True(await dialog.SaveAsync()); Assert.NotNull(dialog.Saved);
             Assert.Equal(2, Assert.Single(StampCategories.Read(fixture.IndexPath).Objects).Connections!.Points.Count);
             Assert.False(await dialog.SaveAsync());
@@ -281,16 +281,22 @@ public sealed class ModuleCaptureTests
             using var stream = new MemoryStream(); frame.Save(stream); stream.Position = 0;
             using var image = RasterImage.Load(stream); byte[] pixels = Fixture.Pixels(image);
             Assert.Contains(Enumerable.Range(0, pixels.Length / 4), i => pixels[i * 4] == 80 && pixels[i * 4 + 1] == 160 && pixels[i * 4 + 2] == 20);
+            var canvas = dialog.Editor.Canvas;
+            var gridPoint = canvas.TranslatePoint(canvas.Screen(3, 2.5), dialog)!.Value;
+            var grid = dialog.GetVisualDescendants().OfType<CheckBox>().Single(c => Equals(c.Content, LocalText.T("Grid")));
+            grid.IsChecked = false; Dispatcher.UIThread.RunJobs();
+            using var noGridFrame = dialog.CaptureRenderedFrame();
+            using var noGridStream = new MemoryStream(); noGridFrame!.Save(noGridStream); noGridStream.Position = 0;
+            using var noGridImage = RasterImage.Load(noGridStream); byte[] noGridPixels = Fixture.Pixels(noGridImage);
+            int gridIndex = ((int)gridPoint.Y * image.PixelWidth + (int)gridPoint.X) * 4;
+            Assert.Contains(Enumerable.Range(-2, 5), offset => pixels[gridIndex + offset * 4] != noGridPixels[gridIndex + offset * 4]);
+            grid.IsChecked = true; Dispatcher.UIThread.RunJobs();
             if (Environment.GetEnvironmentVariable("CRYSTALSTUDIO_CAPTURE_SCREENSHOT") is { Length: > 0 } path) frame.Save(path);
-            using var handler = Window.WindowOpenedEvent.AddClassHandler<ModuleConnectionsWindow>((editor, _) => Dispatcher.UIThread.Post(() =>
-            {
-                editor.ConnectionsList.SelectedIndex = 0; editor.WidthBox.Text = "2";
-                Assert.True(editor.TryApply()); editor.DialogResult = true;
-            }));
-            var edit = dialog.GetVisualDescendants().OfType<Button>().Single(b => Equals(b.Content, LocalText.T("Edit module connections…")));
-            edit.RaiseEvent(new RoutedEventArgs(Button.ClickEvent, edit));
+            dialog.Editor.ConnectionsList.SelectedIndex = 0;
+            dialog.Editor.WidthBox.Text = "2";
+            Assert.True(dialog.Editor.Commit());
             Assert.Equal(2, dialog.Reviewed.Points[0].Width); Assert.True(dialog.SaveButton.IsEnabled);
-            dialog.GetVisualDescendants().OfType<TabControl>().Single().SelectedIndex = 1; Dispatcher.UIThread.RunJobs();
+            Assert.Empty(dialog.GetVisualDescendants().OfType<TabControl>());
             var diagram = dialog.GetVisualDescendants().OfType<ModuleConnectionCanvas>().Single();
             Assert.Equal(2, diagram.Points[0].Width); Assert.Equal(4, diagram.Points.Count);
             if (Environment.GetEnvironmentVariable("CRYSTALSTUDIO_CAPTURE_SCREENSHOT") is { Length: > 0 } diagramPath)

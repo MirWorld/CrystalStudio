@@ -42,17 +42,23 @@ internal static class ModuleConnectionRules
                 (long)point.Y + (point.Edge is ModuleEdge.East or ModuleEdge.West ? i : 0));
     }
 
-    internal static void Validate(ModuleConnections? connections, IReadOnlyList<StampCell> cells)
+    internal static void Validate(ModuleConnections? connections, IReadOnlyList<StampCell> cells,
+        IReadOnlyDictionary<(long, long), Cell>? cachedCells = null, Bounds? cachedBounds = null)
     {
         if (connections == null) return;
         if (connections.Version != 1 || connections.Points == null || connections.Points.Count > 64)
             throw new InvalidDataException(LocalText.T("Unsupported connections or more than 64 openings."));
         if (connections.Points.Count == 0) return;
-        var bounds = GetBounds(cells, connections);
-        var lookup = new Dictionary<(long, long), Cell>();
-        foreach (var cell in cells)
-            if (!lookup.TryAdd((cell.X, cell.Y), cell.Cell))
-                throw new InvalidDataException(LocalText.T("Module contains duplicate cells."));
+        var bounds = cachedBounds ?? GetBounds(cells, connections);
+        if (cachedCells == null)
+        {
+            var dictionary = new Dictionary<(long, long), Cell>();
+            foreach (var cell in cells)
+                if (!dictionary.TryAdd((cell.X, cell.Y), cell.Cell))
+                    throw new InvalidDataException(LocalText.T("Module contains duplicate cells."));
+            cachedCells = dictionary;
+        }
+        var lookup = cachedCells;
         var ids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var openings = new HashSet<(long, long)>();
         bool Inside(long x, long y) => x >= bounds.Left && x <= bounds.Right && y >= bounds.Top && y <= bounds.Bottom;
@@ -62,7 +68,7 @@ internal static class ModuleConnectionRules
         {
             if (point == null || !Token(point.Id) || !Token(point.Kind) || !ids.Add(point.Id) ||
                 !Enum.IsDefined(point.Edge) || point.Width is < 1 or > 64)
-                throw new InvalidDataException(LocalText.T("Use unique connection IDs, valid types and widths from 1 to 64."));
+                throw ModuleDiagnostics.Error("definition", LocalText.T("Use unique connection IDs, valid types and widths from 1 to 64."), point);
             bool edge = point.Edge switch
             {
                 ModuleEdge.North => point.Y == bounds.Top,
@@ -76,9 +82,17 @@ internal static class ModuleConnectionRules
                 ModuleEdge.East => (-1, 0), _ => (1, 0)
             };
             foreach (var (x, y) in Opening(point))
-                if (!edge || !Inside(x, y) || !Inside(x + dx, y + dy) || !openings.Add((x, y)) ||
-                    !Walkable(x, y) || !Walkable(x + dx, y + dy))
-                    throw new InvalidDataException(LocalText.Format("Connection {0} must be on its edge, without overlap or blocked passage.", point.Id));
+            {
+                if (!edge || !Inside(x, y) || !Inside(x + dx, y + dy))
+                    throw ModuleDiagnostics.Error("edge", LocalText.Format("Connection {0}: place the full opening on its boundary, with room for the inward cell.", point.Id), point, (int)x, (int)y);
+                if (!openings.Add((x, y)))
+                    throw ModuleDiagnostics.Error("overlap", LocalText.Format("Connection {0} overlaps another enabled connection at ({1}, {2}).", point.Id, x, y), point, (int)x, (int)y);
+                if (!Walkable(x, y) || !Walkable(x + dx, y + dy))
+                {
+                    int bx = (int)(!Walkable(x, y) ? x : x + dx), by = (int)(!Walkable(x, y) ? y : y + dy);
+                    throw ModuleDiagnostics.Error("blocked", LocalText.Format("Connection {0} is blocked at ({1}, {2}). Move the opening or repair the map collision.", point.Id, bx, by), point, bx, by);
+                }
+            }
         }
     }
 

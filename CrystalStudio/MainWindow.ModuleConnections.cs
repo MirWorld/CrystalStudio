@@ -10,7 +10,7 @@ public partial class MainWindow
             var cells = Viewport.Document.Cells.Select(pair => new StampCell(
                 pair.Key % Viewport.Document.Width + map.StampOriginX,
                 pair.Key / Viewport.Document.Width + map.StampOriginY, pair.Value)).ToList();
-            var dialog = new ModuleConnectionsWindow(cells, map.Category?.Connections) { Owner = this };
+            var dialog = new ModuleConnectionsWindow(cells, map.Category?.Connections, assets) { Owner = this };
             if (dialog.ShowDialog() != true || dialog.Result == null) return;
             var category = map.Category ?? new CategorizedStamp("", "", map.Path == null ? map.Name : Path.GetFileNameWithoutExtension(map.Path),
                 null, null, [], [], [], [], null, "unknown", null, false, "unreviewed");

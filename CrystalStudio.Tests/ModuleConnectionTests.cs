@@ -218,9 +218,8 @@ public sealed class ModuleConnectionTests
         {
             Dispatcher.UIThread.RunJobs();
             var preview = dialog.GetVisualDescendants().OfType<ModuleConnectionCanvas>().Single();
-            double scale = Math.Min((preview.Bounds.Width - 24) / 5, (preview.Bounds.Height - 24) / (5.0 * 2 / 3));
-            double top = (preview.Bounds.Height - 5 * scale * 2 / 3) / 2;
-            var point = preview.TranslatePoint(new Point(preview.Bounds.Width / 2, top + scale / 3), dialog)!.Value;
+            Click(dialog.Editor.NewButton);
+            var point = preview.TranslatePoint(preview.Screen(2.5, .5), dialog)!.Value;
             dialog.MouseDown(point, MouseButton.Left); dialog.MouseUp(point, MouseButton.Left);
             Assert.Equal("2", dialog.XBox.Text); Assert.Equal("0", dialog.YBox.Text);
             Assert.True(dialog.TryApply());

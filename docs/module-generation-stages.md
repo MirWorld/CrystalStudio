@@ -245,3 +245,58 @@ dotnet test CrystalStudio.Tests/CrystalStudio.Tests.csproj -c Release --no-resto
 git diff --check
 git diff --cached --check
 ```
+
+## 阶段 9：统一画布编辑和可见操作反馈（2026-11-06）
+
+## 修改内容
+
+- 在 `D:/Code/Mir` 的 `codex/automatic-module-generation` 分支实施；保留切换分支前的 stash，不恢复或覆盖其中的其他修改。
+- 制作模块改为左侧接口列表、中央素材画布、右侧属性的单窗口流程；已有 `.X` 的连接点窗口复用同一组件，不再从制作窗口打开嵌套弹窗。
+- 分离当前选中、是否启用和未提交草稿；画布与列表双向选择。普通接口绿色，选中接口青色粗框并显示端点，草稿橙色虚线，非法草稿红色，未启用接口灰色虚线；附编号和朝外箭头。
+- 新增边界点击／反向拖动建接口、主体移动、端点调整、一格接口两端手柄、属性即时预览以及局部撤销／重做。保留高级坐标输入，文本框内快捷键遵循文本编辑行为。
+- 连接点越界、重叠和碰撞分别给出结构化诊断及可定位坐标。非法输入阻止选择切换和应用；Esc 取消草稿，指针捕获丢失时取消未完成拖动。
+- 新增只读预览的滚轮缩放、中键／空格平移、适应画面、网格和碰撞开关。接口与素材共用坐标变换，空白边缘及放大预览也显示网格。
+- 缓存编辑快照的单元格查询和固定几何的内部连通结果，避免每次拖动都重建整张模块的索引或执行完整洪泛检查；实际保存仍执行完整校验。
+- `.X`、连接点和占地存储格式保持兼容；未启用接口只留在当前编辑会话，不写入保存结果。
+
+## 验证结果
+
+- 相关连接点和模块制作回归测试通过；已有对象应用／保存、清空旧接口、空白边缘、地面网格及入库事务的测试继续通过。
+- 新增实际鼠标／键盘验收覆盖新增即时预览、反向拖动、列表与画布选择同步、复选框独立启用、移动／调整端点、一格角点接口、Delete、撤销／重做和文本框输入行为。
+- 非法输入保留、切换选择被阻止、碰撞位置诊断、红色草稿、Esc 取消、鼠标捕获丢失、负局部坐标和实际滚轮／中键导航测试通过。
+- 验收中修复了从输入框进入新增模式时失焦可能提交临时标记的问题，并修复了小模块受普通地图最小缩放限制、无法缩小的问题。
+- 对橙色草稿、青色选中框和红色非法接口进行了像素断言；使用合成素材检查素材预览及放大后空白格的网格开关，导出并查看截图。未把合成素材验收描述为真实素材人工试玩。
+
+## 阶段 10：收敛入口和生成地图交互（2026-11-06）
+
+## 修改内容
+
+- 删除独立“拼接模块”菜单、窗口和主窗口事件入口，移除 5 个仅测试旧窗口的界面测试及过时界面文案。保留自动生成依赖的加载、放置计划、应用与整体撤销逻辑及相关核心测试。
+- 模块池展示按需异步加载的缩略图、名称、占地尺寸及接口摘要，路径放入提示；提供名称／标签／接口类型搜索、搜索结果批量选择和总选中数，过滤不改变已有勾选。
+- 生成区域设置改为可展开面板，默认显示区域摘要；数量、种子、三种布局算法和生成范围规则保持兼容。
+- 生成预览直接叠加素材、模块边界、实例编号和接口；支持缩放、平移和点击查看实例来源及接口信息。
+- 区分未生成、生成中、可应用、过期和失败；生成中提供活动指示与停止按钮。参数变化、失败及取消保留旧预览，旧结果不可应用。
+- 文件或接口校验失败时选中问题模块并显示接口编号和坐标，结构化诊断不依赖解析本地化错误文案。生成成功时清理旧错误定位信息。
+- 更新中文／英文文案和使用说明，明确选区制作、直接编辑、禁用与选中的区别及新的生成流程。
+
+## 验证结果
+
+- CrystalStudio Release 构建通过，0 个错误；最终针对性测试构建通过。
+- 仅执行 5 个模块测试类，共 **126／126 通过**：`ModuleConnectionTests` 30、`ModuleCaptureTests` 33、`ModuleGenerationTests` 29、`ModuleJoiningTests` 22、`ModuleInteractionTests` 12。未执行全量测试。
+- 网格显示的最终调整另行定向复验 `CapturePreviewRendersArtworkAndCanEditDetectedConnections`，**1／1 通过**，包含素材像素和网格开关前后的画布像素差异断言。
+- 收尾时补充“新增悬停草稿尚未放置时点击启用框，不应意外新增接口”的真实鼠标验收，修正该切换行为后定向复验 `SelectionIsBidirectionalAndDisabledConnectionsRemainEditableAndVisible`，**1／1 通过**。
+- 搜索保持勾选、仅选择当前搜索结果、缩略图与尺寸加载、旧预览保留且不能应用、停止生成、实例点击选中及结构化错误定位测试通过。
+- 主菜单测试确认独立拼接入口不存在，选区仍能传入自动生成；原有精确数量、内部／整体连通性、图层锁、应用／撤销／重做及保存重开测试通过。
+- 已查看统一制作窗口、草稿／选中／非法状态和带缩略图的生成预览截图；截图保存在系统临时目录 `crystal-module-ux`，没有向真实素材目录写入测试模块。
+- `git diff --check`、新增文件空白／冲突标记检查及本地化 JSON 检查通过。编译仍有现有 nullable／XAML 和依赖 NU1903 警告，本次未升级依赖。
+- 未推送或创建 PR。原有 stash `before-module-generation-switch-2026-11-06` 保留。
+
+本阶段验收命令：
+
+```powershell
+dotnet build CrystalStudio/CrystalStudio.csproj -c Release --no-restore --nologo -v:q
+dotnet test CrystalStudio.Tests/CrystalStudio.Tests.csproj -c Release --no-restore --filter 'FullyQualifiedName~ModuleInteractionTests|FullyQualifiedName~ModuleCaptureTests|FullyQualifiedName~ModuleGenerationTests|FullyQualifiedName~ModuleJoiningTests|FullyQualifiedName~ModuleConnectionTests' --nologo --logger 'console;verbosity=normal'
+dotnet test CrystalStudio.Tests/CrystalStudio.Tests.csproj -c Release --no-restore --filter 'FullyQualifiedName~CapturePreviewRendersArtworkAndCanEditDetectedConnections' --nologo --logger 'console;verbosity=normal'
+dotnet test CrystalStudio.Tests/CrystalStudio.Tests.csproj -c Release --no-restore --filter 'FullyQualifiedName~SelectionIsBidirectionalAndDisabledConnectionsRemainEditableAndVisible' --nologo --logger 'console;verbosity=normal'
+git diff --check
+```
