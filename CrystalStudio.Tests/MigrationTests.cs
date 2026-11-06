@@ -525,7 +525,7 @@ public sealed class MigrationTests
         {
             for (int i = 0; i < 30; i++) { await Task.Delay(20); Dispatcher.UIThread.RunJobs(); }
             var tools = window.FindControl<ResponsivePanel>("ToolPanel")!.Children.OfType<RadioButton>().ToArray();
-            Assert.Equal(10, tools.Length);
+            Assert.Equal(12, tools.Length);
             Assert.All(tools, tool => { Assert.Equal(32, tool.Bounds.Width); Assert.Equal(32, tool.Bounds.Height); });
             var eye = window.FindControl<CheckBox>("GroundVisible")!;
             Assert.Equal(22, eye.Bounds.Width); Assert.Equal(22, eye.Bounds.Height);

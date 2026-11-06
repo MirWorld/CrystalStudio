@@ -1,7 +1,7 @@
 using System.Diagnostics;
 namespace CrystalStudio;
 
-public enum EditorTool { Brush, Pencil, Bucket, Eraser, Select, Stamp, Pickup, Clone, SpecialBrush, Wall, TownStamp }
+public enum EditorTool { Brush, Pencil, Bucket, Eraser, Select, Stamp, Pickup, Clone, SpecialBrush, Wall, TownStamp, Eyedropper, Pan }
 public sealed partial class MapViewport : SceneControl
 {
     public MapDocument Document { get; private set; } = new(256, 256);
@@ -118,6 +118,8 @@ public sealed partial class MapViewport : SceneControl
     }
     private bool SelectionContains(int x, int y) => Selection is Rect area && x >= area.Left && x < area.Right && y >= area.Top && y < area.Bottom;
     public event Action<int, int>? Hover;
+    // Raised when the user right-clicks a ground or middle tile to select its source asset.
+    public event Action<int, int, MapLayer>? AssetPicked;
     public event Action? Changed;
     public event Action? AssetUsed;
     public event Action<double, int>? Rendered;
@@ -159,8 +161,8 @@ public sealed partial class MapViewport : SceneControl
     }
     public void RefreshAssets() { detailAssetRevision++; RefreshStampDrawing(); if (Zoom >= 0.25 || DarknessVisible) sceneDirty = true; RefreshOverviewAssets(); brushPreviewKey = null; chunks.Clear(); frontRows.Clear(); if (sceneDirty) InvalidateVisual(); else UpdateInteractionScene(); }
     public void InvalidateCell(int x, int y) { sceneDirty = true; InvalidateOverviewCell(x, y); editRevision++; for (int l = 0; l < 2; l++) chunks.Remove((x / 16, y / 16, l)); frontRows.Remove((x / 16, y)); InvalidateVisual(); }
-    public void Undo() { if (pendingWall.Count > 0) { CancelWallDraft(true); InvalidateVisual(); return; } CancelWallDraft(); CancelPickup(); brushPreviewKey = null; History.Undo(Document, InvalidateCell); chunks.Clear(); frontRows.Clear(); InvalidateVisual(); Changed?.Invoke(); }
-    public void Redo() { CancelWallDraft(); CancelPickup(); brushPreviewKey = null; History.Redo(Document, InvalidateCell); chunks.Clear(); frontRows.Clear(); InvalidateVisual(); Changed?.Invoke(); }
+    public void Undo() { if (movingSelection != null) { CancelInteraction(); return; } if (pendingWall.Count > 0) { CancelWallDraft(true); InvalidateVisual(); return; } CancelWallDraft(); CancelPickup(); brushPreviewKey = null; int width = Document.Width, height = Document.Height; History.Undo(Document, InvalidateCell); if (width != Document.Width || height != Document.Height) { RefreshAfterResize(); return; } chunks.Clear(); frontRows.Clear(); InvalidateVisual(); Changed?.Invoke(); }
+    public void Redo() { if (movingSelection != null) { CancelInteraction(); return; } CancelWallDraft(); CancelPickup(); brushPreviewKey = null; int width = Document.Width, height = Document.Height; History.Redo(Document, InvalidateCell); if (width != Document.Width || height != Document.Height) { RefreshAfterResize(); return; } chunks.Clear(); frontRows.Clear(); InvalidateVisual(); Changed?.Invoke(); }
     private double FitZoom => Math.Min(1, Math.Min(Math.Max(1, ActualWidth - 80) / (Document.Width * 48.0), Math.Max(1, ActualHeight - 80) / (Document.Height * 32.0)));
     public void Fit() { Zoom = FitZoom; origin = new((ActualWidth - Document.Width * 48 * Zoom) / 2, (ActualHeight - Document.Height * 32 * Zoom) / 2); InvalidateVisual(); Changed?.Invoke(); }
     private double LimitZoom(double zoom) => Math.Clamp(double.IsFinite(zoom) && zoom > 0 ? zoom : Zoom, FitZoom, 1);
@@ -296,6 +298,7 @@ public sealed partial class MapViewport : SceneControl
         dc.PushTransform(new SceneTranslation(origin.X, origin.Y)); dc.PushTransform(new SceneScale(Zoom, Zoom));
         if(IsStampPickingTool&&!PastingRegion)DrawPickupHints(dc);
         DrawRegionPreview(dc);
+        DrawSelectionMove(dc);
         if (Selection is Rect selection) dc.DrawRectangle(new ImmutableSolidColorBrush(Color.FromArgb(30, 110, 150, 255)), cursor, new(selection.X * 48, selection.Y * 32, selection.Width * 48, selection.Height * 32));
         bool stampPointer=(Tool is EditorTool.Stamp or EditorTool.TownStamp||IsStampPickingTool&&PickedStampId!=null)&&(IsPointerOver||hover!=(-1,-1));
         if ((Document.Contains(hover.X, hover.Y)||stampPointer) && !panning && !PastingRegion)
@@ -328,7 +331,7 @@ public sealed partial class MapViewport : SceneControl
                 }
                 dc.Pop();
             }
-            if(Tool!=EditorTool.Wall&&Tool!=EditorTool.SpecialBrush&&Tool!=EditorTool.Stamp&&!IsStampPickingTool&&Tool!=EditorTool.Select){var footprint = PaintFootprint(hover.X, hover.Y);
+            if(Tool!=EditorTool.Wall&&Tool!=EditorTool.SpecialBrush&&Tool!=EditorTool.Stamp&&!IsStampPickingTool&&Tool!=EditorTool.Select&&Tool!=EditorTool.Eyedropper&&Tool!=EditorTool.Pan){var footprint = PaintFootprint(hover.X, hover.Y);
             dc.DrawRectangle(null, cursor, new(footprint.X * 48, footprint.Y * 32, footprint.Width * 48, footprint.Height * 32));}
         }
         dc.Pop(); dc.Pop();
@@ -365,16 +368,16 @@ public sealed partial class MapViewport : SceneControl
     }
     private void AppendSprite(SceneGroup scene, MapSpriteDrawing.BackgroundIndex background, int x, int y, int lib, int index, bool anchored, bool front, bool blend)
     {
-        if (index < 0 || Assets?.Get(lib, index) is not Sprite sprite) return;
-        var bounds=MapSpriteDrawing.Bounds(sprite,x,y,lib,index,anchored,front,blend);
+        if (index < 0 || MapSpriteDrawing.SkipFront(lib, Document.SourceFormat) || Assets?.Get(lib, index) is not Sprite sprite) return;
+        var bounds=MapSpriteDrawing.Bounds(sprite,x,y,lib,index,anchored,front,blend,Document.SourceFormat);
         if(blend&&!bounds.Intersects(detailCoverage))return;
         MapSpriteDrawing.Append(scene,sprite,bounds,blend,detailEffects,background);drawn++;
     }
     private void DrawSprite(SceneContext dc, int x, int y, int lib, int index, bool anchored) => DrawSprite(dc, x, y, lib, index, anchored, false);
     private void DrawSprite(SceneContext dc, int x, int y, int lib, int index, bool anchored, bool front, bool blend = false)
     {
-        if (index < 0) return; var s = Assets?.Get(lib, index); if (s == null) return;
-        var bounds = MapSpriteDrawing.Bounds(s, x, y, lib, index, anchored, front, blend);
+        if (index < 0 || MapSpriteDrawing.SkipFront(lib, Document.SourceFormat)) return; var s = Assets?.Get(lib, index); if (s == null) return;
+        var bounds = MapSpriteDrawing.Bounds(s, x, y, lib, index, anchored, front, blend, Document.SourceFormat);
         dc.DrawImage(blend ? MapSpriteDrawing.Additive(s, bounds, new SceneGroup()) : s.Bitmap, bounds); drawn++;
     }
     public (int X, int Y) CellAt(Point p) => ((int)Math.Floor((p.X - origin.X) / Zoom / 48), (int)Math.Floor((p.Y - origin.Y) / Zoom / 32));
@@ -390,13 +393,28 @@ public sealed partial class MapViewport : SceneControl
     }
     private bool BeginSelection(int x, int y)
     {
+        if (SelectionContains(x, y)) return BeginSelectionMove(x, y);
         if (!SelectionContains(x, y)) Deselect();
         if (!Document.Contains(x, y)) return false;
         selectionStart = (x, y); selectionDragged = false;
         return true;
     }
+    public bool PickTile(int x, int y)
+    {
+        if (!Document.Contains(x, y) || Layer is not (MapLayer.Ground or MapLayer.Middle)) return false;
+        if (Layer == MapLayer.Ground) { x &= ~1; y &= ~1; }
+        var cell = Document.Get(x, y);
+        int library = Layer == MapLayer.Ground ? cell.BackLibrary : cell.MiddleLibrary;
+        int image = Layer == MapLayer.Ground ? (cell.BackImage & 0x1FFFFFFF) - 1 : cell.MiddleImage - 1;
+        if (library < 0 || image < 0) return false;
+        Library = library;
+        SpriteIndex = image;
+        AssetPicked?.Invoke(library, image, Layer);
+        return true;
+    }
     private void UpdateSelection(int x, int y)
     {
+        if (movingSelection != null) { UpdateSelectionMove(x, y); return; }
         if ((x, y) != selectionStart) selectionDragged = true;
         if (!selectionDragged) return;
         int ax = selectionStart.X, ay = selectionStart.Y;
@@ -406,9 +424,10 @@ public sealed partial class MapViewport : SceneControl
     protected override void OnPointerPressed(PointerPressedEventArgs e)
     {
         base.OnPointerPressed(e); Focus(); mouse = e.GetPosition(this);
-        hover = CellAt(mouse); if(e.GetCurrentPoint(this).Properties.IsRightButtonPressed) { if (!SelectionContains(hover.X, hover.Y)) Deselect(); return; } panning = e.GetCurrentPoint(this).Properties.IsMiddleButtonPressed || InputState.IsKeyDown(Key.Space);
+        hover = CellAt(mouse); if(e.GetCurrentPoint(this).Properties.IsRightButtonPressed) { if (PickTile(hover.X, hover.Y)) { e.Handled = true; return; } if (!SelectionContains(hover.X, hover.Y)) Deselect(); return; } panning = e.GetCurrentPoint(this).Properties.IsMiddleButtonPressed || InputState.IsKeyDown(Key.Space) || Tool == EditorTool.Pan && !PastingRegion && e.GetCurrentPoint(this).Properties.IsLeftButtonPressed;
         if (panning) { panStart = mouse; originStart = origin; CapturePointer(e.Pointer); dragging = true; return; }
         if (!e.GetCurrentPoint(this).Properties.IsLeftButtonPressed) return;
+        if (Tool == EditorTool.Eyedropper && !PastingRegion) { PickTile(hover.X, hover.Y); e.Handled = true; return; }
         if(PastingRegion){PlaceRegion();e.Handled=true;return;}
         if(IsStampPickingTool){if(PickedStampId==null)PickupAt(hover.X,hover.Y);else if(Tool==EditorTool.Clone)ClonePickedTo(hover.X,hover.Y);else MovePickedTo(hover.X,hover.Y);e.Handled=true;return;}
         if (Tool == EditorTool.TownStamp) { PlaceTownAt(hover.X, hover.Y); e.Handled = true; return; }
@@ -445,9 +464,9 @@ public sealed partial class MapViewport : SceneControl
         base.OnPointerExited(e);
         if(!dragging){hover=(-1,-1);RefreshPointerScene();}
     }
-    protected override void OnPointerReleased(PointerReleasedEventArgs e) { base.OnPointerReleased(e); if(e.InitialPressMouseButton != MouseButton.Right) End(); }
-    protected override void OnPointerCaptureLost(PointerCaptureLostEventArgs e) { base.OnPointerCaptureLost(e); NavigationCancelled?.Invoke(); lastWall = null; wallStrokePath.Clear(); if (dragging) { dragging = false; panning = false; History.Commit(); Changed?.Invoke(); } }
-    private void End() { History.Commit(); dragging = false; panning = false; lastWall = null; wallStrokePath.Clear(); ReleasePointer(); Changed?.Invoke(); InvalidateVisual(); }
+    protected override void OnPointerReleased(PointerReleasedEventArgs e) { base.OnPointerReleased(e); if(e.InitialPressMouseButton != MouseButton.Right) { if (movingSelection != null && e.InitialPressMouseButton == MouseButton.Left) { var cell = CellAt(e.GetPosition(this)); UpdateSelectionMove(cell.X, cell.Y); FinishSelectionMove(); } End(); } }
+    protected override void OnPointerCaptureLost(PointerCaptureLostEventArgs e) { base.OnPointerCaptureLost(e); NavigationCancelled?.Invoke(); CancelSelectionMove(); lastWall = null; wallStrokePath.Clear(); if (dragging) { dragging = false; panning = false; History.Commit(); Changed?.Invoke(); } }
+    private void End() { CancelSelectionMove(); History.Commit(); dragging = false; panning = false; lastWall = null; wallStrokePath.Clear(); ReleasePointer(); Changed?.Invoke(); InvalidateVisual(); }
     protected override void OnPointerWheelChanged(PointerWheelEventArgs e) { base.OnPointerWheelChanged(e); var p = e.GetPosition(this); var world = (p - origin) / Zoom; Zoom = LimitZoom(Zoom * (e.Delta.Y > 0 ? 1.15 : 1 / 1.15)); origin = p - world * Zoom; InvalidateVisual(); Changed?.Invoke(); e.Handled = true; }
     private void Apply(int x, int y)
     {

@@ -128,6 +128,7 @@ public partial class MainWindow : EditorWindow
 
         Viewport.Hover += UpdateCellInspector;
         Viewport.Changed += () => UpdateCellInspector(Viewport.HoverCell.X, Viewport.HoverCell.Y);
+        Viewport.AssetPicked += SelectPickedTile;
 
         Viewport.Changed += UpdateLabels; Viewport.Message += message => Status.Text = (message); Viewport.Rendered += (ms, count) => { Performance.Text = LocalText.Format("Prepare {0:F1} ms · Batches {1:N0} · Sprite cache {2:N0}",ms,count,(assets?.Cached ?? 0) + (assets?.OverviewCached ?? 0)); ToolTip.SetTip(LibraryStatus, (Performance.Text)); };
         Viewport.AssetUsed += RememberActiveAsset;
@@ -409,7 +410,7 @@ public partial class MainWindow : EditorWindow
 
     }
 
-    private void UpdateLabels() { if (!initialized || Viewport == null) return; ZoomLabel.Content = ($"{Viewport.Zoom:P0}"); SelectedLabel.Text = (Viewport.Tool == EditorTool.TownStamp ? (Viewport.Town?.Name ?? LocalText.T("Generate a Town")) : (Viewport.Tool == EditorTool.Wall ? (Viewport.WallCatalogueError ?? LocalText.Format("Wall · {0} · Drag to connect · Shift to remove", LocalText.T(Viewport.WallFamily?.DisplayName ?? "Choose type"))) : (Viewport.Tool == EditorTool.SpecialBrush ? LocalText.Format("Special Brush · {0} · {1} variant(s) · {2}% density",LocalText.T(Viewport.SpecialBrushKind.BrushName()),Viewport.Trees.Count,Viewport.TreeOptions.Density) : (Viewport.IsStampPickingTool ? (Viewport.PickedStamp?.Name ?? ((Viewport.Tool == EditorTool.Clone ? LocalText.T("Choose a placed stamp to clone") : LocalText.T("Choose a placed stamp to move")))) : (StampMode ? (selectedStampName ?? LocalText.T("Choose an object stamp")) : (Viewport.IsCollisionLayer ? LocalText.Format("{0} collision · Paint to apply, erase to remove",LocalText.T(Viewport.Layer == MapLayer.LowCollision ? "Low" : "High")) : (Viewport.SpriteIndex < 0 ? ((PatternPalette ? LocalText.T("Select a terrain set to brush") : LocalText.T("Select a sprite to place"))) : (PatternPalette ? LocalText.Format("Library {0} / Terrain set {1}",Viewport.Library,Viewport.SpriteIndex / AutoTileBrush.BlockSize(AssetLayout(Viewport.Library, Viewport.Layer))) : LocalText.Format("Library {0} / Sprite {1}",Viewport.Library,Viewport.SpriteIndex))))))))); UpdateWorkspace(); UpdateMapBrowserControls(); }
+    private void UpdateLabels() { if (!initialized || Viewport == null) return; UpdateLayerCounts(); ZoomLabel.Content = ($"{Viewport.Zoom:P0}"); SelectedLabel.Text = (Viewport.Tool == EditorTool.TownStamp ? (Viewport.Town?.Name ?? LocalText.T("Generate a Town")) : (Viewport.Tool == EditorTool.Wall ? (Viewport.WallCatalogueError ?? LocalText.Format("Wall · {0} · Drag to connect · Shift to remove", LocalText.T(Viewport.WallFamily?.DisplayName ?? "Choose type"))) : (Viewport.Tool == EditorTool.SpecialBrush ? LocalText.Format("Special Brush · {0} · {1} variant(s) · {2}% density",LocalText.T(Viewport.SpecialBrushKind.BrushName()),Viewport.Trees.Count,Viewport.TreeOptions.Density) : (Viewport.IsStampPickingTool ? (Viewport.PickedStamp?.Name ?? ((Viewport.Tool == EditorTool.Clone ? LocalText.T("Choose a placed stamp to clone") : LocalText.T("Choose a placed stamp to move")))) : (StampMode ? (selectedStampName ?? LocalText.T("Choose an object stamp")) : (Viewport.IsCollisionLayer ? LocalText.Format("{0} collision · Paint to apply, erase to remove",LocalText.T(Viewport.Layer == MapLayer.LowCollision ? "Low" : "High")) : (Viewport.SpriteIndex < 0 ? ((PatternPalette ? LocalText.T("Select a terrain set to brush") : LocalText.T("Select a sprite to place"))) : (PatternPalette ? LocalText.Format("Library {0} / Terrain set {1}",Viewport.Library,Viewport.SpriteIndex / AutoTileBrush.BlockSize(AssetLayout(Viewport.Library, Viewport.Layer))) : LocalText.Format("Library {0} / Sprite {1}",Viewport.Library,Viewport.SpriteIndex))))))))); UpdateWorkspace(); UpdateMapBrowserControls(); }
 
     private async Task Run(Func<Task> action) { if (busy) return; busy = true; UpdateLabels(); try { await action(); } catch (Exception ex) { StudioLog.Error("Editor.Operation",ex,$"Map={mapPath}; Tool={Viewport.Tool}"); MessageBox.Show(this, ex.Message, "Crystal Studio", MessageBoxButton.OK, MessageBoxImage.Warning); Status.Text = LocalText.T("Operation failed"); } finally { busy = false; UpdateLabels(); } }
 
@@ -634,12 +635,20 @@ public partial class MainWindow : EditorWindow
 
     private void SetTool(EditorTool tool) { if (tool == EditorTool.Wall) { Viewport.Layer = MapLayer.Objects; LayerList.SelectedIndex = (int)MapLayer.Objects; Status.Text = LocalText.T("Draw connected wall sections \u00b7 Shift or Remove deletes and reconnects"); } if (tool == EditorTool.Pickup) Status.Text = LocalText.T("Click a placed stamp to pick it up"); else if (tool == EditorTool.Clone) Status.Text = LocalText.T("Click a placed stamp to clone it"); bool changingBrowser = StampMode != (tool == EditorTool.Stamp); Viewport.Tool = tool; if (changingBrowser) { searchDelay.Stop(); AssetSearch.Clear(); } page = 0; BuildPage(); BrushSize.IsEnabled = tool != EditorTool.Pencil; UpdateLabels(); Viewport.InvalidateVisual(); }
 
-    private void ToolClick(object s, RoutedEventArgs e) => SetTool(Enum.Parse<EditorTool>((string)((Control)s).Tag));
+    private void ToolClick(object s, RoutedEventArgs e)
+    {
+        var tool = Enum.Parse<EditorTool>((string)((Control)s).Tag);
+        SetTool(tool);
+        if (tool == EditorTool.Eyedropper) Status.Text = LocalText.T("Click a ground or middle tile to select its source artwork.");
+        else if (tool == EditorTool.Pan) Status.Text = LocalText.T("Drag with the left mouse button to pan. Middle drag and Space + drag also work.");
+    }
 
     private void LayerChanged(object s, SelectionChangedEventArgs e)
     {
         if (!initialized || Viewport == null || restoringAsset) return;
         Viewport.Layer = (MapLayer)LayerList.SelectedIndex; Viewport.SpriteIndex = -1; page = 0;
+        if (Viewport.Tool == EditorTool.Eyedropper && Viewport.Layer is not (MapLayer.Ground or MapLayer.Middle))
+            SetTool(EditorTool.Pencil);
         if (Viewport.Tool is EditorTool.SpecialBrush or EditorTool.Wall or EditorTool.TownStamp && Viewport.Layer != MapLayer.Objects || Viewport.IsCollisionLayer && Viewport.Tool is EditorTool.Stamp or EditorTool.Pickup or EditorTool.Clone)
             SetTool(EditorTool.Pencil);
         SelectLibraryForLayer(); BuildPage(); UpdateLabels(); Viewport.InvalidateVisual();
@@ -792,6 +801,47 @@ public partial class MainWindow : EditorWindow
 
     private void LibraryChanged(object s, SelectionChangedEventArgs e) { if (restoringAsset) return; page = 0; Viewport.SpriteIndex = -1; if (LibraryList.SelectedItem is LibraryChoice l) Viewport.Library = l.Id; BuildPage(); }
 
+    private void SelectPickedTile(int library, int index, MapLayer layer)
+    {
+        if (assets?.Libraries.TryGetValue(library, out var atlas) != true || index < 0 || index >= atlas.Count)
+        {
+            Status.Text = LocalText.T("Tile library or image is unavailable");
+            return;
+        }
+
+        restoringAsset = true;
+        try
+        {
+            LayerList.SelectedIndex = (int)layer;
+            Viewport.Layer = layer;
+            Viewport.Library = library;
+            Viewport.SpriteIndex = index;
+            LibraryList.SelectedItem = LibraryList.Items.OfType<LibraryChoice>().FirstOrDefault(l => l.Id == library);
+        }
+        finally { restoringAsset = false; }
+
+        // A search filter can hide the sampled tile; clear it so the reverse lookup
+        // always reveals and selects the matching palette item.
+        searchDelay.Stop();
+        if (AssetSearch.Text.Length != 0) { AssetSearch.Clear(); searchDelay.Stop(); }
+        var layout = AssetLayout(library, layer);
+        var paletteAsset = AssetReference.Tile(atlas.Path, library, index, layer, layout);
+        var visibleIndices = FilteredIndices(atlas);
+        var targetIndex = visibleIndices.IndexOf(paletteAsset.Index);
+        page = targetIndex >= 0 ? targetIndex / PageSize : 0;
+        BuildPage();
+        var selected = choices.FirstOrDefault(c => c.Asset is AssetReference asset && asset.SameAsset(paletteAsset));
+        if (selected != null)
+        {
+            AssetList.SelectedItem = selected;
+            AssetList.ScrollIntoView(selected);
+        }
+        RememberActiveAsset();
+        UpdateLabels();
+        Viewport.InvalidateVisual();
+        Status.Text = LocalText.Format("Selected tile · Lib {0} · Sprite {1}", library, index);
+    }
+
     private void SearchChanged(object s, TextChangedEventArgs e) { page = 0; if (initialized) { searchDelay.Stop(); searchDelay.Start(); } }
 
     private void PreviousPage(object s, RoutedEventArgs e) { if (CategoryPalette) { ChangeCategoryPage(-1); return; } page = Math.Max(0, page - 1); BuildPage(); }
@@ -860,7 +910,13 @@ public partial class MainWindow : EditorWindow
         if (a.StampPath != null) { if (a.StampCells != null) SelectStamp(a); else Status.Text = (a.LoadError ?? LocalText.T("Loading stamp\u2026")); return; }
         if (SavedPalette) { RestoreTile(a); return; }
         Viewport.SpriteIndex = a.Index;
-        if (Viewport.Tool != EditorTool.Pencil && Viewport.Tool != EditorTool.Brush && Viewport.Tool != EditorTool.Bucket) SetTool(EditorTool.Pencil);
+        if (Viewport.Tool != EditorTool.Pencil && Viewport.Tool != EditorTool.Brush && Viewport.Tool != EditorTool.Bucket)
+        {
+            // The raw-sprite palette is already correct. Rebuilding it through SetTool
+            // here clears the items while Avalonia is still committing their selection.
+            Viewport.Tool = EditorTool.Pencil;
+            BrushSize.IsEnabled = false;
+        }
         RememberActiveAsset(); UpdateLabels(); Viewport.InvalidateVisual();
     }
 
@@ -966,7 +1022,7 @@ public partial class MainWindow : EditorWindow
         WallControls.IsVisible = Viewport.Tool == EditorTool.Wall ? true : false;
         WallSettingsButton.IsEnabled = WallEraseToggle.IsEnabled = !busy;
         WallBrushLabel.Text = (Viewport.WallFamily?.DisplayName ?? LocalText.T("Choose Type"));
-        SizeControls.IsVisible = Viewport.IsStampPickingTool || Viewport.Tool is EditorTool.Wall or EditorTool.TownStamp ? false : true;
+        SizeControls.IsVisible = Viewport.IsStampPickingTool || Viewport.Tool is EditorTool.Wall or EditorTool.TownStamp or EditorTool.Pan or EditorTool.Eyedropper ? false : true;
         SpecialBrushSettingsButton.IsVisible = Viewport.Tool == EditorTool.SpecialBrush ? true : false;
 
         DeleteStampButton.IsVisible = Viewport.Tool == EditorTool.Clone ? false : true;
@@ -994,6 +1050,14 @@ public partial class MainWindow : EditorWindow
 
         ExportButton.IsEnabled = !busy && Viewport.Selection.HasValue;
         ExportMinimapButton.IsEnabled = !busy;
+        bool canCopy = !busy && Viewport.Selection.HasValue && (Viewport.VisibleLayers.Any(v => v) || Viewport.CollisionVisible);
+        CopyRegionMenuButton.IsEnabled = canCopy;
+        CutRegionMenuButton.IsEnabled = canCopy && !Viewport.AnyLayerLocked;
+        PasteRegionMenuButton.IsEnabled = !busy && Viewport.CanPasteRegion && !Viewport.AnyLayerLocked;
+        EyedropperToolButton.IsEnabled = !busy && Viewport.Layer is MapLayer.Ground or MapLayer.Middle;
+        CropButton.IsEnabled = CropMenuButton.IsEnabled = !busy && activeMap?.IsStamp != true &&
+            Viewport.Selection.HasValue && !Viewport.AnyLayerLocked;
+        ExpandMapMenuButton.IsEnabled = !busy && activeMap?.IsStamp != true && !Viewport.AnyLayerLocked;
 
         FillButton.IsEnabled = !busy && Viewport.Selection.HasValue && (Viewport.SpriteIndex >= 0 || Viewport.IsCollisionLayer);
 
@@ -1002,6 +1066,8 @@ public partial class MainWindow : EditorWindow
         BrushSizeLabel.Text = (Viewport.Tool == EditorTool.Bucket ? LocalText.T("Fill") : (Viewport.Tool == EditorTool.Pencil ? ("1\u00d71") : ($"{Viewport.BrushSize}\u00d7{Viewport.BrushSize}")));
 
         Viewport.Cursor = Viewport.Tool == EditorTool.TownStamp || Viewport.Tool == EditorTool.Wall || Viewport.Tool == EditorTool.Select || Viewport.Tool == EditorTool.Brush || Viewport.Tool == EditorTool.SpecialBrush || Viewport.Tool == EditorTool.Pencil || Viewport.Tool == EditorTool.Bucket ? EditorCursors.Cross : EditorCursors.Arrow;
+        if (Viewport.Tool == EditorTool.Pan) Viewport.Cursor = EditorCursors.Hand;
+        else if (Viewport.Tool == EditorTool.Eyedropper) Viewport.Cursor = EditorCursors.Cross;
 
         SelectedPreviewCaption.Text = (Viewport.IsStampPickingTool ? LocalText.T("Placed Stamp") : LocalText.T("Active Asset"));
 

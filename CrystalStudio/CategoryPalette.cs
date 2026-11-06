@@ -362,9 +362,24 @@ public partial class MainWindow
         // Skia previews share the bounded preview queue and the thread pool.
         return Task.Run(() =>
         {
-            token.ThrowIfCancellationRequested();
-            var cells=CellCodec.LoadStamp(stampPath,previewAssets.Format,token);
-            return StampPreview.Create(cells,previewAssets,120,84,token,waitForAssets:true);
+            try
+            {
+                token.ThrowIfCancellationRequested();
+                var cells=CellCodec.LoadStamp(stampPath,previewAssets.Format,token);
+                var preview=StampPreview.Create(cells,previewAssets,120,84,token,waitForAssets:true);
+                if (token.IsCancellationRequested)
+                {
+                    preview?.Dispose();
+                    return Task.FromCanceled<RasterImage?>(token);
+                }
+                return Task.FromResult(preview);
+            }
+            // Keep cooperative cancellation inside user code rather than throwing
+            // through Task.Run's synchronous delegate. Preserve the canceled status.
+            catch (OperationCanceledException) when (token.IsCancellationRequested)
+            {
+                return Task.FromCanceled<RasterImage?>(token);
+            }
         }, token);
     }
 

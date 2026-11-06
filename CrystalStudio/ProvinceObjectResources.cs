@@ -33,7 +33,10 @@ internal static class ProvinceObjectResources
                 }
                 if (visible) result.Add((role, tree));
             }
-            catch (IOException) { }
+            catch (Exception ex) when (ex is IOException or InvalidDataException)
+            {
+                StudioLog.Warning("Province.Objects", $"Skipping unavailable object; Name={name}", ex);
+            }
         }
         return result;
     }

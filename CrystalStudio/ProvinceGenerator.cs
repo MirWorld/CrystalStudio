@@ -46,6 +46,11 @@ public static class ProvinceGenerator
     public static IReadOnlyList<ProvinceScenery> LoadScenery(AssetStore assets, CancellationToken cancellation = default)
     {
         var index = StampCategories.Read(StampCategories.FindIndex() ?? throw new FileNotFoundException("The outdoor object catalogue is unavailable."));
+        return LoadScenery(index, assets, cancellation);
+    }
+
+    internal static IReadOnlyList<ProvinceScenery> LoadScenery(StampCategoryIndex index, AssetStore assets, CancellationToken cancellation = default)
+    {
         var result = new List<ProvinceScenery>();
         foreach (var stamp in index.Objects.OrderBy(s => s.Id))
         {
@@ -64,9 +69,11 @@ public static class ProvinceGenerator
                 if (tree.Cells.Max(c => c.X) - tree.Cells.Min(c => c.X) > 30 || tree.Cells.Max(c => c.Y) - tree.Cells.Min(c => c.Y) > 40) continue;
                 result.Add(new(tree, kinds[0], bareTree ? ["MongchonProvince"] : stamp.RegionGroups) { CatalogueId = stamp.Id });
             }
-            catch (IOException) { }
+            catch (Exception ex) when (ex is IOException or InvalidDataException)
+            {
+                StudioLog.Warning("Province.Scenery", $"Skipping unavailable object; Id={stamp.Id}; File={stamp.File}", ex);
+            }
         }
-        if (!result.Any(s => s.Kind == SpecialBrushKind.Tree)) throw new InvalidDataException("No matching outdoor tree stamps are available in the object catalogue.");
         return result;
     }
 

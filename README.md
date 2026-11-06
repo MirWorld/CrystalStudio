@@ -58,6 +58,28 @@ Game artwork is not included. Select the game client root containing **Data**
 
 生成器不再要求外部素材像素指纹与原始素材一致，允许替换图片。仍检查素材能否读取、图片编号、必要尺寸和模板结构；内置目录及地图编辑元数据的完整性校验保留。
 
+## 快速创建地图
+
+从 **文件 → 快速创建地图…**（`Ctrl+Alt+N`）进入。原有 `Ctrl+N` 空白地图入口继续保留。
+
+1. **选择创建方案**：支持空白地图、基础地形、野外地图和地下城。可选“素材测试场 / 野外探索区 / 城镇外围 / 小型地下城”用途模板，或载入自己的生成预设。推荐尺寸根据地图类型过滤，支持横纵向尺寸、交换宽高、锁定比例，并显示地图格数和基础地表图块数量。地表图块通常覆盖 `2 × 2` 个地图格，不等同于角色移动距离或游玩时长。
+2. **调整与预览**：生成地图默认显示风格、疏密和随机种子等常用设置；其余参数放入“高级生成参数”。可返回“上一步：地图设置”：仅修改名称、输出目录或保存偏好时保留当前预览；修改尺寸、类型或生成参数时重新预览，并保留当前种子和参数。取消设置页返回预览，取消生成预览则退出创建，不改动现有地图。
+3. **确认创建**：预览中直接显示名称、类型、尺寸、是否保存、完整输出路径和待保存预设。空白地图可跳过预览。勾选“创建后立即保存”才显示并校验输出目录；未勾选时可以直接创建临时地图。现有同名地图不会被静默覆盖，保存失败时地图仍保留在编辑器中。
+
+**素材预检**区分必需与可选资源：野外地图先检查选中风格的基础地表，再加载装饰与水系，缺少必需地表时无需等待装饰扫描。地下城检查地面和墙体。缺少可选河岸、海岸、悬崖、装饰、城镇或入口素材时，会省略相关功能并提示，不因此阻止整张地图创建；岛屿风格仍需要完整的岛屿海岸。省略边界装饰不会移除野外地图的不可通行外围。生成结果中的数量不足、空间受限等提示仍显示在预览底部。
+
+**最近候选**最多保留五组种子、生成参数和小缩略图，点击缩略图可恢复参数并重新生成。收藏可防止候选被新结果自动淘汰；五个全部收藏后，需要先取消一个收藏才能保留新候选。切换总览和局部细节不会新增候选。候选仅在本次创建会话内保留，不跨窗口关闭或程序重启保存；尺寸或类型不同的候选不可直接恢复。恢复时使用当前已加载素材，不承诺在素材或目录版本变化后得到完全一致的结果，也不额外常驻五张完整地图。
+
+**预览交互**支持滚轮缩放、拖动平移、缩放按钮和适应视图。双击指定位置或点击“检查视图中心”会从当前生成结果重绘该位置附近的局部细节，不重新规划地图；“返回总览”退出局部视图。放大总览只是放大预览图，不等于提高素材精度。预览获得焦点后可用 `+ / -` 缩放、方向键平移、`Home` 适应视图、`Enter` 检查视图中心。原有“重新随机”仅更换种子，“随机化”更换较大范围的生成参数，二者继续保留。
+
+用途模板是现有生成参数的组合，并非固定布局：城镇数量和房间数量是请求值，实际结果受素材、地图尺寸和空间影响；目前不会固定预留城镇、出生点或主路线区域。
+
+**预设管理**支持重命名、复制、删除、导入和导出。创建页“高级创建选项”可在创建成功后保存或更新预设；同名更新仅在最终创建时确认，不会在进入预览或返回设置时反复确认。拒绝最终覆盖会留在当前预览，空白地图则留在其创建页。预设最多 50 个，仅保存类型、尺寸和生成参数，不携带地图名称、输出目录或立即保存偏好；选择预设不会覆盖当前本机设置。导入同名预设时会拒绝覆盖，可先重命名或删除已有预设。管理操作立即生效，删除预设不会删除地图文件。
+
+配置目录下的 `map-creation.json` 升级为版本 2，读取旧版本时迁移生成预设，同时保留上次使用的本机输出设置。新导出的预设不包含这些本机设置。生成配方仍写入地图旁的 `.creation.json`，用于记录生成来源，不是手工编辑成果的完整备份。独立恢复快照继续沿用现有机制。
+
+本轮不包含候选持久化、玩法连通性检查、固定布局约束和局部保护式重生成。局部预览重绘不是局部地图重生成。自动化界面测试使用测试素材，不能代替实际游戏素材下的地图效果验收。
+
 ## Getting Started
 
 1. Start the editor using the command above, or run `CrystalStudio.exe` from a published release.
@@ -68,6 +90,40 @@ Game artwork is not included. Select the game client root containing **Data**
 
 For published releases, keep the `catalogue` and `Objects` folders beside the
 executable. They contain the editor's brushes, objects and generator data.
+
+## Quick Create Map
+
+Use **File > Quick Create Map** (**Ctrl+Alt+N**) to choose a map type, dimensions,
+and optional saved preset. Turn off **Save the map after creation** to create an
+unsaved map without selecting an output folder. When saving immediately, the
+wizard checks for filename collisions and files blocking the output directory;
+existing maps are never overwritten.
+
+Changing settings marks the preset selection as custom. Editing dimensions keeps
+the preset's generator parameters; changing the map type restores that type's
+current draft, or its last-used parameters if no draft exists. User-defined preset names are displayed unchanged in either
+language. Automatic filenames increment existing numeric suffixes, for example
+`NewMap_2` to `NewMap_3`.
+
+Terrain, province, and dungeon previews provide **Back to map settings**, which
+preserves the creation form and current generator parameters without adding a map
+or saving a preset. Returning from map settings without confirming keeps the
+current preview. **Cancel** on the preview exits creation without changing the workspace.
+
+Previews support mouse-wheel zoom, left/middle-button drag to pan, and **Fit
+preview** to return to the whole image. When the preview has keyboard focus,
+`+` / `-` zoom, arrow keys pan, and `0` / `Home` fit the image. Zoom is relative to
+the fitted preview bitmap, not the map's original artwork resolution, and never
+changes the generator parameters. In Quick Create, double-click a location or use
+**Inspect centre** to redraw local detail without replanning the map; **Overview**
+returns to the whole preview. Standalone generator windows retain the fixed detail crop.
+
+Sliders also have exact numeric inputs that follow the same ranges and discrete
+steps. Terrain patch amount is entered as a percentage. Province scenes and
+dungeon themes retain their adjustments when revisited within a preview window;
+first-time selections still use the existing defaults. **Change seed** only
+changes the seed, while **Randomize settings** retains its original broader
+randomization behaviour. Map generation, file formats, and saving rules are unchanged.
 
 ## Basic Controls
 
@@ -340,3 +396,27 @@ catalogue/extractions/<会话编号>-<报告编号>.json
 天宫使用中轴殿堂、成对庭院和连接桥，配白色云海、浅色石地、蓝色几何镶嵌、亭阁与成对雕像。海底使用中心圣所、环形礁室与多条放射通路，珊瑚沿礁壁形成聚落。异星使用错位撞击盆地、不可通行的陨坑核心和折线裂隙，以最小生成树连接盆地，增加部分回游路线，搭配暗色玄武岩、红色裂纹地面、水晶与菌类。
 
 所有主题复用经过真实素材预览审查的完整原生物件与地砖，保留原生墙体美术。装饰避开主要通路及房间中心，并检查最终墙体碰撞连通性；地图空间不足时减少房间数量，预览显示实际结果。配方版本更新为 quick-map-v5，记录主题和生成参数。此功能生成编辑器场景，不创建服务端传送、NPC 或刷怪配置。
+
+## 小地图导出尺寸
+
+“文件 → 导出小地图”先打开尺寸面板，再选择 PNG 保存位置。默认“小”，宽高均为地图原始像素尺寸的 1/4；“中”为 1/2，“大”为 1:1。原始像素尺寸按每格 48×32 计算，例如 100×60 格地图对应小 1200×480、中 2400×960、大 4800×1920 像素。
+
+切换预设会填充宽、高输入框，也可以直接输入自定义正整数。自定义比例与地图不同则保留地图比例、居中留黑边。尺寸过大时不能导出。大尺寸使用原始素材精度，中、小按输出比例读取素材；导出仍包含全部美术图层，保持不透明 PNG，不受当前图层显示开关影响。
+
+## 裁剪地图
+
+用选择工具（M）框选需要保留的范围，点击工具栏选择按钮旁的“裁剪到选区”，或选择“工具 → 裁剪到选区”。地图尺寸缩到选区，范围内所有图层、碰撞、门和灯光数据保留，对齐后裁剪范围的左上角移至新地图原点。为保持 2×2 地砖对齐，边界最多向外扩一格，并限制在原地图范围内。
+
+完整保留的物件更新坐标；跨边界物件只保留范围内的地图单元，不再作为完整物件记录。裁剪支持 Ctrl+Z 撤销及重做，先前的编辑历史继续保留；实际写入文件仍需保存。没有选区或存在锁定图层时按钮禁用，此操作用于地图编辑。
+
+## 吸管、手形平移与编辑菜单
+
+工具栏“吸管”支持点击地砖和中间层素材，在素材列表中定位对应图片；地砖任一格都按完整 2×2 地砖拾取。拾取不会绘制，选好后切回笔刷或铅笔继续编辑。原有右键拾取保留。
+
+工具栏“手形平移”支持按住左键拖动画布，不写入地图。中键拖动、空格加拖动继续可用。“编辑”菜单增加“复制可见图层”“剪切可见图层”“粘贴区域”，与 Ctrl+C、Ctrl+X、Ctrl+V 使用相同操作。粘贴进入预览后点击地图放置，Escape 取消；在吸管或手形模式中也可以放置粘贴内容。没有选区时禁用复制和剪切，没有复制内容时禁用粘贴，存在锁定图层时禁用剪切和粘贴。
+
+## 选区移动与地图扩边
+
+使用选择工具（M）框选，再按住选区内部拖动，松开鼠标应用移动。移动包含所有图层、碰撞、门和灯光，与图层显示开关无关；源范围清空，目标矩形被完整覆盖，包括源区域中的空白格。支持重叠移动，拖动预览不会提前修改地图，Esc 取消，红色目标框表示越界、不会放置。选区向外对齐完整 2×2 地砖，位移按 2 格对齐。完整物件随区域更新坐标；被选区切开或被目标覆盖的物件取消完整物件记录，未覆盖的单元仍保留。
+
+打开“工具 → 地图扩边”，分别输入左、上、右、下增加的格数。四边支持非负偶数，至少一边大于 0；面板显示新尺寸并检查地图大小限制。新区域为空白，原内容和完整物件随左、上扩边量平移，素材格式保留。选区移动和扩边都需要解锁所有图层，支持撤销／重做；扩边用于地图编辑页，原文件需保存后才会改变。

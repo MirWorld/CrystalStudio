@@ -244,7 +244,7 @@ public sealed class AssetStore : IDisposable
     {
         using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, stopToken);
         cancellation.Token.ThrowIfCancellationRequested();
-        level = Math.Clamp(level, 2, 16);
+        level = Math.Clamp(level, 0, 16);
         var result = new ConcurrentDictionary<(int Library, int Image), Sprite>();
         var missing = new List<(int Library, int Image)>();
         foreach (var key in images.Distinct())
@@ -266,15 +266,20 @@ public sealed class AssetStore : IDisposable
             using var reader = new BinaryReader(new FileStream(library.Path, FileMode.Open, FileAccess.Read, FileShare.Read, 65536));
             foreach (var key in job)
             {
-                token.ThrowIfCancellationRequested();
+                if (token.IsCancellationRequested) break;
                 if (failed.ContainsKey(key)) continue;
                 if (!overviewCache.TryGetValue((key.Library, key.Image, level), out var sprite))
                 {
                     try { sprite = library.DecodeOverview(reader, key.Image, level, token); }
+                    // Handle cooperative cancellation before it crosses the framework's
+                    // synchronous worker callback (which can trigger user-unhandled breaks).
+                    // Parallel.ForEachAsync still completes as canceled via its linked token.
+                    catch (OperationCanceledException) when (token.IsCancellationRequested)
+                    { return ValueTask.CompletedTask; }
                     catch (Exception ex) when (ex is IOException or InvalidDataException or ArgumentException)
                     { failed[key] = 0; StudioLog.Error("Assets.Overview", ex, $"Library={key.Library}; Image={key.Image}; File={library.Path}"); Error?.Invoke(ex.Message); continue; }
                     if (sprite == null) { failed[key] = 0; continue; }
-                    token.ThrowIfCancellationRequested();
+                    if (token.IsCancellationRequested) { sprite.Bitmap.Dispose(); break; }
                     if (overviewCache.TryAdd((key.Library, key.Image, level), sprite))
                     {
                         overviewOrder.Enqueue((key.Library, key.Image, level));
@@ -334,10 +339,16 @@ public sealed class AssetStore : IDisposable
             stop.Dispose();
         }, CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
     }
-    public static AssetStore Load(string root, AssetSourceFormat format = AssetSourceFormat.Default)
+    public static AssetStore Load(string root, AssetSourceFormat format = AssetSourceFormat.Default, string? attachmentsRoot = null)
     {
         var store = new AssetStore(format);
-        try { store.Register(root); StudioLog.Info("Assets.Load", $"Root={root}; Format={format}; Libraries={store.Libraries.Count}"); return store; }
+        try
+        {
+            store.Register(root);
+            AttachedAssets.Register(store, attachmentsRoot ?? DataPaths.ResolveEditor("Attachments"));
+            StudioLog.Info("Assets.Load", $"Root={root}; Format={format}; Libraries={store.Libraries.Count}");
+            return store;
+        }
         catch (Exception ex) { StudioLog.Error("Assets.Load", ex, $"Root={root}; Format={format}"); store.Dispose(); throw; }
     }
     private void Add(int id, string root, string relative) { string path = System.IO.Path.Combine(root, relative.Replace('\\', System.IO.Path.DirectorySeparatorChar) + ".lib"); if (File.Exists(path)) Libraries[id] = new(path); }

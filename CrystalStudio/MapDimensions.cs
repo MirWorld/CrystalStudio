@@ -17,6 +17,14 @@ internal static class MapDimensions
             throw new ArgumentOutOfRangeException(nameof(width), "Invalid or excessive map dimensions.");
     }
 
+    internal static bool CanExpand(int width, int height, int left, int top, int right, int bottom)
+    {
+        if (left < 0 || top < 0 || right < 0 || bottom < 0 || ((left | top | right | bottom) & 1) != 0 ||
+            (left | top | right | bottom) == 0) return false;
+        long expandedWidth = (long)width + left + right, expandedHeight = (long)height + top + bottom;
+        return expandedWidth <= short.MaxValue && expandedHeight <= short.MaxValue && expandedWidth * expandedHeight <= MaximumCells;
+    }
+
     public static string? CreationError(int width, int height, MapCreationKind kind)
     {
         if (!Enum.IsDefined(kind)) return "Choose a map type.";

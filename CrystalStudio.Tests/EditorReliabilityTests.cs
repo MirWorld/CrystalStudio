@@ -225,6 +225,27 @@ public sealed class EditorReliabilityTests
     }
 
     [AvaloniaFact]
+    public void RightClickTileLookupReturnsGroundAndMiddleSourceAssets()
+    {
+        var document = new MapDocument(4, 4);
+        document.Set(0, 0, new Cell { BackLibrary = 7, BackImage = unchecked((int)0xA0000006), MiddleLibrary = 8, MiddleImage = 10 });
+        var viewport = new MapViewport { Layer = MapLayer.Ground };
+        viewport.SetDocument(document);
+        var picked = new List<(int Library, int Index, MapLayer Layer)>();
+        viewport.AssetPicked += (library, index, layer) => picked.Add((library, index, layer));
+
+        Assert.True(viewport.PickTile(0, 0));
+        Assert.Equal((7, 5, MapLayer.Ground), Assert.Single(picked));
+        Assert.Equal(7, viewport.Library);
+        Assert.Equal(5, viewport.SpriteIndex);
+
+        viewport.Layer = MapLayer.Middle;
+        Assert.True(viewport.PickTile(0, 0));
+        Assert.Equal((8, 9, MapLayer.Middle), picked[1]);
+        Assert.False(viewport.PickTile(3, 3));
+    }
+
+    [AvaloniaFact]
     public void LocksProtectPaintingMetadataAndWholeMapOperations()
     {
         var document = new MapDocument(4, 4);
