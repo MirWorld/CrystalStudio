@@ -1057,6 +1057,7 @@ public partial class MainWindow : EditorWindow
         EyedropperToolButton.IsEnabled = !busy && Viewport.Layer is MapLayer.Ground or MapLayer.Middle;
         CropButton.IsEnabled = CropMenuButton.IsEnabled = !busy && activeMap?.IsStamp != true &&
             Viewport.Selection.HasValue && !Viewport.AnyLayerLocked;
+        ExpandMapMenuButton.IsEnabled = !busy && activeMap?.IsStamp != true && !Viewport.AnyLayerLocked;
 
         FillButton.IsEnabled = !busy && Viewport.Selection.HasValue && (Viewport.SpriteIndex >= 0 || Viewport.IsCollisionLayer);
 

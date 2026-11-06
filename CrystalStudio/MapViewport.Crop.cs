@@ -2,6 +2,16 @@ namespace CrystalStudio;
 
 public sealed partial class MapViewport
 {
+    public bool ExpandMap(int left, int top, int right, int bottom)
+    {
+        if (!AllowEdit() || (left | top | right | bottom) == 0) return false;
+        CancelInteraction();
+        var expanded = Document.Expand(left, top, right, bottom);
+        History.Resize(Document, expanded);
+        RefreshAfterResize();
+        return true;
+    }
+
     public bool CropSelection()
     {
         if (Selection is not Rect area || !AllowEdit()) return false;

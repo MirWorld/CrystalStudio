@@ -2733,8 +2733,8 @@
     "Chinese": "选择 Crystal Data 或 Map 目录"
   },
   "SelectMDragtoSelectaRegion_38D59A68": {
-    "English": "Select · M\nDrag to Select a Region",
-    "Chinese": "选择 · M\n拖动以选择区域"
+    "English": "Select · M\nDrag to select. Drag inside the selection to move all layers in steps of 2; the destination is overwritten. Escape cancels.",
+    "Chinese": "选择 · M\n框选范围后，拖动选区内部可按 2 格移动所有图层并覆盖目标。Esc 取消。"
   },
   "Select_2A78025D": {
     "English": "Select",
@@ -4367,6 +4367,14 @@
   "ClassicThemeDescription": {"English": "Classic dungeon and cave layouts", "Chinese": "经典房间与自然洞穴布局"},
   "ThemeDetailsCount": {"English": " · {0} scene details", "Chinese": " · {0} 处主题细节"},
   "ThemeObjectsUnavailable": {"English": "No reviewed visible objects are available for this dungeon theme.", "Chinese": "当前素材库没有此主题所需的已审查可见物件。"},
+  "ExpandMap": {"English": "Expand Map", "Chinese": "地图扩边"},
+  "ExpandMapHint": {"English": "Add blank cells on each side in steps of 2. Existing artwork is preserved.", "Chinese": "按 2 格为单位向四边增加空白区域，保留原有地图内容。"},
+  "ExpandLeftCells": {"English": "Add left (cells)", "Chinese": "左侧增加（格）"},
+  "ExpandTopCells": {"English": "Add top (cells)", "Chinese": "上方增加（格）"},
+  "ExpandRightCells": {"English": "Add right (cells)", "Chinese": "右侧增加（格）"},
+  "ExpandBottomCells": {"English": "Add bottom (cells)", "Chinese": "下方增加（格）"},
+  "ExpandedMapSize": {"English": "Expanded map: {0} × {1} cells", "Chinese": "扩边后地图：{0} × {1} 格"},
+  "InvalidExpansion": {"English": "Enter non-negative even amounts, with at least one side greater than 0. The result must fit the map size limits.", "Chinese": "请输入非负偶数，至少一侧大于 0，扩边结果不能超出地图尺寸限制。"},
   "EyedropperTool": {"English": "Eyedropper", "Chinese": "吸管"},
   "EyedropperToolHint": {"English": "Click a ground or middle tile to select its source artwork.", "Chinese": "点击地砖或中间层素材，拾取对应素材并在素材列表中定位。"},
   "PanTool": {"English": "Hand / Pan", "Chinese": "手形平移"},
