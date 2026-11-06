@@ -11,9 +11,10 @@ public partial class MainWindow
             var loadedWalls = wallFamilies.Count > 0 ? new WallCatalogue(1, wallFamilies.ToList()) : null;
             var definitions = await Task.Run(() => (Walls: loadedWalls ?? WallCatalogue.Read(WallCatalogue.ResolvePath()), Terrain: TerrainCatalogue.Load()));
             if (closed) return;
-            var dialog = new TempleGeneratorWindow(Viewport.Document, assets, definitions.Walls, definitions.Terrain) { Owner = this };
+            var dialog = new TempleGeneratorWindow(Viewport.Document, assets, definitions.Walls, definitions.Terrain, creationStore.Parameters(MapCreationKind.Dungeon)) { Owner = this };
             if (dialog.ShowDialog() != true || dialog.Plan == null) return;
             Viewport.ApplyTemple(dialog.Plan);
+            RememberGeneration(MapCreationKind.Dungeon, dialog);
             Status.Text = LocalText.Format("Generated {0} dungeon · {1} · Seed {2} · Ctrl+Z to undo",dialog.Plan.Options.Type,dialog.Plan.Options.Temple.Name,dialog.Plan.Options.Seed);
         });
     }

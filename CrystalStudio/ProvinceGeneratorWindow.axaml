@@ -5,6 +5,13 @@
         <Grid><Grid.RowDefinitions><RowDefinition /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
         <ScrollViewer VerticalScrollBarVisibility="Auto"><StackPanel>
             <TextBlock Text="{local:Loc OutdoorProvince_EB80CC30}" FontSize="20" FontWeight="SemiBold" />
+            <TextBlock Text="{local:Loc SceneTheme}" />
+            <ComboBox x:Name="SceneList" SelectionChanged="SceneChanged" Margin="0,6,0,14" AutomationProperties.Name="{local:Loc SceneTheme}">
+                <ComboBoxItem Content="{local:Loc WildernessScene}" />
+                <ComboBoxItem Content="{local:Loc VillageCountrysideScene}" />
+                <ComboBoxItem Content="{local:Loc ForestRuinsScene}" />
+                <ComboBoxItem Content="{local:Loc MiningQuarryScene}" />
+            </ComboBox>
             <TextBlock Text="{local:Loc LandscapeStyle_95397827}" />
             <ComboBox x:Name="StyleList" SelectionChanged="SettingsChanged" Margin="0,6,0,18" AutomationProperties.Name="{local:Loc ProvinceLandscapeStyle_84104B72}" />
             <TextBlock Text="{local:Loc ChanceperGeneratedMap_482493D3}" FontWeight="SemiBold" Margin="0,0,0,12" />
@@ -23,6 +30,14 @@
             <Slider x:Name="VegetationSlider" Minimum="0" Maximum="100" TickFrequency="1" IsSnapToTickEnabled="True" Value="55" ValueChanged="SettingsChanged" Margin="0,4,0,18" AutomationProperties.Name="{local:Loc InteriorVegetation_B15DE6A3}" />
             <TextBlock><Run Text="{local:Loc TownCount_9041BBE0}" /><Run Text="{Binding ElementName=TownCountSlider, Path=Value, StringFormat={}{0:0}}" /></TextBlock>
             <Slider x:Name="TownCountSlider" Minimum="0" Maximum="8" TickFrequency="1" IsSnapToTickEnabled="True" Value="0" ValueChanged="SettingsChanged" Margin="0,4,0,12" AutomationProperties.Name="{local:Loc TownCount_5495A825}" ToolTip.Tip="{local:Loc FitTownstoDryClearingsandConnectTheirStreetsCrowdedMapsMayFitFewe_F095EDB3}" />
+            <StackPanel x:Name="RuinOptions" IsVisible="False">
+                <TextBlock><Run Text="{local:Loc RuinCount}" /><Run Text="{Binding ElementName=RuinCountSlider, Path=Value, StringFormat={}{0:0}}" /></TextBlock>
+                <Slider x:Name="RuinCountSlider" Minimum="1" Maximum="4" TickFrequency="1" IsSnapToTickEnabled="True" Value="2" ValueChanged="SettingsChanged" Margin="0,4,0,12" AutomationProperties.Name="{local:Loc RuinCount}" />
+            </StackPanel>
+            <StackPanel x:Name="MineOptions" IsVisible="False">
+                <TextBlock><Run Text="{local:Loc MineCount}" /><Run Text="{Binding ElementName=MineCountSlider, Path=Value, StringFormat={}{0:0}}" /></TextBlock>
+                <Slider x:Name="MineCountSlider" Minimum="1" Maximum="4" TickFrequency="1" IsSnapToTickEnabled="True" Value="2" ValueChanged="SettingsChanged" Margin="0,4,0,12" AutomationProperties.Name="{local:Loc MineCount}" />
+            </StackPanel>
         </StackPanel></ScrollViewer>
         <StackPanel Grid.Row="1" Margin="0,12,0,0">
             <TextBlock Text="{local:Loc Seed_367EF06B}" />

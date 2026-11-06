@@ -27,9 +27,10 @@ public partial class TerrainGeneratorWindow : EditorWindow
     private TerrainOptions? cachedOptions;
     private TerrainArea cachedArea;
     public TerrainPlan? Plan { get; private set; }
-    public TerrainGeneratorWindow(MapDocument document, AssetStore assets, TerrainCatalogue catalogue)
+    private readonly IReadOnlyDictionary<string, string>? savedParameters;
+    public TerrainGeneratorWindow(MapDocument document, AssetStore assets, TerrainCatalogue catalogue, IReadOnlyDictionary<string, string>? parameters = null)
     {
-        this.document = document; this.assets = assets; this.catalogue = catalogue;
+        this.document = document; this.assets = assets; this.catalogue = catalogue; savedParameters = parameters;
         InitializeComponent();
         RouteList.SelectedIndex = 0;
         previewTimer.Tick += PreviewTimerTick;
@@ -59,6 +60,7 @@ public partial class TerrainGeneratorWindow : EditorWindow
         }
         catch (OperationCanceledException) { }
         catch (Exception ex) { if (!closed) { PreviewHint.Text = LocalText.T("Terrain artwork could not be loaded."); FeedbackText.Text = (ex.Message); } }
+        finally { if (ready && !closed) GeneratorPreferences.Restore(this, savedParameters); }
     }
     private void BiomeChanged(object sender, SelectionChangedEventArgs e)
     {

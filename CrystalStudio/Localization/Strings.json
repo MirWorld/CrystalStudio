@@ -1,4 +1,32 @@
 {
+  "RecoverMaps": {"English": "Recover Maps", "Chinese": "恢复地图"},
+  "CheckMap": {"English": "Check Map", "Chinese": "检查地图"},
+  "DimensionsTotalLimit": {"English": "Use dimensions from 16 to 4096, with at most 16,000,000 cells.", "Chinese": "宽高须为 16～4096，且总格数不能超过 1600 万。"},
+  "MixedUnchanged": {"English": "Mixed — leave unchanged", "Chinese": "混合值 — 留空不修改"},
+  "AutomaticRecoveryUnavailable": {"English": "Automatic recovery is unavailable.", "Chinese": "自动恢复不可用。"},
+  "RecoveryWriteFailed": {"English": "Could not write the automatic recovery snapshot.", "Chinese": "自动恢复快照写入失败。"},
+  "NoRecoverySnapshots": {"English": "No recovery snapshots are available.", "Chinese": "没有可恢复的快照。"},
+  "OpenRecoveredCopy": {"English": "Open Recovered Copy", "Chinese": "打开恢复副本"},
+  "DeleteSnapshot": {"English": "Delete Snapshot", "Chinese": "删除快照"},
+  "RecoveredMapName": {"English": "Recovered — {0}", "Chinese": "恢复 — {0}"},
+  "DeleteRecoveryQuestion": {"English": "Delete this recovery snapshot?", "Chinese": "删除此恢复快照？"},
+  "CheckingMap": {"English": "Checking map…", "Chinese": "正在检查地图…"},
+  "LocateIssue": {"English": "Locate", "Chinese": "定位"},
+  "MapChangedCheckAgain": {"English": "The map changed. Run the check again.", "Chinese": "地图已发生变化，请重新检查。"},
+  "MapCheckSummary": {"English": "{0:N0} findings; showing {1:N0}. Disconnected areas may be intentional.", "Chinese": "发现 {0:N0} 项，显示 {1:N0} 项。独立区域可能是有意设计，请人工复核。"},
+  "LoadLibrariesForCheck": {"English": "Load libraries to check image references.", "Chinese": "加载资源库后可检查图像引用。"},
+  "CheckImageReference": {"English": "{0}: {1} · Library {2}, Image {3}", "Chinese": "{0}：{1} · 资源库 {2}，图片 {3}"},
+  "MissingLibraryCheck": {"English": "Missing library", "Chinese": "缺失资源库"},
+  "InvalidImageCheck": {"English": "Invalid image number", "Chinese": "图片编号无效"},
+  "EmptyImageCheck": {"English": "Empty image", "Chinese": "图片为空"},
+  "UnreadableImageCheck": {"English": "Unreadable image", "Chinese": "图片无法读取"},
+  "OpenDoorCheck": {"English": "Open door", "Chinese": "开门状态"},
+  "DoorNoForeground": {"English": "Door has no foreground image", "Chinese": "门属性没有对应的前景图像"},
+  "DoorNoNeighbour": {"English": "Door has no walkable neighbouring cell", "Chinese": "门周围没有可行走单元格"},
+  "DisconnectedArea": {"English": "Disconnected walkable area: {0:N0} cells", "Chinese": "独立可行走区域：{0:N0} 格"},
+  "LayerIsLocked": {"English": "This layer is locked.", "Chinese": "当前图层已锁定。"},
+  "UnlockAllLayers": {"English": "Unlock all layers before editing multiple layers.", "Chinese": "请先解锁所有图层，再执行跨图层操作。"},
+  "LockLayer": {"English": "Lock {0}", "Chinese": "锁定{0}"},
   "AiSettings_20261105": { "English": "AI settings", "Chinese": "AI 设置" },
   "AiVision_20261105": { "English": "Vision AI", "Chinese": "视觉识图 AI" },
   "AiImage_20261105": { "English": "Image AI", "Chinese": "生图 AI" },
@@ -3735,5 +3763,220 @@
   "DockResizeHeight": {
     "English": "Drag to resize panel height",
     "Chinese": "拖动调整面板高度"
-  }
+  },
+  "QuickMap_0": {
+    "English": "Quick Create Map",
+    "Chinese": "快速创建地图"
+  },
+  "QuickMap_1": {
+    "English": "Quick Create Map…",
+    "Chinese": "快速创建地图…"
+  },
+  "QuickMap_2": {
+    "English": "Choose a map type, preview it, then create.",
+    "Chinese": "选择地图类型，预览后创建。"
+  },
+  "QuickMap_3": {
+    "English": "Map type",
+    "Chinese": "地图类型"
+  },
+  "QuickMap_4": {
+    "English": "Blank",
+    "Chinese": "空白地图"
+  },
+  "QuickMap_5": {
+    "English": "Width × height in cells",
+    "Chinese": "宽 × 高（单元格）"
+  },
+  "QuickMap_6": {
+    "English": "Map name",
+    "Chinese": "地图名称"
+  },
+  "QuickMap_7": {
+    "English": "Output folder",
+    "Chinese": "输出目录"
+  },
+  "QuickMap_8": {
+    "English": "Save the map after creation",
+    "Chinese": "创建后保存地图"
+  },
+  "QuickMap_9": {
+    "English": "Choose an output folder.",
+    "Chinese": "请选择输出目录。"
+  },
+  "QuickMap_10": {
+    "English": "Enter a valid map filename without a folder path.",
+    "Chinese": "请输入有效的地图文件名，不要包含目录路径。"
+  },
+  "QuickMap_11": {
+    "English": "A map with this name already exists. Choose another name.",
+    "Chinese": "已存在同名地图，请更换名称。"
+  },
+  "QuickMap_12": {
+    "English": "Next: Preview",
+    "Chinese": "下一步：预览"
+  },
+  "QuickMap_13": {
+    "English": "A blank map needs no game artwork.",
+    "Chinese": "空白地图无需游戏素材即可创建。"
+  },
+  "QuickMap_14": {
+    "English": "The next window checks artwork and previews the result. Cancelling leaves your maps unchanged.",
+    "Chinese": "下一步将检查素材并预览结果；取消不会改动现有地图。"
+  },
+  "QuickMap_15": {
+    "English": "Choose a map type.",
+    "Chinese": "请选择地图类型。"
+  },
+  "QuickMap_16": {
+    "English": "A map supports at most 16,000,000 cells.",
+    "Chinese": "地图最多支持 16,000,000 个单元格。"
+  },
+  "QuickMap_17": {
+    "English": "Province generation needs at least 128×128 cells and supports up to 1,000,000 cells.",
+    "Chinese": "省域生成要求宽高至少 128 格，总格数不超过 1,000,000。"
+  },
+  "QuickMap_18": {
+    "English": "Dungeon generation needs at least 64×64 cells and supports up to 1,000,000 cells.",
+    "Chinese": "地牢生成要求宽高至少 64 格，总格数不超过 1,000,000。"
+  },
+  "QuickMap_19": {
+    "English": "Generate at most 300,000 ground tiles at once. Choose a smaller map.",
+    "Chinese": "单次最多生成 300,000 个地表图块，请选择较小的地图。"
+  },
+  "QuickMap_20": {
+    "English": "Load game libraries in Settings before generating a map.",
+    "Chinese": "请先在设置中加载游戏素材，再生成地图。"
+  },
+  "QuickMap_21": {
+    "English": "Required generator catalogues are missing. Restore catalogue and Objects beside the editor.",
+    "Chinese": "缺少生成目录，请恢复编辑器旁的 catalogue 和 Objects 文件夹。"
+  },
+  "QuickMap_22": {
+    "English": "The output path now exists. The map remains unsaved; use Save As.",
+    "Chinese": "输出路径已存在；地图保留为未保存状态，请使用另存为。"
+  },
+  "QuickMap_23": {
+    "English": "Map saved, but its creation recipe could not be saved.",
+    "Chinese": "地图已保存，但创建配方保存失败。"
+  },
+  "QuickMap_24": {
+    "English": "Preset",
+    "Chinese": "预设"
+  },
+  "QuickMap_25": {
+    "English": "Last used settings",
+    "Chinese": "上次使用的设置"
+  },
+  "QuickMap_26": {
+    "English": "Optional preset name",
+    "Chinese": "可选：预设名称"
+  },
+  "QuickMap_27": {
+    "English": "Save/update preset after creation (optional)",
+    "Chinese": "创建后保存／更新预设（可选）"
+  },
+  "QuickMap_28": {
+    "English": "Enter a preset name (1–80 characters).",
+    "Chinese": "请输入 1～80 个字符的预设名称。"
+  },
+  "QuickMap_29": {
+    "English": "At most 50 map presets can be saved.",
+    "Chinese": "最多可保存 50 个地图预设。"
+  },
+  "QuickMap_30": {
+    "English": "Replace the existing preset after creating this map?",
+    "Chinese": "创建这张地图后，替换已有的同名预设吗？"
+  },
+  "QuickMap_31": {
+    "English": "Map preset",
+    "Chinese": "地图预设"
+  },
+  "QuickMap_32": {
+    "English": "Recover Unsaved Maps…",
+    "Chinese": "恢复未保存地图…"
+  },
+  "QuickMap_33": {
+    "English": "Recover Unsaved Maps",
+    "Chinese": "恢复未保存地图"
+  },
+  "QuickMap_34": {
+    "English": "{0} recovery snapshot(s) available. Use File → Recover Unsaved Maps.",
+    "Chinese": "发现 {0} 份恢复快照，请使用“文件 → 恢复未保存地图”。"
+  },
+  "QuickMap_35": {
+    "English": "Recovery snapshot failed. Save your map manually.",
+    "Chinese": "恢复快照保存失败，请手动保存地图。"
+  },
+  "QuickMap_36": {
+    "English": "Could not read recovery snapshots.",
+    "Chinese": "无法读取恢复快照。"
+  },
+  "QuickMap_37": {
+    "English": "No recovery snapshots are available.",
+    "Chinese": "没有可用的恢复快照。"
+  },
+  "QuickMap_38": {
+    "English": "Recovery opens an unsaved copy. Original map files are never overwritten.",
+    "Chinese": "恢复操作会打开未保存的副本，不会覆盖原始地图文件。"
+  },
+  "QuickMap_39": {
+    "English": "Recover selected map",
+    "Chinese": "恢复选中地图"
+  },
+  "QuickMap_40": {
+    "English": "Discard snapshot",
+    "Chinese": "丢弃快照"
+  },
+  "QuickMap_41": {
+    "English": "Permanently discard this recovery snapshot?",
+    "Chinese": "永久丢弃这份恢复快照吗？"
+  },
+  "QuickMap_42": {
+    "English": " (recovered)",
+    "Chinese": "（已恢复）"
+  },
+  "QuickMap_43": {
+    "English": "Recovered an unsaved copy. Use Save As to choose its destination.",
+    "Chinese": "已恢复为未保存副本，请使用另存为选择保存位置。"
+  },
+  "SceneTheme": {
+    "English": "Scene theme",
+    "Chinese": "场景主题"
+  },
+  "WildernessScene": {
+    "English": "Wilderness",
+    "Chinese": "自然荒野"
+  },
+  "VillageCountrysideScene": {
+    "English": "Village and countryside",
+    "Chinese": "村镇与郊野"
+  },
+  "DetailedScenes": {
+    "English": "Detailed living scenes",
+    "Chinese": "丰富生活场景"
+  },
+  "EcologyEdgePlants": {
+    "English": "{0} woodland, trail and shore edge plants",
+    "Chinese": "{0} 处林缘、路旁与岸边植被"
+  },
+  "ForestRuinsScene": { "English": "Forest ruins", "Chinese": "森林遗迹" },
+  "RuinCount": { "English": "Ruin clearings: ", "Chinese": "遗迹空地数量：" },
+  "ForestRuinClearings": { "English": "{0} forest ruin clearings", "Chinese": "{0} 处森林遗迹空地" },
+  "MiningQuarryScene": { "English": "Mining and quarry", "Chinese": "矿区与采石场" },
+  "MineCount": { "English": "Mining yards: ", "Chinese": "采掘场数量：" },
+  "MiningYards": { "English": "{0} mining and quarry yards", "Chinese": "{0} 处矿区与采石场" },
+  "MiningArtworkUnavailable": { "English": "Mining yard artwork is unavailable in the selected libraries.", "Chinese": "当前素材库缺少完整矿区所需的素材。" },
+  "MiningDetailsUnavailable": { "English": "Some mining yard details are unavailable; only complete visible objects were used.", "Chinese": "部分矿区细节素材不可用，已仅使用完整可见物件。" },
+  "FantasyDungeonTheme": {"English": "World theme", "Chinese": "世界主题"},
+  "ClassicDungeonTheme": {"English": "Classic dungeon / cave", "Chinese": "经典地牢 / 洞穴"},
+  "CelestialPalaceTheme": {"English": "Celestial palace", "Chinese": "天宫 · 云上宫阙"},
+  "AbyssalReefTheme": {"English": "Abyssal reef", "Chinese": "海底 · 深渊珊瑚宫"},
+  "AlienPlanetTheme": {"English": "Alien planet", "Chinese": "异星 · 裂隙晶巢"},
+  "CelestialThemeDescription": {"English": "Axial halls, paired courts and bridges above a white cloud sea", "Chinese": "中轴殿堂、对称院落、云海桥廊"},
+  "AbyssalThemeDescription": {"English": "Coral chambers, tidal loops and a submerged central sanctuary", "Chinese": "珊瑚洞群、潮汐环路、海底中庭"},
+  "AlienThemeDescription": {"English": "Offset impact basins, fractured routes and crystalline life", "Chinese": "偏心环坑、断裂通道、异形晶体生态"},
+  "ClassicThemeDescription": {"English": "Classic dungeon and cave layouts", "Chinese": "经典房间与自然洞穴布局"},
+  "ThemeDetailsCount": {"English": " · {0} scene details", "Chinese": " · {0} 处主题细节"},
+  "ThemeObjectsUnavailable": {"English": "No reviewed visible objects are available for this dungeon theme.", "Chinese": "当前素材库没有此主题所需的已审查可见物件。"}
 }

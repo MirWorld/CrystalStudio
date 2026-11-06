@@ -167,15 +167,18 @@ public partial class MainWindow : EditorWindow
             });
 
             if (Environment.GetCommandLineArgs().Skip(1).FirstOrDefault() is string path && File.Exists(path)) await Run(() => OpenMap(path));
+            StartRecovery();
 
         };
 
         InitializeDocking();
 
         InitializeMapTabs();
+        InitializeMapCreation();
         InitializeRecentMaps();
 
         InitializeCellMenu();
+        InitializeLayerLocks();
 
         ThemeService.Changed += ThemeChanged;
 
@@ -452,7 +455,7 @@ public partial class MainWindow : EditorWindow
         panel.Children.Add(create);
         dialog.Content = panel;
 
-        create.Click += (_, _) => { if (!int.TryParse(width.Text, out int w) || !int.TryParse(height.Text, out int h) || w < 16 || h < 16 || w > 4096 || h > 4096) { MessageBox.Show(dialog, "Enter dimensions between 16 and 4096."); return; } AddMapTab(new(w, h)); Status.Text = LocalText.T("New map created"); dialog.DialogResult = true; }; dialog.ShowDialog();
+        create.Click += (_, _) => { if (!int.TryParse(width.Text, out int w) || !int.TryParse(height.Text, out int h)) { MessageBox.Show(dialog, "Enter dimensions between 16 and 4096."); return; } if (MapDimensions.CreationError(w, h, MapCreationKind.Blank) is { } error) { MessageBox.Show(dialog, LocalText.T(error)); return; } AddMapTab(new(w, h)); Status.Text = LocalText.T("New map created"); dialog.DialogResult = true; }; dialog.ShowDialog();
 
     }
 
@@ -467,6 +470,8 @@ public partial class MainWindow : EditorWindow
         Status.Text = LocalText.T("Reading map\u2026");
         var d = await Task.Run(() => MapDocument.Load(path, settings.AssetFormat));
         AddMapTab(d, path);
+        try { activeMap!.Recipe = MapCreationStore.LoadRecipe(path, d); }
+        catch (Exception exception) { StudioLog.Error("MapCreation.LoadRecipe", exception, $"Path={path}"); }
         StudioLog.Info("Map.Open",$"Loaded; Path={path}; Size={d.Width}x{d.Height}; Stamps={d.PlacedStamps.Count}");
         RememberMap(path);
         Status.Text = (d.MetadataWarning ?? LocalText.Format("Map loaded · {0:N0} remembered stamps", d.PlacedStamps.Count));
@@ -505,10 +510,30 @@ public partial class MainWindow : EditorWindow
     {
 
         if (activeMap?.IsStamp == true) return SaveStampEditor(saveAs);
-        string? target = saveAs ? null : mapPath; if (target == null) { var picker = new SaveFileDialog { Filter = "Crystal map (*.map)|*.map", FileName = mapPath == null ? "Untitled.map" : Path.GetFileName(mapPath), InitialDirectory = mapPath == null ? "" : Path.GetDirectoryName(mapPath), DefaultExt = ".map", AddExtension = true, OverwritePrompt = true }; if (picker.ShowDialog(this) != true) return false; target = picker.FileName; }
+        string? target = saveAs ? null : mapPath; if (target == null) { var picker = new SaveFileDialog { Filter = "Crystal map (*.map)|*.map", FileName = mapPath == null ? MapCreationPaths.FileName(activeMap?.Name.StartsWith("Untitled ", StringComparison.Ordinal) == false ? activeMap.Name : "Untitled") : Path.GetFileName(mapPath), InitialDirectory = mapPath == null ? MapCreationPaths.DefaultDirectory(settings.LibraryFolder) : Path.GetDirectoryName(mapPath), DefaultExt = ".map", AddExtension = true, OverwritePrompt = true }; if (picker.ShowDialog(this) != true) return false; target = picker.FileName; }
 
-        try { if (mapPath == null) Viewport.Document.SourceFormat = settings.AssetFormat; Viewport.Document.Save(target); mapPath = target; RememberMap(target); Viewport.History.Saved(); UpdateLabels(); UpdateMapTabLabels(); Status.Text = LocalText.Format("Saved {0}",Path.GetFileName(target)); return true; } catch (Exception ex) { StudioLog.Error("Map.Save",ex,$"Path={target}"); MessageBox.Show(this, ex.Message, "Save failed"); return false; }
+        return SaveMapTo(target);
 
+    }
+
+    private bool SaveMapTo(string target, bool overwrite = true)
+    {
+        try
+        {
+            if (mapPath == null && activeMap?.KeepSourceFormat != true) Viewport.Document.SourceFormat = settings.AssetFormat;
+            if (overwrite) Viewport.Document.Save(target); else Viewport.Document.SaveNew(target);
+            mapPath = target; RememberMap(target); Viewport.History.Saved();
+            if (activeMap != null) ForgetRecovery(activeMap);
+            UpdateLabels(); UpdateMapTabLabels(); Status.Text = LocalText.Format("Saved {0}", Path.GetFileName(target));
+            if (activeMap?.Recipe is { } recipe)
+            {
+                try { activeMap.Recipe = recipe with { AssetFormat = Viewport.Document.SourceFormat }; MapCreationStore.SaveRecipe(target, activeMap.Recipe); }
+                catch (Exception exception) { StudioLog.Error("MapCreation.SaveRecipe", exception, $"Path={target}"); Status.Text = LocalText.T("Map saved, but its creation recipe could not be saved."); }
+            }
+            _ = RefreshSavedMapAsync(target); return true;
+        }
+        catch (Exception exception)
+        { StudioLog.Error("Map.Save", exception, $"Path={target}"); MessageBox.Show(this, exception.Message, "Save failed"); return false; }
     }
 
     private void SettingsClick(object s, RoutedEventArgs e) { if (!busy) OpenSettings(); }
@@ -706,18 +731,44 @@ public partial class MainWindow : EditorWindow
     {
 
         if (busy || !Viewport.Document.Contains(point.X, point.Y)) return;
-
-        var c = Viewport.Document.Get(point.X, point.Y);
+        if (Viewport.IsLayerLocked(MapLayer.Objects)) { Status.Text = LocalText.T("This layer is locked."); return; }
 
         var dialog = new EditorWindow { Title = LocalText.T("Cell Properties"), Width = 340, SizeToContent = SizeToContent.Height, Owner = this, WindowStartupLocation = WindowStartupLocation.CenterOwner, CanResize = false }; var panel = new StackPanel { Margin = new(24) }; dialog.Content = panel;
 
         panel.Children.Add(new TextBlock { Text = (area.Width == 1 && area.Height == 1 ? LocalText.Format("Cell {0}, {1}",point.X,point.Y) : LocalText.T("Apply to Selected Cells")), FontSize = 18, Margin = new(0, 0, 0, 14) });
 
-        TextBox Field(string label, string value) { panel.Children.Add(new TextBlock { Text = LocalText.T(label)}); var box = new TextBox { Text = value }; panel.Children.Add(box); return box; }
-
-        var light = Field("Light (0\u2013255)", c.Light.ToString()); var door = Field("Door Index (0\u2013255)", c.Door.ToString()); var offset = Field("Door Offset (0\u2013255)", c.DoorOffset.ToString()); var apply = new Button { Content = LocalText.T("Apply Properties")}; panel.Children.Add(apply);
-
-        apply.Click += (_, _) => { if (!byte.TryParse(light.Text, out var l) || !byte.TryParse(door.Text, out var d) || !byte.TryParse(offset.Text, out var o)) { MessageBox.Show(dialog, "One or more values are outside the supported range."); return; } Viewport.ApplyMetadata(l, d, o, area); dialog.DialogResult = true; }; dialog.ShowDialog();
+        var initialValues = new Dictionary<TextBox, string>();
+        TextBox Field(string label, Func<Cell, byte> read)
+        {
+            panel.Children.Add(new TextBlock { Text = LocalText.T(label) });
+            byte? common = Viewport.CommonMetadata(area, read);
+            var box = new TextBox { Text = common?.ToString() ?? "", Watermark = LocalText.T("Mixed — leave unchanged") };
+            initialValues[box] = box.Text ?? "";
+            panel.Children.Add(box);
+            return box;
+        }
+        var light = Field("Light (0\u2013255)", cell => cell.Light);
+        var door = Field("Door Index (0\u2013255)", cell => cell.Door);
+        var offset = Field("Door Offset (0\u2013255)", cell => cell.DoorOffset);
+        var apply = new Button { Content = LocalText.T("Apply Properties") }; panel.Children.Add(apply);
+        apply.Click += (_, _) =>
+        {
+            bool Parse(TextBox box, out byte? value)
+            {
+                value = null;
+                if (string.IsNullOrWhiteSpace(box.Text)) return true;
+                if (!byte.TryParse(box.Text, out var parsed)) return false;
+                value = parsed; return true;
+            }
+            if (!Parse(light, out var l) || !Parse(door, out var d) || !Parse(offset, out var o))
+            { MessageBox.Show(dialog, "One or more values are outside the supported range."); return; }
+            // Unchanged fields must not flatten mixed values in a selection.
+            Viewport.ApplyMetadata(light.Text == initialValues[light] ? null : l,
+                door.Text == initialValues[door] ? null : d,
+                offset.Text == initialValues[offset] ? null : o, area);
+            dialog.DialogResult = true;
+        };
+        dialog.ShowDialog();
 
     }
 
@@ -859,6 +910,8 @@ public partial class MainWindow : EditorWindow
     private void KeyDownHandler(object s, KeyEventArgs e)
 
     {
+        if (!busy && FocusManager?.GetFocusedElement() is not TextBox && e.Key == Key.N && e.KeyModifiers == (KeyModifiers.Control | KeyModifiers.Alt))
+        { QuickCreateClick(s, e); e.Handled = true; return; }
 
         if (FocusManager?.GetFocusedElement() is TextBox or MenuItem || mapFileList.IsKeyboardFocusWithin || InputState.Modifiers.HasFlag(KeyModifiers.Alt) || busy) return; bool ctrl = InputState.Modifiers.HasFlag(KeyModifiers.Control);
 

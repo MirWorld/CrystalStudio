@@ -30,10 +30,15 @@ public sealed record Cell
         TileOffset == other.TileOffset && TileFrames == other.TileFrames && Light == other.Light && Foreground == other.Foreground;
     public bool Empty => BackImage == 0 && MiddleImage == 0 && Foreground is null && Door == 0 && DoorOffset == 0 && MiddleFrames == 0 && MiddleTick == 0 && TileAnimation == 0 && TileOffset == 0 && TileFrames == 0 && Light == 0;
 }
-public sealed partial class MapDocument(int width, int height)
+public sealed partial class MapDocument
 {
-    public int Width { get; } = width;
-    public int Height { get; } = height;
+    public int Width { get; }
+    public int Height { get; }
+    public MapDocument(int width, int height)
+    {
+        MapDimensions.Validate(width, height);
+        Width = width; Height = height;
+    }
     public AssetSourceFormat SourceFormat { get; internal set; }
     private readonly Dictionary<int, Cell> cells = [];
     private readonly Dictionary<int, Cell> presentationCells = [];
@@ -56,7 +61,7 @@ public sealed partial class MapDocument(int width, int height)
     {
         if (!File.Exists(path)) throw new FileNotFoundException("Map file not found.", path);
         var legacy = new MapReader(path);
-        if (legacy.Width <= 0 || legacy.Height <= 0 || (long)legacy.Width * legacy.Height > 16_000_000) throw new InvalidDataException("Invalid map dimensions.");
+        if (!MapDimensions.CanRoundTrip(legacy.Width, legacy.Height)) throw new InvalidDataException("Invalid map dimensions.");
         var d = new MapDocument(legacy.Width, legacy.Height) { SourceFormat = format };
         bool sanxiuIds = format == AssetSourceFormat.Sanxiu && legacy.IsCrystalVersion1;
         for (int x = 0; x < d.Width; x++) for (int y = 0; y < d.Height; y++)
@@ -75,8 +80,11 @@ public sealed partial class MapDocument(int width, int height)
         StampMetadata.Read(path, d);
         return d;
     }
-    public void Save(string path)
+    public void Save(string path) => SaveCore(path, true);
+    internal void SaveNew(string path) => SaveCore(path, false);
+    private void SaveCore(string path, bool overwrite)
     {
+        MapDimensions.Validate(Width, Height);
         AtomicFile.Write(path, stream =>
         {
             using var w = new BinaryWriter(stream, System.Text.Encoding.UTF8, leaveOpen: true);
@@ -95,7 +103,7 @@ public sealed partial class MapDocument(int width, int height)
                 CellCodec.Write(w, cell, true);
             }
             StampMetadata.Write(w, d: this);
-        });
+        }, overwrite: overwrite, backup: overwrite);
     }
 }
 public record StampCell(int X, int Y, Cell Cell);
@@ -163,7 +171,7 @@ public static class CellCodec
             using var w = new BinaryWriter(stream, System.Text.Encoding.UTF8, leaveOpen: true);
             w.Write((byte)'C'); w.Write((byte)'#'); w.Write((byte)2); w.Write(list.Count);
             foreach (var c in list) { w.Write(c.X); w.Write(c.Y); Write(w, c.Cell, false); }
-        });
+        }, backup: true);
     }
 }
 public sealed class EditHistory
@@ -221,5 +229,6 @@ public sealed class EditHistory
     public void Undo(MapDocument d, Action<int, int>? changed = null) => Swap(d, undo, redo, changed);
     public void Redo(MapDocument d, Action<int, int>? changed = null) => Swap(d, redo, undo, changed);
     public void Saved() { Commit(); savedState = currentState; }
+    public void MarkUnsaved() => savedState = -1;
 }
 

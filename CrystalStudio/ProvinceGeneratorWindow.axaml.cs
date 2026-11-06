@@ -15,18 +15,22 @@ public partial class ProvinceGeneratorWindow : EditorWindow
     private IReadOnlyList<ProvinceScenery> scenery = [];
     private TerrainWaterResources? water;
     private readonly ProvinceTownResources towns = new();
+    private readonly ProvinceRuinResources ruins = new();
+    private readonly ProvinceMineResources mines = new();
     private ProvincePlan? cached;
     private RasterImage? overview, detailPreview;
     private bool ready, closed, changingSettings;
     private int revision;
     public ProvincePlan? Plan { get; private set; }
+    private readonly IReadOnlyDictionary<string, string>? savedParameters;
 
-    public ProvinceGeneratorWindow(MapDocument document, AssetStore assets, WallCatalogue? wallCatalogue = null)
+    public ProvinceGeneratorWindow(MapDocument document, AssetStore assets, WallCatalogue? wallCatalogue = null, IReadOnlyDictionary<string, string>? parameters = null)
     {
-        this.document = document; this.assets = assets; suppliedWalls = wallCatalogue;
+        this.document = document; this.assets = assets; suppliedWalls = wallCatalogue; savedParameters = parameters;
         InitializeComponent();
         TownCountSlider.Maximum = Math.Clamp(document.Width * document.Height / (128 * 128), 1, 8);
         StyleList.ItemsSource = ProvinceStyle.All; StyleList.SelectedIndex = 0;
+        SceneList.SelectedIndex = parameters is { Count: > 0 } && !parameters.ContainsKey("SceneList") ? 0 : 1;
         timer.Tick += Generate;
         Loaded += Load;
         Closed += (_, _) => { closed = true; timer.Stop(); pending?.Cancel(); lifetime.Cancel(); };
@@ -40,12 +44,47 @@ public partial class ProvinceGeneratorWindow : EditorWindow
                 ProvinceGenerator.LoadScenery(assets, lifetime.Token)), lifetime.Token);
             water = await TerrainWaterResources.Load(assets, lifetime.Token);
             if (closed) return;
-            ready = true; RandomizeButton.IsEnabled = true; UpdateDoorOptions(); Schedule();
+            ready = true; RandomizeButton.IsEnabled = true; GeneratorPreferences.Restore(this, savedParameters); UpdateDoorOptions(); Schedule();
         }
         catch (OperationCanceledException) { }
         catch (Exception ex) { if (!closed) { PreviewHint.Text = LocalText.T("Province artwork unavailable"); FeedbackText.Text = (ex.Message); } }
     }
-    private void SettingsChanged(object sender, RoutedEventArgs e) { UpdateDoorOptions(); Schedule(); }
+    private void SceneChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (TownCountSlider == null) return;
+        bool village = SceneList.SelectedIndex == (int)ProvinceScene.VillageCountryside;
+        bool forestRuins = SceneList.SelectedIndex == (int)ProvinceScene.ForestRuins;
+        bool mining = SceneList.SelectedIndex == (int)ProvinceScene.MiningQuarry;
+        if (MineOptions != null) MineOptions.IsVisible = mining;
+        if (RuinOptions != null) RuinOptions.IsVisible = forestRuins;
+        StyleList.IsEnabled = !forestRuins && !mining;
+        if (forestRuins || mining) StyleList.SelectedIndex = 0;
+        TownCountSlider.Minimum = village ? 1 : 0;
+        TownCountSlider.Value = village ? Math.Min(TownCountSlider.Maximum, Math.Max(1, document.Width * document.Height / 90000)) : 0;
+        if (forestRuins)
+        {
+            ForestSlider.Value = 100; CliffSlider.Value = 35; BeachSlider.Value = 0;
+            RiverSlider.Value = 40; VegetationSlider.Value = 85;
+            if (RuinCountSlider != null) RuinCountSlider.Value = Math.Clamp(document.Width * document.Height / 90000, 1, 4);
+        }
+        if (mining)
+        {
+            ForestSlider.Value = 55; CliffSlider.Value = 100; BeachSlider.Value = 0;
+            RiverSlider.Value = 25; VegetationSlider.Value = 35;
+            if (MineCountSlider != null) MineCountSlider.Value = Math.Clamp(document.Width * document.Height / 100000, 1, 4);
+        }
+        if (village)
+        {
+            ForestSlider.Value = 65; CliffSlider.Value = 35; BeachSlider.Value = 20;
+            RiverSlider.Value = 45; VegetationSlider.Value = 70;
+        }
+        UpdateDoorOptions(); Schedule();
+    }
+    private void SettingsChanged(object sender, RoutedEventArgs e)
+    {
+        if (SceneList?.SelectedIndex is (int)ProvinceScene.ForestRuins or (int)ProvinceScene.MiningQuarry && StyleList.SelectedIndex != 0) StyleList.SelectedIndex = 0;
+        UpdateDoorOptions(); Schedule();
+    }
     private void UpdateDoorOptions()
     {
         if (DoorCountSlider==null || StyleList.SelectedItem is not ProvinceStyle style) return;
@@ -67,7 +106,7 @@ public partial class ProvinceGeneratorWindow : EditorWindow
         try
         {
             int next = Random.Shared.Next(StyleList.Items.Count - 1);
-            StyleList.SelectedIndex = next >= StyleList.SelectedIndex ? next + 1 : next;
+            if (SceneList.SelectedIndex is not ((int)ProvinceScene.ForestRuins or (int)ProvinceScene.MiningQuarry)) StyleList.SelectedIndex = next >= StyleList.SelectedIndex ? next + 1 : next;
             foreach (var slider in new[] { ForestSlider, CliffSlider, BeachSlider, RiverSlider, VegetationSlider, TownCountSlider })
                 slider.Value = Random.Shared.Next((int)slider.Minimum, (int)slider.Maximum + 1);
             DoorCountSlider.Value=Random.Shared.Next(1, 5);
@@ -82,7 +121,7 @@ public partial class ProvinceGeneratorWindow : EditorWindow
         if (!int.TryParse(SeedBox.Text, out int seed)) { PreviewHint.Text = ((FeedbackText.Text = LocalText.T("Enter a whole-number seed."))); return; }
         var options = new ProvinceOptions(seed, StyleList.SelectedItem as ProvinceStyle, (int)ForestSlider.Value,
             (int)CliffSlider.Value, (int)BeachSlider.Value, (int)RiverSlider.Value, (int)VegetationSlider.Value, (int)TownCountSlider.Value,
-            DoorCountSlider.IsEnabled ? (int)DoorCountSlider.Value : 0);
+            DoorCountSlider.IsEnabled ? (int)DoorCountSlider.Value : 0, (ProvinceScene)SceneList.SelectedIndex, (int)RuinCountSlider.Value, (int)MineCountSlider.Value);
         int request = revision; bool detail = DetailToggle.IsChecked == true;
         var job = CancellationTokenSource.CreateLinkedTokenSource(lifetime.Token); pending = job;
         try
@@ -96,7 +135,7 @@ public partial class ProvinceGeneratorWindow : EditorWindow
                     var p = cached;
                     if (p == null || p.Options != options || p.SourceRevision != document.PickupRevision)
                     {
-                        p = ProvinceGenerator.Plan(document, terrain, walls, scenery, options, job.Token, water?.Banks, water?.Shore, assets, towns: towns);
+                        p = ProvinceGenerator.Plan(document, terrain, walls, scenery, options, job.Token, water?.Banks, water?.Shore, assets, towns: towns, ruins: ruins, mines: mines);
                         // Keep a finished plan even if a preview-mode change cancels
                         // rendering. Only generation options invalidate the map.
                         cached = p; overview = detailPreview = null;

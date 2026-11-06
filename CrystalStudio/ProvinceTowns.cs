@@ -37,6 +37,9 @@ internal static class ProvinceTowns
         int width = map.Width, height = map.Height, columns = (width + 1) / 2, rows = (height + 1) / 2;
         var random = new Random(options.Seed ^ 0x70A45);
         var family = resources.Family(style, assets, token);
+        if (options.Scene == ProvinceScene.VillageCountryside)
+            family = family with { Pieces = family.Pieces.Where(p => p.Role is not ("prop" or "greenery") ||
+                ProvinceSceneryPalette.GroundSetId(p.Id) != "unverified").ToList() };
         var wallResources = options.TownCount > 0 ? resources.Walls(assets, token) : null;
         var basis = terrain.Sets.Single(s => s.Id == style.BaseId);
         var patch = terrain.Sets.Single(s => s.Id == style.PatchId);
@@ -174,7 +177,8 @@ internal static class ProvinceTowns
                         {
                             town = TownGenerator.Generate(family, new(size, random.Next(), 3, random.Next(48, 71),
                                 Ground: false, Greenery: !style.Arid, Layout: layouts[random.Next(layouts.Length)],
-                                Decorations: TownDecorations.Sparse), cancellationToken: token, wallResources: wallResources);
+                                Decorations: options.Scene == ProvinceScene.VillageCountryside ? TownDecorations.Detailed : TownDecorations.Sparse),
+                                cancellationToken: token, wallResources: wallResources);
                         }
                         catch (InvalidDataException) { }
                     }
@@ -235,7 +239,8 @@ internal static class ProvinceTowns
         if (result.Count < options.TownCount)
             notes.Add($"Placed {result.Count} of {options.TownCount} requested towns; the remaining sites were too small or cut off by water/cliffs.");
         if (reducedSpacing) notes.Add("Water, cliffs or limited space required closer town spacing.");
-        BlendStreets(map, basis, patch, masks, hard, streets, options.Seed, token);
+        BlendStreets(map, basis, patch, masks, hard, streets, options.Seed, token,
+            options.Scene == ProvinceScene.VillageCountryside ? 0 : 1);
         var decorationGround = new ProvinceSceneryGround(terrain);
         for (int i = 0; i < result.Count; i++)
         {
@@ -346,8 +351,22 @@ internal static class ProvinceTowns
         return plan with { Buildings = buildings, Cells = cells.Values.ToList() };
     }
 
+    internal static void BlendPaths(MapDocument map, TerrainCatalogue terrain, ProvinceStyle style,
+        HashSet<(int X, int Y)> paths, int seed, CancellationToken token)
+    {
+        var basis = terrain.Sets.Single(s => s.Id == style.BaseId);
+        var patch = terrain.Sets.Single(s => s.Id == style.PatchId);
+        var masks = new Dictionary<(int, int), int>();
+        foreach (var shape in basis.Shapes) foreach (var tile in shape.Value) masks[(basis.Library, tile.Index + 1)] = 0;
+        foreach (var shape in patch.Shapes) foreach (var tile in shape.Value) masks[(patch.Library, tile.Index + 1)] = shape.Key;
+        var hard = new bool[map.Width * map.Height];
+        foreach (var p in map.Cells)
+            hard[p.Key] = (p.Value.BackImage & 0x60000000) != 0 || p.Value.ForegroundImages.Count > 0 || p.Value.MiddleImage != 0;
+        BlendStreets(map, basis, patch, masks, hard, paths, seed, token, 0);
+    }
+
     private static void BlendStreets(MapDocument map, TerrainSet basis, TerrainSet patch,
-        Dictionary<(int, int), int> masks, bool[] hard, HashSet<(int X, int Y)> streets, int seed, CancellationToken token)
+        Dictionary<(int, int), int> masks, bool[] hard, HashSet<(int X, int Y)> streets, int seed, CancellationToken token, int shoulder)
     {
         int columns = (map.Width + 1) / 2, rows = (map.Height + 1) / 2, stride = columns + 1;
         var cover = new bool[stride * (rows + 1)];
@@ -384,8 +403,10 @@ internal static class ProvinceTowns
             for (int x = Math.Max(0, vx - 1); x <= Math.Min(columns - 1, vx); x++)
             { int tile = y * columns + x; changed.Add(tile); queue.Enqueue(tile); }
         }
+        // Village lanes already have a walkable width in the town plan. Avoid
+        // widening every garden spur into a square that clears the whole yard.
         foreach (var p in streets)
-            for (int dy = -1; dy <= 1; dy++) for (int dx = -1; dx <= 1; dx++) Paint(p.X / 2 + dx, p.Y / 2 + dy);
+            for (int dy = -shoulder; dy <= shoulder; dy++) for (int dx = -shoulder; dx <= shoulder; dx++) Paint(p.X / 2 + dx, p.Y / 2 + dy);
         int Mask(int x, int y)
         {
             int first = y * stride + x;

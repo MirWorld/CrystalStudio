@@ -8,6 +8,12 @@ public partial class MainWindow
         public string? Path = path;
         public string Name = name;
         public bool FitOnFirstDisplay = true;
+        public bool KeepSourceFormat;
+        public MapCreationRecipe? Recipe;
+        public readonly Guid RecoveryId = Guid.NewGuid();
+        public long RecoveryRevision = -1;
+        public int RecoveryVersion;
+        public MapRecoveryEntry? RecoveryOrigin;
         public TextBlock Label = new(); public bool IsStamp; public int StampOriginX, StampOriginY; public CategorizedStamp? Category; public bool CategoryDirty;
     }
 
@@ -68,6 +74,7 @@ public partial class MainWindow
             if (activeMap != null) activeMap.State = Viewport.CaptureEditorState();
             activeMap = map; stampProperties.IsVisible = map.IsStamp ? true : false;
             Viewport.RestoreEditorState(map.State);
+            SyncLayerLocks();
             FitNewMap();
             inspectorCell = null;
             UpdateCellInspector(-1, -1);
@@ -91,6 +98,7 @@ public partial class MainWindow
         if (busy || !mapTabs.Items.Contains(tab)) return false;
         mapTabs.SelectedItem = tab;
         if (!ConfirmDiscard()) return false;
+        ForgetRecovery((OpenMapTab)tab.Tag!);
         switchingMap = true;
         try { activeMap = null; mapTabs.Items.Remove(tab); }
         finally { switchingMap = false; }
