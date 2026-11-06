@@ -5,6 +5,9 @@ public enum EditorTool { Brush, Pencil, Bucket, Eraser, Select, Stamp, Pickup, C
 public sealed partial class MapViewport : SceneControl
 {
     public MapDocument Document { get; private set; } = new(256, 256);
+    // 渲染流程按地图源格式分叉：Crystal 与 Mir2 经典各用各的锚点/帧语义，UI 操作共用。
+    private MapSpriteLayout layout = MapSpriteLayout.Crystal;
+    internal MapSpriteLayout Layout => layout;
     public EditHistory History { get; private set; } = new();
     public AssetStore? Assets { get; set; }
     private TilePatternLayout BrushLayout => AutoTileBrush.Layout(Library, Layer, Assets?.Format ?? AssetSourceFormat.Default);
@@ -137,7 +140,7 @@ public sealed partial class MapViewport : SceneControl
     private static Brush paper => ThemeService.Brush("CanvasPaper");
     private static ScenePen cursor => new(ThemeService.Brush("Accent"),1.5);
     public MapViewport() { InitializeScene(); Focusable = true; ClipToBounds = true; RenderOptions.SetBitmapInterpolationMode(this, Avalonia.Media.Imaging.BitmapInterpolationMode.None); animationTimer.Tick += (_, _) => AdvanceAnimation(); Loaded += (_, _) => { animationTimer.Start(); sceneDirty = true; InvalidateVisual(); }; Unloaded += (_, _) => { PauseOverview(); animationTimer.Stop(); NavigationCancelled?.Invoke(); if (dragging) End(); }; }
-    public void SetDocument(MapDocument d, bool preserveZoom = false) { NavigationCancelled?.Invoke(); if (dragging) End(); ResetOverview(); ResetPresentation(); ResetDetailScene(); ResetPickupHints(); ResetStampDrawing(); CancelPickup(); CancelPaste(); CancelWallDraft(); Document = d; History = new(); Selection = null; brushPreviewKey = null; chunks.Clear(); frontRows.Clear(); origin = new(60, 70); Zoom = preserveZoom ? LimitZoom(Zoom) : 1; WarmOverview(); InvalidateVisual(); Changed?.Invoke(); }
+    public void SetDocument(MapDocument d, bool preserveZoom = false) { NavigationCancelled?.Invoke(); if (dragging) End(); ResetOverview(); ResetPresentation(); ResetDetailScene(); ResetPickupHints(); ResetStampDrawing(); CancelPickup(); CancelPaste(); CancelWallDraft(); Document = d; layout = MapSpriteLayout.For(d); History = new(); Selection = null; brushPreviewKey = null; chunks.Clear(); frontRows.Clear(); origin = new(60, 70); Zoom = preserveZoom ? LimitZoom(Zoom) : 1; WarmOverview(); InvalidateVisual(); Changed?.Invoke(); }
     internal void StopBackgroundWork() { ResetOverview(); animationTimer.Stop(); }
     internal MapEditorState CaptureEditorState()
     {
@@ -256,9 +259,9 @@ public sealed partial class MapViewport : SceneControl
                     else for (int y = cy * 16; y < Math.Min(Document.Height, cy * 16 + 16); y++) for (int x = cx * 16; x < Math.Min(Document.Width, cx * 16 + 16); x++)
                     {
                         var cell = Document.Get(x, y); if (cell.MiddleImage == 0 || cell.MiddleLibrary < 0) continue;
-                        int frames = MapSpriteDrawing.MiddleFrames(cell.MiddleFrames);
+                        int frames = layout.MiddleFrames(cell.MiddleFrames);
                         if (frames > 1) animatedChunks.Add((cx, cy, layer));
-                        AppendSprite(scene, background, x, y, cell.MiddleLibrary, cell.MiddleImage - 1 + (frames > 0 ? animationFrame / (1 + cell.MiddleTick) % frames : 0), true, false, MapSpriteDrawing.MiddleBlend(cell.MiddleFrames));
+                        AppendSprite(scene, background, x, y, cell.MiddleLibrary, cell.MiddleImage - 1 + (frames > 0 ? animationFrame / (1 + cell.MiddleTick) % frames : 0), true, false, layout.MiddleBlend(cell.MiddleFrames));
                     }
                 }
                 else for (int y = y0; y <= y1; y++) for (int cx = x0 / 16; cx <= x1 / 16; cx++)
@@ -277,7 +280,7 @@ public sealed partial class MapViewport : SceneControl
                             int image = MapPreview.FrontImage(cell, front, DoorsOpen);
                             if (image < 0) continue;
                             int frames = front.Frames & 0x7F; if (frames > 1) animatedRows.Add((cx, y));
-                            AppendSprite(scene, background, x, y, front.Library, image + (frames > 0 ? animationFrame / (1 + front.Tick) % frames : 0), true, true, MapSpriteDrawing.FrontBlend(front.Frames));
+                            AppendSprite(scene, background, x, y, front.Library, image + (frames > 0 ? animationFrame / (1 + front.Tick) % frames : 0), true, true, layout.FrontBlend(front.Frames));
                         }
                     }
                 }
@@ -341,7 +344,7 @@ public sealed partial class MapViewport : SceneControl
                 if (cell.Foreground is not { Library: >= 0 } front) continue;
                 int image = MapPreview.FrontImage(cell, front, DoorsOpen);
                 if (image < 0) continue;
-                int frames = front.Frames & 0x7F;
+                int frames = layout.FrontFrames(front.Frames);
                 if (frames > 1) animatedRows.Add(key);
                 DrawSprite(dc, x, y, front.Library, image + (frames > 1 ? animationFrame / (1 + front.Tick) % frames : 0), true, true);
             }
@@ -354,7 +357,7 @@ public sealed partial class MapViewport : SceneControl
             for (int y = cy * 16; y < Math.Min(Document.Height, cy * 16 + 16); y++) for (int x = cx * 16; x < Math.Min(Document.Width, cx * 16 + 16); x++)
             {
                 var c = Document.Get(x, y); if (layer == 0 && x % 2 == 0 && y % 2 == 0) DrawSprite(dc, x, y, c.BackLibrary, (c.BackImage & 0x1FFFFFFF) - 1, false);
-                if (layer == 1 && c.MiddleImage > 0 && c.MiddleLibrary >= 0) { int frames = MapSpriteDrawing.MiddleFrames(c.MiddleFrames); if (frames > 1) animatedChunks.Add(key); DrawSprite(dc, x, y, c.MiddleLibrary, c.MiddleImage - 1 + (frames > 1 ? animationFrame / (1 + c.MiddleTick) % frames : 0), true); }
+                if (layer == 1 && c.MiddleImage > 0 && c.MiddleLibrary >= 0) { int frames = layout.MiddleFrames(c.MiddleFrames); if (frames > 1) animatedChunks.Add(key); DrawSprite(dc, x, y, c.MiddleLibrary, c.MiddleImage - 1 + (frames > 1 ? animationFrame / (1 + c.MiddleTick) % frames : 0), true); }
             }
         }
          chunks[key] = group; return group;
@@ -362,7 +365,7 @@ public sealed partial class MapViewport : SceneControl
     private void AppendSprite(SceneGroup scene, MapSpriteDrawing.BackgroundIndex background, int x, int y, int lib, int index, bool anchored, bool front, bool blend)
     {
         if (index < 0 || Assets?.Get(lib, index) is not Sprite sprite) return;
-        var bounds=MapSpriteDrawing.Bounds(sprite,x,y,lib,index,anchored,front,blend);
+        var bounds=MapSpriteDrawing.Bounds(layout,sprite,x,y,lib,index,anchored,front,blend);
         if(blend&&!bounds.Intersects(detailCoverage))return;
         MapSpriteDrawing.Append(scene,sprite,bounds,blend,detailEffects,background);drawn++;
     }
@@ -370,7 +373,7 @@ public sealed partial class MapViewport : SceneControl
     private void DrawSprite(SceneContext dc, int x, int y, int lib, int index, bool anchored, bool front, bool blend = false)
     {
         if (index < 0) return; var s = Assets?.Get(lib, index); if (s == null) return;
-        var bounds = MapSpriteDrawing.Bounds(s, x, y, lib, index, anchored, front, blend);
+        var bounds = MapSpriteDrawing.Bounds(layout, s, x, y, lib, index, anchored, front, blend);
         dc.DrawImage(blend ? MapSpriteDrawing.Additive(s, bounds, new SceneGroup()) : s.Bitmap, bounds); drawn++;
     }
     public (int X, int Y) CellAt(Point p) => ((int)Math.Floor((p.X - origin.X) / Zoom / 48), (int)Math.Floor((p.Y - origin.Y) / Zoom / 32));

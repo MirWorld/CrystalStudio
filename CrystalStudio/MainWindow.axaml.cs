@@ -505,9 +505,33 @@ public partial class MainWindow : EditorWindow
     {
 
         if (activeMap?.IsStamp == true) return SaveStampEditor(saveAs);
-        string? target = saveAs ? null : mapPath; if (target == null) { var picker = new SaveFileDialog { Filter = "Crystal map (*.map)|*.map", FileName = mapPath == null ? "Untitled.map" : Path.GetFileName(mapPath), InitialDirectory = mapPath == null ? "" : Path.GetDirectoryName(mapPath), DefaultExt = ".map", AddExtension = true, OverwritePrompt = true }; if (picker.ShowDialog(this) != true) return false; target = picker.FileName; }
+        // 已保存过的地图按默认保存格式直接写回；另存或首次保存先选格式再选位置。
+        if (!saveAs && mapPath != null) return WriteMap(mapPath, settings.SaveFormat);
 
-        try { if (mapPath == null) Viewport.Document.SourceFormat = settings.AssetFormat; Viewport.Document.Save(target); mapPath = target; RememberMap(target); Viewport.History.Saved(); UpdateLabels(); UpdateMapTabLabels(); Status.Text = LocalText.Format("Saved {0}",Path.GetFileName(target)); return true; } catch (Exception ex) { StudioLog.Error("Map.Save",ex,$"Path={target}"); MessageBox.Show(this, ex.Message, "Save failed"); return false; }
+        var chooser = new SaveFormatPickerWindow(settings.SaveFormat, mapPath == null ? null : Path.GetFileName(mapPath),
+            format => ChooseTargetAndWrite(format)) { Owner = this };
+        chooser.ShowDialog();
+        return true;
+
+    }
+
+    private void ChooseTargetAndWrite(MapSaveFormat format)
+
+    {
+
+        var picker = new SaveFileDialog { Filter = "Map (*.map)|*.map", FileName = mapPath == null ? "Untitled.map" : Path.GetFileName(mapPath), InitialDirectory = mapPath == null ? "" : Path.GetDirectoryName(mapPath), DefaultExt = ".map", AddExtension = true, OverwritePrompt = true };
+
+        if (picker.ShowDialog(this) != true) return;
+
+        WriteMap(picker.FileName, format);
+
+    }
+
+    private bool WriteMap(string target, MapSaveFormat format)
+
+    {
+
+        try { if (mapPath == null) Viewport.Document.SourceFormat = settings.AssetFormat; SaveDocumentAs(Viewport.Document, target, format); mapPath = target; RememberMap(target); Viewport.History.Saved(); UpdateLabels(); UpdateMapTabLabels(); Status.Text = LocalText.Format("Saved {0} · {1}",Path.GetFileName(target), SaveFormatName(format)); return true; } catch (Exception ex) { StudioLog.Error("Map.Save",ex,$"Path={target}"); MessageBox.Show(this, ex.Message, "Save failed"); return false; }
 
     }
 
@@ -517,13 +541,15 @@ public partial class MainWindow : EditorWindow
 
     {
 
-        var dialog = new SettingsWindow(settings.LibraryFolder, settings.AssetFormat, async (root, format) =>
+        SettingsWindow? dialog = null;
+
+        dialog = new SettingsWindow(settings.LibraryFolder, settings.AssetFormat, async (root, format) =>
 
         {
 
             var next = await Task.Run(() => AssetStore.Load(root, format));
 
-            var updated = settingsStore.Load() with { LibraryFolder = DataPaths.GetClientRoot(root), AssetFormat = format };
+            var updated = settingsStore.Load() with { LibraryFolder = DataPaths.GetClientRoot(root), AssetFormat = format, SaveFormat = dialog?.SelectedSaveFormat ?? settings.SaveFormat };
 
             try { await Task.Run(() => settingsStore.Save(updated)); }
 
@@ -537,7 +563,7 @@ public partial class MainWindow : EditorWindow
             InstallLibraries(next);
             await RefreshMapBrowserAsync(updated.LibraryFolder);
 
-        }, firstSetup)
+        }, firstSetup, settings.SaveFormat)
 
         { Owner = this };
 

@@ -2,12 +2,17 @@ namespace CrystalStudio;
 
 public sealed class SettingsWindow : EditorWindow
 {
+    /// <summary>用户在“默认保存格式”下拉里选中的格式。</summary>
+    public MapSaveFormat SelectedSaveFormat { get; private set; } = MapSaveFormat.Crystal;
+
     public SettingsWindow(string? currentFolder, Func<string, Task> apply, bool firstSetup = false)
         : this(currentFolder, AssetSourceFormat.Default, (folder, _) => apply(folder), firstSetup) { }
 
     public SettingsWindow(string? currentFolder, AssetSourceFormat currentFormat,
-        Func<string, AssetSourceFormat, Task> apply, bool firstSetup = false)
+        Func<string, AssetSourceFormat, Task> apply, bool firstSetup = false,
+        MapSaveFormat currentSave = MapSaveFormat.Crystal)
     {
+        SelectedSaveFormat = currentSave;
         
         this.Title = (firstSetup ? LocalText.T("Welcome to Crystal Studio") : LocalText.T("Crystal Studio Settings"));
         Width = 660; SizeToContent = SizeToContent.Height; CanResize = false;
@@ -34,6 +39,28 @@ public sealed class SettingsWindow : EditorWindow
         var sanxiuFormat = new RadioButton { Name = "SanxiuAssetFormat", GroupName = "AssetSourceFormat",
             Content = LocalText.T("不紧张\\三修格式"), IsChecked = currentFormat == AssetSourceFormat.Sanxiu };
         panel.Children.Add(defaultFormat); panel.Children.Add(sanxiuFormat);
+        panel.Children.Add(new TextBlock { Text = LocalText.T("Default save format"), Margin = new(0, 14, 0, 5) });
+        var saveFormats = new ComboBox
+        {
+            Name = "DefaultSaveFormat",
+            ItemsSource = new[]
+            {
+                "跟随源格式（12 字节存 12 字节）",
+                "Crystal 地图（编辑器原生）",
+                "Mir2 经典地图（12 字节单元）",
+                "Mir2 新式地图（14 字节单元）",
+                "Mir2 增强地图（15 字节单元）",
+            },
+            SelectedIndex = (int)currentSave,
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+        };
+        panel.Children.Add(saveFormats);
+        panel.Children.Add(new TextBlock
+        {
+            Text = LocalText.T("Save writes this format; Save As lets you pick another one for a single file."),
+            TextWrapping = TextWrapping.Wrap,
+            Margin = new(0, 5, 0, 0),
+        });
         var buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right };
         var cancel = new Button { Content = (firstSetup ? LocalText.T("Set Up Later") : LocalText.T("Cancel")), IsCancel = true };
         var save = new Button { Theme = (Style)this.FindResource("PrimaryButton"), Content = (firstSetup ? LocalText.T("Save and Start") : LocalText.T("Save Changes")), IsDefault = true, IsEnabled = !string.IsNullOrWhiteSpace(currentFolder) };
@@ -66,13 +93,13 @@ public sealed class SettingsWindow : EditorWindow
         };
         save.Click += async (_, _) =>
         {
-            error.IsVisible = false; saving = true; save.IsEnabled = false; browse.IsEnabled = false; cancel.IsEnabled = false; languages.IsEnabled = false; defaultFormat.IsEnabled = false; sanxiuFormat.IsEnabled = false; save.Content = LocalText.T("Checking Libraries\u2026");
-            try { await apply(folder.Text, sanxiuFormat.IsChecked == true ? AssetSourceFormat.Sanxiu : AssetSourceFormat.Default); saving = false; DialogResult = true; }
+            error.IsVisible = false; saving = true; save.IsEnabled = false; browse.IsEnabled = false; cancel.IsEnabled = false; languages.IsEnabled = false; defaultFormat.IsEnabled = false; sanxiuFormat.IsEnabled = false; saveFormats.IsEnabled = false; save.Content = LocalText.T("Checking Libraries\u2026");
+            try { SelectedSaveFormat = (MapSaveFormat)Math.Clamp(saveFormats.SelectedIndex, 0, 3); await apply(folder.Text, sanxiuFormat.IsChecked == true ? AssetSourceFormat.Sanxiu : AssetSourceFormat.Default); saving = false; DialogResult = true; }
             catch (Exception ex)
             {
                 StudioLog.Error("Settings.Save",ex,$"Root={folder.Text}");
                 error.Text = (ex.Message); error.IsVisible = true;
-                saving = false; save.IsEnabled = true; browse.IsEnabled = true; cancel.IsEnabled = true; languages.IsEnabled = true; defaultFormat.IsEnabled = true; sanxiuFormat.IsEnabled = true; save.Content = (firstSetup ? LocalText.T("Save and Start") : LocalText.T("Save Changes"));
+                saving = false; save.IsEnabled = true; browse.IsEnabled = true; cancel.IsEnabled = true; languages.IsEnabled = true; defaultFormat.IsEnabled = true; sanxiuFormat.IsEnabled = true; saveFormats.IsEnabled = true; save.Content = (firstSetup ? LocalText.T("Save and Start") : LocalText.T("Save Changes"));
             }
         };
     }

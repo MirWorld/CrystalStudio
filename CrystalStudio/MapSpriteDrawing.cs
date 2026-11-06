@@ -11,26 +11,15 @@ internal static class MapSpriteDrawing
         bool anchored, bool front = false, bool blend = false)
         => Bounds(new SpriteHeader(sprite.Width, sprite.Height, sprite.X, sprite.Y), x, y, library, image, anchored, front, blend);
 
+    // 默认走 Crystal 流程；Mir2 经典地图由 MapSpriteLayout.Mir2Classic 单独处理，
+    // 不经过这里的库号/图片号特判与整块瓦片判定。
     internal static Rect Bounds(SpriteHeader sprite, int x, int y, int library, int image,
         bool anchored, bool front = false, bool blend = false)
-    {
-        double px = x * 48.0, py = y * 32.0;
-        bool tile = (sprite.Width == 48 && sprite.Height == 32) || (sprite.Width == 96 && sprite.Height == 64);
-        if (front && blend)
-        {
-            if (library is 14 or 27 || library is > 99 and < 199)
-            { px += sprite.X; py += 32 - 96 + sprite.Y; }
-            else
-            {
-                py += 32 - sprite.Height;
-                if (image is >= 2723 and <= 2732) { px += sprite.X; py += sprite.Y; }
-            }
-        }
-        else if (front && library == 28 && (sprite.X != 0 || sprite.Y != 0))
-        { px += sprite.X; py += sprite.Y; }
-        else if (anchored && (!tile || blend)) py += 32 - sprite.Height;
-        return new(px, py, sprite.Width, sprite.Height);
-    }
+        => MapSpriteLayout.Crystal.Bounds(sprite, x, y, library, image, anchored, front, blend);
+
+    internal static Rect Bounds(MapSpriteLayout layout, Sprite sprite, int x, int y, int library, int image,
+        bool anchored, bool front = false, bool blend = false)
+        => layout.Bounds(new SpriteHeader(sprite.Width, sprite.Height, sprite.X, sprite.Y), x, y, library, image, anchored, front, blend);
 
     // Keep the original additive compositing contract. Capture only the effect's rectangle
     // from the preceding scene and add premultiplied RGB, just like SourceAlpha/One.

@@ -17,14 +17,14 @@ public sealed partial class MapViewport
         var key=(cx,cy);if(middleBlendChunks.TryGetValue(key,out bool blend))return blend;
         for(int y=cy*16;y<Math.Min(Document.Height,cy*16+16)&&!blend;y++)
             for(int x=cx*16;x<Math.Min(Document.Width,cx*16+16);x++)
-                if(Document.Get(x,y) is { MiddleImage: > 0, MiddleLibrary: >= 0 } cell && MapSpriteDrawing.MiddleBlend(cell.MiddleFrames)){blend=true;break;}
+                if(Document.Get(x,y) is { MiddleImage: > 0, MiddleLibrary: >= 0 } cell && layout.MiddleBlend(cell.MiddleFrames)){blend=true;break;}
         return middleBlendChunks[key]=blend;
     }
     private bool HasFrontBlend(int cx,int y)
     {
         var key=(cx,y);if(frontBlendRows.TryGetValue(key,out bool blend))return blend;
         for(int x=cx*16;x<Math.Min(Document.Width,cx*16+16)&&!blend;x++)
-            if(Document.Get(x,y).Foreground is { Library: >= 0 } front && (front.Image&0x7FFF)!=0 && MapSpriteDrawing.FrontBlend(front.Frames)){blend=true;break;}
+            if(Document.Get(x,y).Foreground is { Library: >= 0 } front && (front.Image&0x7FFF)!=0 && layout.FrontBlend(front.Frames)){blend=true;break;}
         return frontBlendRows[key]=blend;
     }
     private void AdvanceAnimation()

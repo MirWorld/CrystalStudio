@@ -35,6 +35,8 @@ public sealed partial class MapDocument(int width, int height)
     public int Width { get; } = width;
     public int Height { get; } = height;
     public AssetSourceFormat SourceFormat { get; internal set; }
+    /// <summary>读取时识别到的 Mir2 经典布局；为 null 表示这是编辑器原生或未知格式，保存时沿用 Crystal。</summary>
+    public CrystalStudio.Formats.Mir2MapKind? SourceMir2Kind { get; internal set; }
     private readonly Dictionary<int, Cell> cells = [];
     private readonly Dictionary<int, Cell> presentationCells = [];
     private static readonly Cell empty = new();
@@ -58,6 +60,8 @@ public sealed partial class MapDocument(int width, int height)
         var legacy = new MapReader(path);
         if (legacy.Width <= 0 || legacy.Height <= 0 || (long)legacy.Width * legacy.Height > 16_000_000) throw new InvalidDataException("Invalid map dimensions.");
         var d = new MapDocument(legacy.Width, legacy.Height) { SourceFormat = format };
+        // 记住读取时的经典布局，这样“跟随源格式”保存能把 12 字节地图原样写回 12 字节。
+        d.SourceMir2Kind = Mir2ClassicMap.Detect(path)?.Kind;
         bool sanxiuIds = format == AssetSourceFormat.Sanxiu && legacy.IsCrystalVersion1;
         for (int x = 0; x < d.Width; x++) for (int y = 0; y < d.Height; y++)
         {

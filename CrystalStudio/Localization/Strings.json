@@ -23,6 +23,14 @@
     "English": "Asset format",
     "Chinese": "素材格式"
   },
+  "DefaultSaveFormat_20261106": {
+    "English": "Default save format",
+    "Chinese": "默认保存格式"
+  },
+  "DefaultSaveFormatHint_20261106": {
+    "English": "Save writes this format; Save As lets you pick another one for a single file.",
+    "Chinese": "保存时写入该格式；另存为可以单独选择别的格式。"
+  },
   "DefaultCrystalLibraries_Sanxiu_20261105": {
     "English": "Default (Crystal libraries)",
     "Chinese": "默认（现有素材读取规则）"
