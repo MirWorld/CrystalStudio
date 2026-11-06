@@ -128,6 +128,7 @@ public partial class MainWindow : EditorWindow
 
         Viewport.Hover += UpdateCellInspector;
         Viewport.Changed += () => UpdateCellInspector(Viewport.HoverCell.X, Viewport.HoverCell.Y);
+        InitializeCellHover();
         Viewport.AssetPicked += SelectPickedTile;
 
         Viewport.Changed += UpdateLabels; Viewport.Message += message => Status.Text = (message); Viewport.Rendered += (ms, count) => { Performance.Text = LocalText.Format("Prepare {0:F1} ms · Batches {1:N0} · Sprite cache {2:N0}",ms,count,(assets?.Cached ?? 0) + (assets?.OverviewCached ?? 0)); ToolTip.SetTip(LibraryStatus, (Performance.Text)); };
@@ -229,6 +230,7 @@ public partial class MainWindow : EditorWindow
         }
         groups.Add(("Metadata", LocalText.Format("Light {0} \u00b7 Door {1} \u00b7 Offset {2}", c.Light, c.Door, c.DoorOffset), "Light Value, Door Index and Door Offset"));
         groups.Add(("Tile Animation", LocalText.Format("Image {0} \u00b7 Offset {1} \u00b7 Frames {2}", c.TileAnimation, c.TileOffset, c.TileFrames), "Tile Animationation image, offset and frame count"));
+        UpdateCellHoverContent(x, y, c, groups);
         Inspector.Text = LocalText.Format("Cell {0:N0}, {1:N0} · {2} {3}",x,y,c.ForegroundImages.Count,LocalText.T(c.ForegroundImages.Count == 1 ? "object" : "objects"));
         string key = string.Join("\n", groups);
         if (Equals(InspectorDetails.Tag, key)) return;

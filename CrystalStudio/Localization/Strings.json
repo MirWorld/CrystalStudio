@@ -1,4 +1,7 @@
 {
+  "CellHoverInfo": {"English": "Tile information on hover", "Chinese": "地砖信息悬浮"},
+  "CellWalkable": {"English": "Walkable", "Chinese": "可行走"},
+  "CellNotWalkable": {"English": "Not walkable", "Chinese": "不可行走"},
   "RecoverMaps": {"English": "Recover Maps", "Chinese": "恢复地图"},
   "CheckMap": {"English": "Check Map", "Chinese": "检查地图"},
   "DimensionsTotalLimit": {"English": "Use dimensions from 16 to 4096, with at most 16,000,000 cells.", "Chinese": "宽高须为 16～4096，且总格数不能超过 1600 万。"},
