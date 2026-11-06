@@ -5,7 +5,11 @@
 The Crystal map editor based on Avalonia 11 and .net 10 retains the original compact interface, map editing, object classification, panel docking, and generator.
 
 > 原作者: https://github.com/Lilcooldoode
+
 > author: https://github.com/Lilcooldoode
+
+> rust版本: https://github.com/lxf505226/CrystalStudio-Rust
+
 
 ## Build from Source
 
@@ -21,7 +25,7 @@ dotnet run --project CrystalStudio/CrystalStudio.csproj -c Release
 
 发布脚本默认先执行自动验证，然后生成包含 .NET 运行时的 Windows x64 版本，目录为项目根目录的 `Build/Release`。`catalogue` 和 `Objects` 会一并复制。可通过 `-OutputDirectory` 指定其他目录。
 
-Windows x64 NativeAOT 使用与 `Server.Avalonia/AotBuild.win-x64.bat` 相同的 Release 发布方式。可以双击本目录的 `AotBuild.win-x64.bat`，或者执行：
+Windows x64 NativeAOT 使用 Release 发布方式。可以双击本目录的 `AotBuild.win-x64.bat`，或者执行：
 
 ```powershell
 .\AotBuild.win-x64.bat
@@ -31,9 +35,9 @@ Windows x64 NativeAOT 使用与 `Server.Avalonia/AotBuild.win-x64.bat` 相同的
 .\AotBuild.win-x64.bat -OutputDirectory 'E:\Build\CrystalStudio AOT' -SkipTests
 ```
 
-AOT 默认输出为 `../Build/CrystalStudioAvalonia/aot/win-x64/CrystalStudio.exe`，并保留旁边的 `catalogue`、`Objects` 和其他发布文件。脚本不依赖启动时的工作目录，默认先执行测试，测试或发布失败时返回非零退出码。普通发布继续使用 ReadyToRun；只有 `-Aot` 或独立批处理入口启用 NativeAOT。
+AOT 默认输出为 `../Build/CrystalStudioAvalonia/aot/win-x64/CrystalStudio.exe`，并保留旁边的 `catalogue`、`Objects` 和其他发布文件。脚本不依赖启动时的工作目录，默认先执行测试，测试或发布失败时返回非零退出码。完整发布日志保存在项目的 `Build/logs/publish-日期时间.log`；批处理失败时会等待按回车，输入被重定向的自动构建不会等待。普通发布继续使用 ReadyToRun；只有 `-Aot` 或独立批处理入口启用 NativeAOT。
 
-编译环境需要 .NET 10 SDK、Visual Studio 2022 Build Tools 的“使用 C++ 的桌面开发”及 Windows SDK，并保留仓库的 `HuaXiaServer/NativeStaticLibrary/x64`。AOT 配置复用服务端的 Skia、HarfBuzz 和 GLES 静态库，不引入未使用的 SQLite。设置、语言、笔刷、分类和地图附加元数据使用 JSON 源生成，现有 JSON 字段及树木指纹保持兼容；Avalonia 的现有反射绑定通过裁剪描述文件保留。
+编译环境需要 .NET 10 SDK、Visual Studio Build Tools 的“使用 C++ 的桌面开发”及 Windows SDK。Skia、HarfBuzz 和 GLES 原生 DLL 由 NuGet 包提供并随发布输出，无需旧服务端的 `NativeStaticLibrary` 目录。分发时须保留整个发布目录，包括这些 DLL；编辑器本身仍为 NativeAOT，无需安装 .NET 运行时。设置、语言、笔刷、分类和地图附加元数据使用 JSON 源生成，现有 JSON 字段及树木指纹保持兼容；Avalonia 的现有反射绑定通过裁剪描述文件保留。
 
 界面沿用原版 32×32 工具按钮、16–18 图标、26 高度的图层行以及紧凑页签。地图和交互覆盖层独立保存绘制结果，因此鼠标悬停不会重新提交地图；缩略视图按图集批量绘制，并保留原有层次、透明叠加、动画和灯光逻辑。
 
@@ -333,7 +337,23 @@ catalogue/extractions/<会话编号>-<报告编号>.json
 
 高级设置可覆盖请求路径、鉴权方式、超时时间、附加 JSON、响应字段路径及生图尺寸格式。自定义服务的 JSON 为完整请求体，其他服务将其合并至默认请求体。支持 `{{model}}`、`{{prompt}}`、`{{system}}`、`{{image}}`、`{{images}}`、`{{width}}`、`{{height}}`、`{{size}}`、`{{n}}` 变量；例如响应路径可写为 `choices[0].message.content` 或 `data[0].b64_json`。模型应填写服务商实际提供的模型名或接入点编号。测试按钮调用当前页填写的配置，生图测试会实际生成一张图片并展示结果。
 
-提取扫描完成后，可多选候选并点击 **AI 识图矫正所选名称 / 分类**，也可 **AI 矫正全部未审核**。工具将独立物体图和地图上下文发送给“视觉识图 AI”，生成名称、目录中已有的分类及识别依据；不调整物体碎片和碰撞。批次全部成功后一次性应用，可撤销 / 重做；取消、超时或失败不会改变候选结果。AI 结果保留未审核状态，人工确认后仍通过“保存已确认项至调色板”导出。
+提取扫描完成后，可多选候选并点击 **AI 识别并筛选所选**，也可 **AI 识别并筛选全部未审核**。工具将独立物体图和地图上下文发送给“视觉识图 AI”，先判断完整性，再生成名称、目录中已有的分类及可见依据。明确不完整的物件从当前候选中剔除；完整和无法确定的物件保留为未审核，审核后通过“保存已确认项至调色板”导出。状态栏显示检查、剔除和不确定项数量。
+
+批次全部成功后一次性应用名称更新与剔除，撤销 / 重做作用于整个批次。取消、超时、请求失败或返回缺少完整性判定时，候选结果保持原样。此操作仅更改提取窗口的候选列表，保留物体的原始图片、碎片、碰撞和来源数据。识别判定及剔除数量写入日志；日志不包含请求密钥。
+
+### 识图提示词与完整性判定
+
+原提示词只要求“根据图片矫正名称与类别”，返回 `name`、`category`、`reason`。因此，即使依据已经说明“屋顶结构属于建筑的一部分”，程序也只更新名称和分类。当前提示词版本为 `object-completeness-v1`，实现位于 `CrystalStudio/ObjectExtraction.Ai.cs`；返回 JSON 必须增加 `completeness`：
+
+| 判定 | 可见证据与处理 |
+| :--- | :--- |
+| `complete` | 游戏视角下轮廓和结构完整，可独立使用，保留待审核 |
+| `incomplete` | 仅为母物体的屋面窄条、檐角、半片屋顶、侧边等残片，剔除 |
+| `uncertain` | 像素、遮挡或边界不足以形成可靠结论，保留并标明完整性不确定 |
+
+第一张图只表示实际提取的候选；第二张图辅助判断归属，周围母建筑的像素不能算作候选已有内容。旧名称、分类及模板匹配也不作为完整性证据。提示词明确区分完整物件和表面残片，因此完整房屋、帐篷、瞭望塔以及细长的旗杆、柱子和结构完整的可复用墙段，不能仅因尺寸、比例或可拼接就被判为残缺。`reason` 必须说明可见依据；不完整项应说明缺失主体或截断结构。
+
+识别仍需模型判断，因此无法保证所有素材都准确。无法确定的结果继续保留给人工审核；明确剔除的结果也可以通过撤销恢复。
 
 ## 村镇与郊野场景
 

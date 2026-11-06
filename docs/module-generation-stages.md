@@ -525,3 +525,19 @@ dotnet test CrystalStudio.Tests/CrystalStudio.Tests.csproj -c Release --no-resto
 dotnet build CrystalStudio/CrystalStudio.csproj -c Release --no-restore --nologo -v:q
 git diff --check
 ```
+
+
+## 阶段 21：同步上游与 PR 提交验收（2026-11-06）
+
+## 修改内容
+
+- 将已验收的模块制作、通道拆分及独立新地图生成改动整理为提交。
+- 同步 `fluttergo/CrystalStudio` 的 `master`（`5427356`），合并菜单与本地化冲突，同时保留上游地砖悬浮信息、AI 提取及发布脚本更新。
+- PR 目标为上游 `master`，来源为 fork 的 `codex/automatic-module-generation`；原 stash 保留。
+
+## 验证结果
+
+- 合并后的定向验收 **180／180** 通过：原 178 项模块测试及与菜单合并直接相关的 2 项地砖悬浮测试，包含真实 `632.map` 入库生成验收；未执行无关全量测试。
+- Release 项目编译通过，0 个错误；现有 NU1903 依赖警告保留。
+- JSON 无重复键，模块菜单和上游悬浮菜单均各保留一份；`git diff --check` 通过。
+- 原 stash `de0cee03d21f4e67e70340bc461e69556f2ab72e` 保留。

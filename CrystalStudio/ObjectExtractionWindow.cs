@@ -72,11 +72,11 @@ internal sealed class ObjectExtractionWindow : EditorWindow
         var merge=Button("Merge selected",()=>Command(()=>Review!.Merge(SelectedIds())));
         var exclude=Button("Exclude selected",()=>Command(()=>Review!.Exclude(SelectedIds())));
         var reviewActions=new WrapPanel{Margin=new(0,4)};foreach(var b in new[]{review,unreview,merge,exclude}){reviewActions.Children.Add(b);mutationControls.Add(b);}
-        aiSelected=Button("AI correct selected names / categories",()=>_ = RecognizeAsync());aiSelected.Name="ExtractionAiSelected";
-        aiUnreviewed=Button("AI correct all unreviewed",()=>_ = RecognizeAsync(true));aiUnreviewed.Name="ExtractionAiUnreviewed";
+        aiSelected=Button("AI identify / filter selected",()=>_ = RecognizeAsync());aiSelected.Name="ExtractionAiSelected";
+        aiUnreviewed=Button("AI identify / filter all unreviewed",()=>_ = RecognizeAsync(true));aiUnreviewed.Name="ExtractionAiUnreviewed";
         reviewActions.Children.Add(aiSelected);reviewActions.Children.Add(aiUnreviewed);
-        ToolTip.SetTip(aiSelected,LocalText.T("Uses Vision AI from Settings. Results remain unreviewed and can be undone."));
-        ToolTip.SetTip(aiUnreviewed,LocalText.T("Uses Vision AI from Settings. Results remain unreviewed and can be undone."));
+        ToolTip.SetTip(aiSelected,LocalText.T("Uses Vision AI from Settings. Incomplete objects are excluded; uncertain results remain for review. Undo restores the whole batch."));
+        ToolTip.SetTip(aiUnreviewed,LocalText.T("Uses Vision AI from Settings. Incomplete objects are excluded; uncertain results remain for review. Undo restores the whole batch."));
         // Review commands stay above the grid; the bottom row retains scan/save progress.
         filters.Children.Add(undo);filters.Children.Add(redo);
         var left=new Grid{RowDefinitions=new("*,Auto")};body.Children.Remove(cards);left.Children.Add(cards);Grid.SetRow(reviewActions,1);left.Children.Add(reviewActions);Grid.SetColumn(left,1);body.Children.Add(left);
@@ -133,16 +133,22 @@ internal sealed class ObjectExtractionWindow : EditorWindow
             running=true;operation.Dispose();operation=new();UpdateState();details.IsEnabled=false;
             progress.IsIndeterminate=false;progress.Value=0;
             var results=new Dictionary<Guid,AiObjectRecognition>();
+            StudioLog.Info("Extraction.AI",$"Starting; Prompt={ExtractionAi.PromptVersion}; Targets={targets.Length}");
             foreach(var candidate in targets)
             {
                 operation.Token.ThrowIfCancellationRequested();
                 status.Text=LocalText.Format("AI recognizing {0} / {1}: {2}",results.Count+1,targets.Length,candidate.Name);
-                results.Add(candidate.Id,await ExtractionAi.RecognizeAsync(aiClient,endpoint,candidate,assets,allowed,operation.Token));
+                var result=await ExtractionAi.RecognizeAsync(aiClient,endpoint,candidate,assets,allowed,operation.Token);
+                results.Add(candidate.Id,result);
+                StudioLog.Info("Extraction.AI",$"Result; Candidate={candidate.Id}; Name={result.Name}; Completeness={result.Completeness}; Category={result.Category}; Reason={result.Reason}");
                 progress.Value=100.0*results.Count/targets.Length;
             }
             operation.Token.ThrowIfCancellationRequested();if(closed)return;
             Review.ApplyAi(results);RefreshCategories(selected);
-            status.Text=LocalText.Format("AI corrected {0} names / categories. Review the results before saving; Undo restores the previous values.",results.Count);
+            int excluded=results.Values.Count(r=>r.Completeness==AiObjectCompleteness.Incomplete);
+            int uncertain=results.Values.Count(r=>r.Completeness==AiObjectCompleteness.Uncertain);
+            StudioLog.Info("Extraction.AI",$"Applied; Candidates={results.Count}; Excluded={excluded}; Uncertain={uncertain}");
+            status.Text=LocalText.Format("AI checked {0} objects: {1} incomplete excluded, {2} uncertain kept. Review remaining objects before saving; Undo restores the whole batch.",results.Count,excluded,uncertain);
         }
         catch(OperationCanceledException){status.Text=LocalText.T("AI recognition cancelled. Candidates unchanged.");}
         catch(Exception ex){StudioLog.Error("Extraction.AI",ex);status.Text=LocalText.Format("AI recognition failed. Candidates unchanged. {0}",LocalText.T(ex.Message));}
