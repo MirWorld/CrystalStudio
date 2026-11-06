@@ -618,7 +618,7 @@ public partial class MainWindow : EditorWindow
 
     }
 
-    private async void StampClick(object s, RoutedEventArgs e) { var picker = new OpenFileDialog { Filter = "Crystal object (*.X)|*.X" }; if (picker.ShowDialog(this) != true) return; await Run(async () => { Viewport.Stamp = await Task.Run(() => CellCodec.LoadStamp(picker.FileName)); selectedStampPath = picker.FileName; selectedStampName = Path.GetFileNameWithoutExtension(picker.FileName); Viewport.StampName = selectedStampName; selectedStampPreview = assets == null ? null : StampPreview.Create(Viewport.Stamp, assets); SetTool(EditorTool.Stamp); RememberActiveAsset(); Viewport.InvalidateVisual(); Status.Text = LocalText.Format("Stamp: {0} • {1} cells",Path.GetFileName(picker.FileName),Viewport.Stamp.Count); }); }
+    private async void StampClick(object s, RoutedEventArgs e) { var picker = new OpenFileDialog { Filter = "Crystal object (*.X)|*.X" }; if (picker.ShowDialog(this) != true) return; await Run(async () => { Viewport.Stamp = await Task.Run(() => CellCodec.LoadStamp(picker.FileName, settings.AssetFormat)); selectedStampPath = picker.FileName; selectedStampName = Path.GetFileNameWithoutExtension(picker.FileName); Viewport.StampName = selectedStampName; selectedStampPreview = assets == null ? null : StampPreview.Create(Viewport.Stamp, assets); SetTool(EditorTool.Stamp); RememberActiveAsset(); Viewport.InvalidateVisual(); Status.Text = LocalText.Format("Stamp: {0} • {1} cells",Path.GetFileName(picker.FileName),Viewport.Stamp.Count); }); }
 
     private void ExportClick(object s, RoutedEventArgs e)
 

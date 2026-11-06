@@ -9,7 +9,7 @@ public partial class MainWindow
         await Run(async () =>
         {
             var loadedWalls = wallFamilies.Count > 0 ? new WallCatalogue(1, wallFamilies.ToList()) : null;
-            var definitions = await Task.Run(() => (Walls: loadedWalls ?? WallCatalogue.Read(WallCatalogue.ResolvePath()), Terrain: TerrainCatalogue.Load()));
+            var definitions = await Task.Run(() => (Walls: loadedWalls ?? WallCatalogue.Read(WallCatalogue.ResolvePath(), assets.Format), Terrain: TerrainCatalogue.Load(format: assets.Format)));
             if (closed) return;
             var dialog = new TempleGeneratorWindow(Viewport.Document, assets, definitions.Walls, definitions.Terrain, creationStore.Parameters(MapCreationKind.Dungeon)) { Owner = this };
             if (dialog.ShowDialog() != true || dialog.Plan == null) return;

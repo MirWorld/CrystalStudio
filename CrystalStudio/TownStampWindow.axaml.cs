@@ -20,7 +20,7 @@ public partial class TownStampWindow : EditorWindow
     public TownPlan? Plan { get; private set; }
     public TownStampWindow(AssetStore assets, TownCatalogue catalogue, TownPlan? previous = null)
     {
-        this.assets = assets; this.catalogue = catalogue; terrain = TerrainCatalogue.Load();
+        this.assets = assets; this.catalogue = catalogue; terrain = TerrainCatalogue.Load(format: assets.Format);
         InitializeComponent();
         TypeList.ItemsSource = catalogue.Families;
         TypeList.SelectedItem = catalogue.Families.FirstOrDefault(f => f.Id == previous?.Family.Id) ?? catalogue.Families[0];

@@ -33,7 +33,7 @@ public sealed class RiverCoastLayoutCatalogue
         Require(Number(proof,"remainingExposedGroundSamples")==0&&Number(proof,"disconnectedWalkableCells")==0,
             "Saved coast still has an exposed seam or disconnected walkable land.");
         Require(Hash(path)==Text(proof,"sha256"),"Complete saved coast object checksum changed.");
-        var cells=CellCodec.LoadStamp(path);int width=Number(proof,"width"),height=Number(proof,"height");
+        var cells=CellCodec.LoadStamp(path, artwork.Format);int width=Number(proof,"width"),height=Number(proof,"height");
         Require(width is >0 and <=1024&&height is >0 and <=1024&&cells.Count is >0 and <=30000
             &&cells.Select(c=>(c.X,c.Y)).Distinct().Count()==cells.Count,"Invalid complete coast dimensions or cells.");
         string edge=proof.TryGetProperty("entryEdge",out var entry)?entry.GetString()??"":"";
@@ -184,7 +184,7 @@ public sealed class RiverCoastLayoutCatalogue
         Require(Number(root,"schemaVersion")==1&&(status=="reviewed"||allowResearch&&status.StartsWith("research",StringComparison.Ordinal)),"Unreviewed coast layouts.");
         var proofs=artwork.Catalogue.Sprites.ToDictionary(p=>(p.Library,p.Image));
         foreach(var proof in root.GetProperty("sprites").EnumerateArray())
-            Require(proofs.TryGetValue((Number(proof,"library"),Number(proof,"image")),out var native)
+            Require(proofs.TryGetValue((AssetLibraryIds.Resolve(Number(proof,"library"),MapLayer.Objects,artwork.Format),Number(proof,"image")),out var native)
                 &&native.Width==Number(proof,"width")&&native.Height==Number(proof,"height")&&native.PixelSha256==Text(proof,"pixelSha256"),"Coast sprite proof differs from the original artwork.");
         var originals=artwork.Catalogue.Pieces.ToDictionary(p=>p.Id);var layouts=new List<RiverCoastLayout>();
         string directory=Path.GetDirectoryName(Path.GetFullPath(path))!;
@@ -196,7 +196,7 @@ public sealed class RiverCoastLayoutCatalogue
             Require(file==Path.GetFileName(file)&&Path.GetExtension(file).Equals(".x",StringComparison.OrdinalIgnoreCase),"Invalid coast object path.");
             string objectPath=Path.Combine(directory,file);
             Require(new FileInfo(objectPath).Length<=1024*1024&&Hash(objectPath)==Text(layout,"sha256"),"Saved coast object checksum changed.");
-            var cells=CellCodec.LoadStamp(objectPath);
+            var cells=CellCodec.LoadStamp(objectPath, artwork.Format);
             Require(cells.Count is >0 and <=1000&&cells.Count==Number(layout,"cellCount")&&cells.Select(c=>(c.X,c.Y)).Distinct().Count()==cells.Count,"Invalid coast object cells.");
             var bankPlacements=layout.GetProperty("bankPlacements").EnumerateArray().ToArray();
             Require(bankPlacements.Length==2,"Coast join needs two original bank sections.");

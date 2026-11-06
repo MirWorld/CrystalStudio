@@ -29,7 +29,7 @@ internal static class DungeonThemeDetails
     private static void PaintInlay(MapDocument map, IReadOnlyList<(int X, int Y)> centres,
         AssetStore? assets, CancellationToken token)
     {
-        var terrain = TerrainCatalogue.Load();
+        var terrain = TerrainCatalogue.Load(format: assets?.Format ?? AssetSourceFormat.Default);
         var tile = terrain.Sets.Single(s => s.Id == "0:0:2550");
         if (assets != null && !terrain.MatchesAssets(tile, assets)) throw new InvalidDataException("Celestial inlay artwork is unavailable.");
         foreach (var centre in centres)

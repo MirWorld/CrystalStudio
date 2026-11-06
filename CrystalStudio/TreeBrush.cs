@@ -12,7 +12,7 @@ public sealed record BrushTree(string Name, string Path, IReadOnlyList<StampCell
 {
     internal string? ProvinceGroundSetId { get; init; }
     public static BrushTree Load(string name, string path, AssetStore assets)
-        => FromCells(name, path, CellCodec.LoadStamp(path), assets);
+        => FromCells(name, path, CellCodec.LoadStamp(path, assets.Format), assets);
 
     public static BrushTree FromCells(string name, string path, IEnumerable<StampCell> source, AssetStore? assets = null)
     {
@@ -22,7 +22,8 @@ public sealed record BrushTree(string Name, string Path, IReadOnlyList<StampCell
             throw new InvalidDataException($"{name}: invalid object cells.");
         var cells = raw.Select(s => new StampCell(s.X, s.Y,
             new Cell { BackImage = s.Cell.BackImage & 0x60000000,
-                Foreground = s.Cell.Foreground is { } front && (front.Image & 0x7FFF) > 0 ? front : null }))
+                Foreground = s.Cell.Foreground is { } front && (front.Image & 0x7FFF) > 0
+                    ? front with { Library = checked((short)AssetLibraryIds.Resolve(front.Library, MapLayer.Objects, assets?.Format ?? AssetSourceFormat.Default)) } : null }))
             .Where(s => !s.Cell.Empty).ToList();
         if (cells.Count == 0 || cells.Count > 10_000 || !cells.Any(s => s.Cell.ForegroundImages.Count > 0))
             throw new InvalidDataException($"{name}: choose an object stamp containing foreground sprites (up to 10,000 cells).");

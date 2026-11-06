@@ -40,7 +40,7 @@ public partial class ProvinceGeneratorWindow : EditorWindow
     {
         try
         {
-            (terrain, walls, scenery) = await Task.Run(() => (TerrainCatalogue.Load(), suppliedWalls ?? WallCatalogue.Read(WallCatalogue.ResolvePath()),
+            (terrain, walls, scenery) = await Task.Run(() => (TerrainCatalogue.Load(format: assets.Format), suppliedWalls ?? WallCatalogue.Read(WallCatalogue.ResolvePath(), assets.Format),
                 ProvinceGenerator.LoadScenery(assets, lifetime.Token)), lifetime.Token);
             water = await TerrainWaterResources.Load(assets, lifetime.Token);
             if (closed) return;

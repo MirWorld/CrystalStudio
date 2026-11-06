@@ -17,7 +17,7 @@ public sealed class ProvinceTownResources
     internal TownFamily Family(ProvinceStyle style, AssetStore? assets, CancellationToken token)
     {
         string id = style.Arid ? "mongchon" : "bichon";
-        catalogue ??= TownCatalogue.Load();
+        catalogue ??= TownCatalogue.Load(format: assets?.Format ?? AssetSourceFormat.Default);
         var family = catalogue.Families.Single(f => f.Id == id);
         if (assets == null) return family;
         if (!prepared.TryGetValue(id, out var result))

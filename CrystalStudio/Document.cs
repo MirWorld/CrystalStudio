@@ -108,13 +108,7 @@ public record StampCell(int X, int Y, Cell Cell);
 public static class CellCodec
 {
     internal static void NormalizeLibraryIds(Cell cell, AssetSourceFormat format)
-    {
-        if (format != AssetSourceFormat.Sanxiu) return;
-        if (cell.MiddleLibrary is >= 0 and < 1000 && cell.MiddleImage != 0)
-            cell.MiddleLibrary = checked((short)(cell.MiddleLibrary + 1000));
-        if (cell.Foreground is { Library: >= 0 and < 2000 } front && (front.Image & 0x7FFF) != 0)
-            cell.Foreground = front with { Library = checked((short)(front.Library + 2000)) };
-    }
+        => AssetLibraryIds.NormalizeMap(cell, format);
 
     public static void Write(BinaryWriter w, Cell c, bool map)
     {
@@ -159,7 +153,7 @@ public static class CellCodec
             if (fronts == 1) c.Foreground = new(r.ReadInt16(), r.ReadInt16(), version >= 2 ? r.ReadByte() : (byte)0, version >= 2 ? r.ReadByte() : (byte)0);
             c.Door = r.ReadByte(); c.DoorOffset = r.ReadByte(); if (version < 2) { byte frames = r.ReadByte(), tick = r.ReadByte(); if (c.Foreground is { } front) c.Foreground = front with { Frames = frames, Tick = tick }; }
             c.MiddleFrames = r.ReadByte(); c.MiddleTick = r.ReadByte(); c.TileAnimation = r.ReadInt16(); c.TileOffset = r.ReadInt16(); c.TileFrames = r.ReadByte(); c.Light = r.ReadByte();
-            NormalizeLibraryIds(c, format);
+            AssetLibraryIds.NormalizeStamp(c, format);
             result.Add(new(x, y, c));
         }
         return result;

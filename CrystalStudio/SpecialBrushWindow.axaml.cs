@@ -311,7 +311,7 @@ public partial class SpecialBrushWindow : EditorWindow
     }
 
     private static BrushTree LoadTree(TreeBrushSource source, AssetStore? store = null) =>
-        BrushTree.FromCells(source.Name, source.Path, source.Cells ?? CellCodec.LoadStamp(source.Path), store);
+        BrushTree.FromCells(source.Name, source.Path, source.Cells ?? CellCodec.LoadStamp(source.Path, store?.Format ?? AssetSourceFormat.Default), store);
 
     private void SetWorking(bool working, string? label = null)
     {

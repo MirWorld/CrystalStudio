@@ -18,7 +18,7 @@ internal static class ProvinceObjectResources
             try
             {
                 string path = DataPaths.ResolveEditor("Objects", "mir", $"mir_{id:00000}.X");
-                var tree = BrushTree.FromCells(name, path, CellCodec.LoadStamp(path), assets);
+                var tree = BrushTree.FromCells(name, path, CellCodec.LoadStamp(path, assets?.Format ?? AssetSourceFormat.Default), assets);
                 // Some catalogue objects decode successfully but contain only
                 // transparent cards. They cannot stand in for a visible scene object.
                 bool visible = assets == null;

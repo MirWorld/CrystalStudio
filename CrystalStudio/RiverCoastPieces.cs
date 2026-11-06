@@ -37,6 +37,7 @@ public sealed class RiverCoastPieces
     public IReadOnlyList<Piece> Pieces {get;}
     public IReadOnlyList<Link> Links {get;}
     public IReadOnlyDictionary<(int,int),RiverArtwork.Pixels> NativeSprites {get;}
+    internal AssetSourceFormat Format => NativeSprites.Keys.Any(k => k.Item1 >= 2000) ? AssetSourceFormat.Sanxiu : AssetSourceFormat.Default;
     private readonly Dictionary<(string From,bool ReverseFrom,string To,bool ReverseTo),Link[]> connections;
     private RiverCoastPieces(IReadOnlyList<Piece> pieces,IReadOnlyList<Link> links,IReadOnlyDictionary<(int,int),RiverArtwork.Pixels> sprites)
     {

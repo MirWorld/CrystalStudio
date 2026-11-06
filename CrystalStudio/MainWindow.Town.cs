@@ -8,7 +8,7 @@ public partial class MainWindow
         if (assets == null) { Status.Text = LocalText.T("Load game libraries in Settings before generating a town."); UpdateWorkspace(); return; }
         await Run(async () =>
         {
-            var catalogue = await Task.Run(() => TownCatalogue.Load());
+            var catalogue = await Task.Run(() => TownCatalogue.Load(format: assets.Format));
             if (closed) return;
             var dialog = new TownStampWindow(assets, catalogue, Viewport.Town) { Owner = this };
             if (dialog.ShowDialog() != true || dialog.Plan == null) { UpdateWorkspace(); return; }

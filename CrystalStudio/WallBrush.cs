@@ -370,7 +370,7 @@ public sealed record WallCatalogue(int SchemaVersion, List<WallFamily> Families)
         return definitions;
     }
 
-    public static WallCatalogue Read(string path)
+    public static WallCatalogue Read(string path, AssetSourceFormat format = AssetSourceFormat.Default)
     {
         var definitions = DefinitionPaths(path).Select(file =>
         {
@@ -484,6 +484,23 @@ public sealed record WallCatalogue(int SchemaVersion, List<WallFamily> Families)
                 var inner = family.WithMode(true);
                 foreach (var variant in family.InnerVariants) inner.Compose(variant.Mask, variant.Corners, validateOnly: true);
             }
+        }
+        if (format == AssetSourceFormat.Sanxiu)
+        foreach (var family in catalogue.Families)
+        {
+            WallPiece Normalize(WallPiece piece) => piece with
+            {
+                Cells = piece.Cells.Select(saved =>
+                {
+                    var cell = saved.Cell.Copy();
+                    AssetLibraryIds.NormalizeStamp(cell, format);
+                    return saved with { Cell = cell };
+                }).ToList()
+            };
+            family.Pieces = family.Pieces.Select(Normalize).ToList();
+            family.Entrances = family.Entrances.Select(entrance => entrance with { Piece = Normalize(entrance.Piece) }).ToList();
+            family.SpriteFootprints = family.SpriteFootprints.Select(sprite => sprite with
+                { Library = AssetLibraryIds.Resolve(sprite.Library, MapLayer.Objects, format) }).ToList();
         }
         return catalogue;
     }

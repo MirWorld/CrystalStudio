@@ -37,7 +37,7 @@ public partial class MainWindow
             var parameters = dialog.SelectedParameters ?? creationStore.Parameters(request.Kind);
             if (request.Kind == MapCreationKind.Terrain)
             {
-                var catalogue = await Task.Run(() => TerrainCatalogue.Load());
+                var catalogue = await Task.Run(() => TerrainCatalogue.Load(format: settings.AssetFormat));
                 var preview = new TerrainGeneratorWindow(document, assets!, catalogue, parameters) { Owner = this };
                 if (preview.ShowDialog() != true || preview.Plan == null) return;
                 parameters = GeneratorPreferences.Capture(preview);
@@ -54,8 +54,8 @@ public partial class MainWindow
             }
             else if (request.Kind == MapCreationKind.Dungeon)
             {
-                var definitions = await Task.Run(() => (Terrain: TerrainCatalogue.Load(), Walls: wallFamilies.Count > 0
-                    ? new WallCatalogue(1, wallFamilies.ToList()) : WallCatalogue.Read(WallCatalogue.ResolvePath())));
+                var definitions = await Task.Run(() => (Terrain: TerrainCatalogue.Load(format: settings.AssetFormat), Walls: wallFamilies.Count > 0
+                    ? new WallCatalogue(1, wallFamilies.ToList()) : WallCatalogue.Read(WallCatalogue.ResolvePath(), settings.AssetFormat)));
                 var preview = new TempleGeneratorWindow(document, assets!, definitions.Walls, definitions.Terrain, parameters) { Owner = this };
                 if (preview.ShowDialog() != true || preview.Plan == null) return;
                 document = preview.Plan.Generated;

@@ -30,14 +30,14 @@ public sealed class RiverBridgeComponent
     }
     public static RiverBridgeComponent Load(AssetStore assets,RiverCoastPieces catalogue,string componentPath,string originalModulePath,CancellationToken cancellation=default)
     {
-        var walking=RiverBridgeWalkSupport.Load(originalModulePath);
+        var walking=RiverBridgeWalkSupport.Load(originalModulePath,assets.Format);
         string componentHash=Hash(componentPath);
         bool mountainFree=componentHash=="7179bfb22fa1005425a9050f5ea61d5291cce9f26d9b285b264a2918dc10bd63";
         bool approach=mountainFree||componentHash=="0290a2d1093c4718336be919b695ccca44e6f1cff5ab5b0038ea5a3ff95896fd";
         bool restoredCliffSupport=componentHash=="4df6668033e2264b5fb99552d91c9911e1a752023dad0f697beeb4b4c307f880";
         bool shortUpstream=approach||restoredCliffSupport||componentHash=="08b23de9740bdd52a362294642d94ed4f677f608a5e48bd63af37ea93f906c00";
         Require(shortUpstream||componentHash=="62a56934ccd313ca742bb18f209a34bbe4a1aeef3fa74f377b1e53f28ce6693e","Native bridge component changed.");
-        var original=CellCodec.LoadStamp(originalModulePath);var cells=CellCodec.LoadStamp(componentPath);var actual=cells.ToDictionary(c=>(c.X,c.Y),c=>c.Cell);
+        var original=CellCodec.LoadStamp(originalModulePath,catalogue.Format);var cells=CellCodec.LoadStamp(componentPath,catalogue.Format);var actual=cells.ToDictionary(c=>(c.X,c.Y),c=>c.Cell);
         if(approach)ValidateApproach(assets,catalogue,originalModulePath,actual,original,cancellation,mountainFree,walking);
         else Require(actual.Count==original.Count,"Native bridge component changes its source footprint.");
         foreach(var saved in original.Where(_=>!approach))
@@ -59,6 +59,7 @@ public sealed class RiverBridgeComponent
         foreach(var proof in json.RootElement.GetProperty("sprites").EnumerateArray())
         {
             cancellation.ThrowIfCancellationRequested();int library=proof.GetProperty("library").GetInt32(),image=proof.GetProperty("image").GetInt32();
+            library=AssetLibraryIds.Resolve(library,MapLayer.Objects,assets.Format);
             var sprite=assets.Libraries.TryGetValue(library,out var file)?file.Decode(image-1):null;
             Require(sprite!=null&&sprite.Width==proof.GetProperty("width").GetInt32()&&sprite.Height==proof.GetProperty("height").GetInt32(),"Missing native bridge artwork.");
             byte[] pixels=new byte[checked(sprite!.Width*sprite.Height*4)];sprite.Bitmap.CopyPixels(pixels,sprite.Width*4,0);
@@ -94,7 +95,13 @@ public sealed class RiverBridgeComponent
         {
             foreach(var (point,cell) in expected)
             {
-                if (cell.Foreground is { } f && !walking.IsDeck(point.Item1,point.Item2,f.Library,f.Image&0x7fff)&&((int)f.Library,f.Image&0x7fff) is not ((2,964) or (2,3059) or (2,3068))) cell.Foreground = null;
+                var knownDecks=new HashSet<(int,int)>
+                {
+                    (AssetLibraryIds.Resolve(2,MapLayer.Objects,assets.Format),964),
+                    (AssetLibraryIds.Resolve(2,MapLayer.Objects,assets.Format),3059),
+                    (AssetLibraryIds.Resolve(2,MapLayer.Objects,assets.Format),3068)
+                };
+                if (cell.Foreground is { } f && !walking.IsDeck(point.Item1,point.Item2,f.Library,f.Image&0x7fff)&&!knownDecks.Contains((f.Library,f.Image&0x7fff))) cell.Foreground = null;
                 if(point.Item1<35){cell.MiddleLibrary=0;cell.MiddleImage=0;}
                 int image=cell.BackImage&0x1fffffff;
                 int ground=(point.Item1>=35||cell.ForegroundImages.Count>0)&&image is >=1801 and <=1805?image:0;

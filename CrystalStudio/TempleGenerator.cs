@@ -211,7 +211,7 @@ public static class TempleGenerator
         TerrainSet? exterior = null;
         if (options.Theme != DungeonTheme.Classic)
         {
-            var catalogue = TerrainCatalogue.Load();
+            var catalogue = TerrainCatalogue.Load(format: assets?.Format ?? AssetSourceFormat.Default);
             exterior = catalogue.Sets.Single(s => s.Id == DungeonThemes.Exterior(options.Theme));
             if (assets != null && (!catalogue.MatchesAssets(exterior, assets) || !catalogue.MatchesAssets(floor, assets)))
                 throw new InvalidDataException("The selected libraries do not contain the matching themed ground artwork.");

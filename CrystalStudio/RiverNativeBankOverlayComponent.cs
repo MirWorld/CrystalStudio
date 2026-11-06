@@ -19,7 +19,7 @@ public sealed class RiverNativeBankOverlayComponent
         var bank=art.Pieces.Single(p=>p.Id=="mir/mir_01391");
         if(bank.Role!="bank"||bank.SourceSha256!="3bd5f1b45430503744be9f90ceb475e31048b27745962cbd48c0695fbb5e00f8"||bank.Commands.Count!=20)
             throw new InvalidDataException("Native overlay source bank changed.");
-        var cells=CellCodec.LoadStamp(path);
+        var cells=CellCodec.LoadStamp(path,catalogue.Format);
         var middle=new[]{(X:3,Y:4),(X:11,Y:13)}.SelectMany(at=>bank.Commands
             .Select(c=>(X:at.X+c.X,Y:at.Y+c.Y,c.Library,c.Image))).ToHashSet();
         var front=bank.Commands.Select(c=>new RiverArtworkCommand(c.X+9,c.Y+12,c.Library,c.Image)).ToArray();

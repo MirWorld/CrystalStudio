@@ -39,11 +39,28 @@ public sealed record RiverArtworkCatalogue(int SchemaVersion,string Status,strin
     }
 
     public RiverArtwork Prepare(AssetStore assets,CancellationToken token=default)
-        => new(this,VerifySprites(assets,token),token);
+        => PrepareForFormat(assets,token);
 
     /// <summary>Verify saved-layout dependencies without deriving procedural piece masks or joins.</summary>
     public RiverArtwork PrepareSavedLayouts(AssetStore assets,CancellationToken token=default)
-        => new(this,VerifySprites(assets,token),token,preparePieces:false);
+        => PrepareForFormat(assets,token,preparePieces:false);
+
+    private RiverArtwork PrepareForFormat(AssetStore assets,CancellationToken token,bool preparePieces=true)
+    {
+        var catalogue=this;
+        if(assets.Format==AssetSourceFormat.Sanxiu)
+            catalogue=this with
+            {
+                Sprites=Sprites.Select(sprite=>sprite with
+                    {Library=AssetLibraryIds.Resolve(sprite.Library,MapLayer.Objects,assets.Format)}).ToList(),
+                Pieces=Pieces.Select(piece=>piece with
+                {
+                    Commands=piece.Commands.Select(command=>command with
+                        {Library=AssetLibraryIds.Resolve(command.Library,MapLayer.Objects,assets.Format)}).ToList()
+                }).ToList()
+            };
+        return new(catalogue,catalogue.VerifySprites(assets,token),token,preparePieces,assets.Format);
+    }
 
     private Dictionary<(int,int),RiverArtwork.Pixels> VerifySprites(AssetStore assets,CancellationToken token)
     {
@@ -68,12 +85,13 @@ public sealed class RiverArtwork
     public sealed record Piece(RiverArtworkPiece Source,int Left,int Top,int Width,int Height,
         byte[] Bgra,Sample[] Opaque,Sample[] Footprint,Sample[] Border,int RootX,int RootY);
     public RiverArtworkCatalogue Catalogue {get;}
+    public AssetSourceFormat Format {get;}
     public IReadOnlyList<Piece> Pieces {get;}
     public IReadOnlyDictionary<(int,int),Pixels> Sprites {get;}
 
-    internal RiverArtwork(RiverArtworkCatalogue catalogue,Dictionary<(int,int),Pixels> sprites,CancellationToken token,bool preparePieces=true)
+    internal RiverArtwork(RiverArtworkCatalogue catalogue,Dictionary<(int,int),Pixels> sprites,CancellationToken token,bool preparePieces=true,AssetSourceFormat format=AssetSourceFormat.Default)
     {
-        Catalogue=catalogue;Sprites=sprites;
+        Catalogue=catalogue;Sprites=sprites;Format=format;
         if (!preparePieces) { Pieces=[]; return; }
         var sources=catalogue.Pieces.ToList();
         foreach(var join in catalogue.Joins)

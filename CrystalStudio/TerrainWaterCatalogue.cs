@@ -18,7 +18,7 @@ public sealed class TerrainWaterCatalogue
     public List<WaterSource> Sources { get; set; } = [];
     public List<WaterStrip> Strips { get; set; } = [];
     public List<WaterStripJoin> StripJoins { get; set; } = [];
-    public static TerrainWaterCatalogue Load(string path)
+    public static TerrainWaterCatalogue Load(string path, AssetSourceFormat format = AssetSourceFormat.Default)
     {
         var result = StudioJson.Deserialize<TerrainWaterCatalogue>(File.ReadAllText(path), new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? throw new InvalidDataException("Empty water catalogue.");
         if (result.SchemaVersion != 1 || result.Status != "reviewed" || string.IsNullOrWhiteSpace(result.ReviewBasis) || result.Sources.Count < 2 || result.Sources.Any(s => s.Sha256.Length != 64) || result.States.Count is < 3 or > 4096 || result.Joins.Count != 4) throw new InvalidDataException("Invalid reviewed water catalogue.");
@@ -46,6 +46,13 @@ public sealed class TerrainWaterCatalogue
             int At(WaterStrip s,int start,int p)=>p<start?(s.LeftWater?1:0):p>=start+s.Cells.Length?(s.RightWater?1:0):s.Cells[p-start];
             for(int p=Math.Min(0,join.Shift)-1;p<=Math.Max(a.Cells.Length,join.Shift+b.Cells.Length);p++)
                 if(!allowed[a.Vertical?1:0].Contains((At(a,0,p),At(b,join.Shift,p))))throw new InvalidDataException("A bank cross-section shift contains an unreviewed seam.");
+        }
+        if (format == AssetSourceFormat.Sanxiu)
+        {
+            foreach (var sprite in result.Sprites)
+                sprite.Library = AssetLibraryIds.Resolve(sprite.Library, MapLayer.Objects, format);
+            foreach (var fragment in result.States.SelectMany(state => state.Fragments))
+                fragment.Library = AssetLibraryIds.Resolve(fragment.Library, MapLayer.Objects, format);
         }
         return result;
     }

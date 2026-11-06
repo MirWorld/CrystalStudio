@@ -36,7 +36,7 @@ internal static class GeneratorEntrances
         // D711 uses these complete native floor stair objects, away from its
         // wall faces: 377 descends and 381 ascends. They never replace walls.
         var pieces=new[]{377,381}.Select(n=>(Id:$"mir/mir_{n:00000}",
-            Cells:CellCodec.LoadStamp(DataPaths.ResolveEditor("Objects","mir",$"mir_{n:00000}.X")))).ToArray();
+            Cells:CellCodec.LoadStamp(DataPaths.ResolveEditor("Objects","mir",$"mir_{n:00000}.X"), assets?.Format ?? AssetSourceFormat.Default))).ToArray();
         if (assets!=null)
         foreach (var front in pieces.SelectMany(p=>p.Cells).SelectMany(c=>c.Cell.ForegroundImages).Distinct())
             if (!assets.Libraries.TryGetValue(front.Library,out var library) || front.Image>library.Count || library.Decode(front.Image-1)==null)

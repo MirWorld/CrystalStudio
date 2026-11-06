@@ -61,7 +61,7 @@ public partial class MainWindow
             if (tab.Tag is OpenMapTab { IsStamp: true } existing && string.Equals(existing.Path, path, StringComparison.OrdinalIgnoreCase)) { mapTabs.SelectedItem = tab; return; }
         try
         {
-            var cells = CellCodec.LoadStamp(path);
+            var cells = CellCodec.LoadStamp(path, settings.AssetFormat);
             int minX = cells.Count == 0 ? 0 : cells.Min(c => c.X), minY = cells.Count == 0 ? 0 : cells.Min(c => c.Y);
             int width = cells.Count == 0 ? 32 : checked(cells.Max(c => c.X) - minX + 17);
             int height = cells.Count == 0 ? 32 : checked(cells.Max(c => c.Y) - minY + 17);

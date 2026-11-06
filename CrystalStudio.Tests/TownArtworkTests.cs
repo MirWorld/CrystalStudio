@@ -27,6 +27,27 @@ public sealed class TownArtworkTests
         Assert.Contains("image indices", error.Message);
     }
 
+    [Fact]
+    public void SanxiuTownPreparationResolvesCrystalObjectLibraryReferences()
+    {
+        string folder = Path.Combine(Path.GetTempPath(), "CrystalStudio-TownSanxiu-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(folder);
+        try
+        {
+            Fixture.WriteLibrary(Path.Combine(folder, "Objects.lib"), 192, 256, 20, 100, 200);
+            using var assets = AssetStore.Load(folder, AssetSourceFormat.Sanxiu);
+            var sprites = new Dictionary<(int Library, int Image), Sprite>();
+            var prepared = TownCatalogue.Prepare(Family(1), assets, sprites, out int skipped);
+
+            Assert.Equal(0, skipped);
+            Assert.Equal(2, prepared.Pieces.Count);
+            Assert.All(prepared.Pieces.SelectMany(p => p.Cells), c => Assert.Equal((short)2000, c.Cell.Foreground!.Library));
+            Assert.Contains((2000, 1), sprites.Keys);
+            Assert.Contains((2000, 1), prepared.SpriteProofs.Select(p => (p.Library, p.Image)));
+        }
+        finally { Directory.Delete(folder, true); }
+    }
+
     private static AssetStore Assets()
     {
         string folder = Path.Combine(Path.GetTempPath(), "CrystalStudio-TownArtwork-" + Guid.NewGuid().ToString("N"));

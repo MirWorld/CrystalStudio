@@ -21,7 +21,7 @@ public sealed class RiverNativeReturnComponent
             if(expected.TryGetValue(key,out var old)&&old!=value)throw new InvalidDataException("Native return banks conflict.");
             expected[key]=value;
         }
-        var cells=CellCodec.LoadStamp(path);
+        var cells=CellCodec.LoadStamp(path,catalogue.Format);
         if(cells.Count!=25||cells.Count!=expected.Count||cells.Any(c=>!expected.TryGetValue((c.X,c.Y),out var p)
             ||(c.Cell.MiddleLibrary,c.Cell.MiddleImage)!=p||(c.Cell.BackImage&0x1fffffff)!=0||c.Cell.ForegroundImages.Count!=0))
             throw new InvalidDataException("Native return must preserve both complete bank fragments.");

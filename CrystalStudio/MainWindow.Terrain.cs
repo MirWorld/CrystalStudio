@@ -8,7 +8,7 @@ public partial class MainWindow
         if (assets == null) { Status.Text = LocalText.T("Load game libraries in Settings before generating terrain."); return; }
         await Run(async () =>
         {
-            var catalogue = await Task.Run(() => TerrainCatalogue.Load());
+            var catalogue = await Task.Run(() => TerrainCatalogue.Load(format: settings.AssetFormat));
             if (closed) return;
             var dialog = new TerrainGeneratorWindow(Viewport.Document, assets, catalogue, creationStore.Parameters(MapCreationKind.Terrain)) { Owner = this };
             if (dialog.ShowDialog() != true || dialog.Plan == null) return;

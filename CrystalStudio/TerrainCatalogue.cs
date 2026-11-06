@@ -12,7 +12,7 @@ public sealed class TerrainCatalogue
     public List<TerrainRoute> Routes { get; set; } = [];
     public List<TerrainRejectedBlend> RejectedBlends { get; set; } = [];
     public TerrainWaterCatalogue? Water { get; private set; }
-    public static TerrainCatalogue Load(string? path = null)
+    public static TerrainCatalogue Load(string? path = null, AssetSourceFormat format = AssetSourceFormat.Default)
     {
         var result = StudioJson.Deserialize<TerrainCatalogue>(File.ReadAllText(path ?? DataPaths.ResolveEditor("catalogue", "terrain.json")), new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? throw new InvalidDataException("Empty terrain catalogue.");
         if (result.SchemaVersion != 1 || result.Sets.Count == 0 || result.Sets.Select(s => s.Id).Distinct().Count() != result.Sets.Count) throw new InvalidDataException("Invalid terrain catalogue version or IDs.");
@@ -35,10 +35,15 @@ public sealed class TerrainCatalogue
             string[] steps = [route.BaseId, .. route.ViaIds, route.OverlayId];
             if (steps.Distinct().Count() != steps.Length || steps.Any(id => !result.Sets.Any(s => s.Id == id)) || steps.Zip(steps.Skip(1)).Any(pair => !result.Blends.Any(b => b.BaseId == pair.First && b.OverlayId == pair.Second))) throw new InvalidDataException("Every route step needs its own reviewed direct blend.");
         }
+        if (format == AssetSourceFormat.Sanxiu)
+        {
+            foreach (var set in result.Sets)
+                set.Library = AssetLibraryIds.Resolve(set.Library, MapLayer.Ground, format);
+        }
         string waterPath = Path.Combine(Path.GetDirectoryName(path ?? DataPaths.ResolveEditor("catalogue", "terrain.json"))!, "water.json");
         if (File.Exists(waterPath))
         {
-            result.Water = TerrainWaterCatalogue.Load(waterPath);
+            result.Water = TerrainWaterCatalogue.Load(waterPath, format);
             if (!result.Sets.Any(s => s.Id == result.Water.LandId && s.Base) || !result.Sets.Any(s => s.Id == result.Water.WaterId && s.Material == "Water")) throw new InvalidDataException("Water catalogue surfaces are missing.");
         }
         return result;

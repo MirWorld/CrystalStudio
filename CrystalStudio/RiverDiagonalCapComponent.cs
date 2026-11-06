@@ -22,7 +22,7 @@ public sealed class RiverDiagonalCapComponent
             ("south-west-turn-entry",13,40,false),("west-diagonal-entry",8,41,false)];
         var original=catalogue.ResearchAssemble(parts.Select(p=>new RiverCoastPieces.Placement(byId[p.Id],p.X,p.Y,p.Reverse)).ToArray(),out string failure)
             ??throw new InvalidDataException(failure);
-        var cells=CellCodec.LoadStamp(path);var stored=cells.ToDictionary(c=>(c.X,c.Y),c=>c.Cell);
+        var cells=CellCodec.LoadStamp(path,catalogue.Format);var stored=cells.ToDictionary(c=>(c.X,c.Y),c=>c.Cell);
         if(cells.Count!=original.Cells.Count||cells.Any(c=>c.X<0||c.X>=24||c.Y<0||c.Y>=43)
             ||original.Cells.Any(c=>!stored.TryGetValue((c.X,c.Y),out var saved)||!Same(saved,c.Cell)))
             throw new InvalidDataException("Saved diagonal cap must preserve every native cell and collision flag.");

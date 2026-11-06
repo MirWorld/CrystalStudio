@@ -22,14 +22,14 @@ public sealed class IslandCoastObjects
             string path=Path.Combine(folder,file);
             if(Convert.ToHexStringLower(SHA256.HashData(File.ReadAllBytes(path)))!=proof.GetProperty("sha256").GetString())
                 throw new InvalidDataException("Island coast object differs from its original artwork.");
-            var cells=CellCodec.LoadStamp(path);
+            var cells=CellCodec.LoadStamp(path,assets.Format);
             if(cells.Count>256||cells.Any(c=>c.Cell.MiddleImage!=0||c.Cell.ForegroundImages.Count!=0||c.Cell.Door!=0
                 ||(c.Cell.BackImage&0x1fffffff)!=0&&((c.X|c.Y)&1)!=0))throw new InvalidDataException("Invalid native island shore piece.");
             pieces.Add(proof.GetProperty("number").GetInt32(),cells);
         }
         foreach(var proof in metadata.RootElement.GetProperty("sprites").EnumerateArray())
         {
-            int library=proof.GetProperty("library").GetInt32(),image=proof.GetProperty("image").GetInt32();
+            int library=AssetLibraryIds.Resolve(proof.GetProperty("library").GetInt32(),MapLayer.Ground,assets.Format),image=proof.GetProperty("image").GetInt32();
             if(!assets.Libraries.TryGetValue(library,out var lib)||lib.Decode(image-1) is not {} sprite||sprite.Width!=96||sprite.Height!=64)
                 throw new InvalidDataException("The map-5 island tiles are unavailable in these libraries.");
         }

@@ -21,7 +21,7 @@ public sealed class RiverBoundaryComponent
         bool odd=digest=="77c96770534ddb3db84cb0b451c1fbbce9d36c2c51506ab42760d9e93a11b9c5";
         if(!odd&&digest!="8590c52571198b3620e48fa6e6e6612bac80bbc471d69dea4cd46a131994dabf")
             throw new InvalidDataException("Native map-edge component differs from its verified artwork and game collision proof.");
-        var cells=CellCodec.LoadStamp(path);var original=catalogue.Pieces.Single(p=>p.Id=="west-diagonal").Cells.Where(c=>c.Cell.MiddleImage!=0).ToArray();
+        var cells=CellCodec.LoadStamp(path,catalogue.Format);var original=catalogue.Pieces.Single(p=>p.Id=="west-diagonal").Cells.Where(c=>c.Cell.MiddleImage!=0).ToArray();
         var native=new Dictionary<(int,int),Cell>();
         foreach(var offset in odd?new[]{(3,4),(9,13)}:new[]{(3,4)})
             foreach(var c in original)native[(c.X+offset.Item1,c.Y+offset.Item2)]=c.Cell;

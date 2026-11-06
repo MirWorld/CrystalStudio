@@ -15,7 +15,7 @@ public sealed class RiverBridgeWalkSupport
         IReadOnlySet<(int,int,int,int)> deck)
     {this.source=source;this.walk=walk;this.x=x;this.y=y;this.deck=deck;}
 
-    public static RiverBridgeWalkSupport Load(string modulePath,int x=0,int y=0)
+    public static RiverBridgeWalkSupport Load(string modulePath,AssetSourceFormat format=AssetSourceFormat.Default,int x=0,int y=0)
     {
         Require(Hash(modulePath)=="79e7810c61e05ca9186ab9a3506e1125683f3181b4d9ceb8a598ce1180d3aee9","Native bridge source component changed.");
         string proofPath=Path.ChangeExtension(modulePath,"json");
@@ -24,7 +24,7 @@ public sealed class RiverBridgeWalkSupport
         Require(Hash(proofPath) is "1e96f108660c3aebfac1e21496c3daa1c10fed02d2f897aa27735ff9eab62a1e"
             or "3e257c64eaf2e10692b02dc8f5d4d15941918c28321a2a6066b13f2dc424f8f8","Native bridge walking proof changed.");
         using var json=JsonDocument.Parse(File.ReadAllText(proofPath));
-        var cells=CellCodec.LoadStamp(modulePath);var byPoint=cells.ToDictionary(c=>(c.X,c.Y),c=>c.Cell);
+        var cells=CellCodec.LoadStamp(modulePath,format);var byPoint=cells.ToDictionary(c=>(c.X,c.Y),c=>c.Cell);
         var route=json.RootElement.GetProperty("pixelVerifiedCrossing").EnumerateArray().Select(p=>(p.GetProperty("x").GetInt32(),p.GetProperty("y").GetInt32())).ToArray();
         Require(route.Length==29&&route.Distinct().Count()==29,"Invalid original bridge route.");
         foreach(var point in route)
@@ -35,7 +35,8 @@ public sealed class RiverBridgeWalkSupport
         using var crossing=JsonDocument.Parse(File.ReadAllText(crossingPath));
         var offset=json.RootElement.GetProperty("sourceCrossing");int dx=offset.GetProperty("x").GetInt32(),dy=offset.GetProperty("y").GetInt32();
         var deck=crossing.RootElement.GetProperty("bridgeCommands").EnumerateArray().Select(p=>(
-            p.GetProperty("x").GetInt32()+dx,p.GetProperty("y").GetInt32()+dy,p.GetProperty("library").GetInt32(),p.GetProperty("image").GetInt32())).ToHashSet();
+            p.GetProperty("x").GetInt32()+dx,p.GetProperty("y").GetInt32()+dy,
+            AssetLibraryIds.Resolve(p.GetProperty("library").GetInt32(),MapLayer.Objects,format),p.GetProperty("image").GetInt32())).ToHashSet();
         Require(deck.Count==122&&deck.All(p=>byPoint.TryGetValue((p.Item1,p.Item2),out var cell)
             &&cell.ForegroundImages.Any(f=>f.Library==p.Item3&&(f.Image&0x7fff)==p.Item4)),"Bridge flow evidence must name exactly the original 122 Front fragments.");
         return new(cells,route,x,y,deck);

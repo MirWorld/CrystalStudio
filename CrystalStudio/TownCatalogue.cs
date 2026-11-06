@@ -16,7 +16,7 @@ public sealed record TownFamily(string Id, string Name, TownSource SourceMap, do
 }
 public sealed record TownCatalogue(int SchemaVersion, List<TownFamily> Families)
 {
-    public static TownCatalogue Load(string? path = null)
+    public static TownCatalogue Load(string? path = null, AssetSourceFormat format = AssetSourceFormat.Default)
     {
         var catalogue = StudioJson.Deserialize<TownCatalogue>(File.ReadAllText(path ?? DataPaths.ResolveEditor("catalogue", "towns.json")),
             new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? throw new InvalidDataException("Empty town catalogue.");
@@ -36,13 +36,32 @@ public sealed record TownCatalogue(int SchemaVersion, List<TownFamily> Families)
                         (c.Cell.BackImage & ~0x60000000) != 0 || c.Cell.MiddleImage != 0 ))
                     throw new InvalidDataException("Invalid town piece: " + piece.Id);
         }
+        if (format == AssetSourceFormat.Sanxiu)
+            catalogue = catalogue with { Families = catalogue.Families.Select(f => PrepareReferences(f, format)).ToList() };
         return catalogue;
     }
+
+    private static TownFamily PrepareReferences(TownFamily family, AssetSourceFormat format)
+        => family with
+        {
+            SpriteProofs = family.SpriteProofs.Select(proof => proof with
+                { Library = AssetLibraryIds.Resolve(proof.Library, MapLayer.Objects, format) }).ToList(),
+            Pieces = family.Pieces.Select(piece => piece with
+            {
+                Cells = piece.Cells.Select(saved =>
+                {
+                    var cell = saved.Cell.Copy();
+                    AssetLibraryIds.NormalizeStamp(cell, format);
+                    return saved with { Cell = cell };
+                }).ToList()
+            }).ToList()
+        };
 
     // 允许替换素材；房屋引用的库和图片编号仍须可读取。
     public static TownFamily Prepare(TownFamily family, AssetStore assets, Dictionary<(int Library, int Image), Sprite> sprites, out int skipped,
         CancellationToken cancellationToken = default)
     {
+        if (assets.Format == AssetSourceFormat.Sanxiu) family = PrepareReferences(family, assets.Format);
         var valid = new HashSet<(int, int)>();
         foreach (var proof in family.SpriteProofs)
         {

@@ -21,7 +21,7 @@ public sealed class RiverSouthDiagonalComponent
             if(expected.TryGetValue(key,out var old)&&old!=value)throw new InvalidDataException("South diagonal source banks conflict.");
             expected[key]=value;
         }
-        var cells=CellCodec.LoadStamp(path);
+        var cells=CellCodec.LoadStamp(path,catalogue.Format);
         var banks=cells.Where(c=>c.Cell.MiddleImage!=0).ToDictionary(c=>(c.X,c.Y),c=>(c.Cell.MiddleLibrary,c.Cell.MiddleImage));
         if(cells.Count!=121||banks.Count!=expected.Count||expected.Any(p=>!banks.TryGetValue(p.Key,out var value)||value!=p.Value)
             ||cells.Any(c=>c.Cell.BackLibrary!=0||(c.Cell.BackImage&~0x60000000)!=0||c.Cell.ForegroundImages.Count!=0

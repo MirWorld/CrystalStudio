@@ -23,7 +23,7 @@ public sealed class TownWallResources
     {
         var families = WallCatalogue.DefinitionPaths(WallCatalogue.ResolvePath())
             .Where(path => Path.GetFileName(Path.GetDirectoryName(path)) is "bichon-wall" or "small-fence" or "large-fence" or "brick-wall")
-            .SelectMany(path => WallCatalogue.Read(path).Families);
+            .SelectMany(path => WallCatalogue.Read(path, assets.Format).Families);
         return Prepare(families, assets, sprites, cancellation);
     }
 
@@ -72,7 +72,7 @@ public sealed class TownWallResources
             int gate = family.Id == "bichon-wall" ? 7362 : family.Id == "brick-wall" ? 52 : 0;
             if (gate != 0)
             {
-                var cells = CellCodec.LoadStamp(DataPaths.ResolveEditor("Objects", "mir", $"mir_{gate:00000}.X"));
+                var cells = CellCodec.LoadStamp(DataPaths.ResolveEditor("Objects", "mir", $"mir_{gate:00000}.X"), assets.Format);
                 if (cells.SelectMany(c => c.Cell.ForegroundImages).Any(f => ReadSprite(f) == null)) continue;
                 result.Gates[family.Id] = cells;
                 foreach (var front in cells.SelectMany(c => c.Cell.ForegroundImages).Distinct())

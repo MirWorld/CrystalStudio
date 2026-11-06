@@ -28,7 +28,7 @@ internal sealed class NativeCoastSupport
             var references=new HashSet<(int,int)>();
             foreach(var spriteProof in bankGround.GetProperty("groundSprites").EnumerateArray())
             {
-                cancellation.ThrowIfCancellationRequested();int library=Number(spriteProof,"library"),image=Number(spriteProof,"image");
+                cancellation.ThrowIfCancellationRequested();int library=AssetLibraryIds.Resolve(Number(spriteProof,"library"),MapLayer.Ground,assets.Format),image=Number(spriteProof,"image");
                 var sprite=assets.Libraries.TryGetValue(library,out var lib)?lib.Decode(image-1):null;
                 Require(library==0&&(image is >=1 and <=5 or >=1801 and <=1805 or >=2301 and <=2400)
                     &&sprite!=null&&sprite.Width==96&&sprite.Height==64,"Unverified native bank ground family or dimensions.");
@@ -73,11 +73,11 @@ internal sealed class NativeCoastSupport
                     "Native crossing source proof changed.");
                 int x=Number(crossing,"x"),y=Number(crossing,"y"),w=Number(source,"width"),h=Number(source,"height");
                 Require((x&1)==0&&(y&1)==0&&x>=0&&y>=0&&w==60&&h==92&&x+w<=width&&y+h<=height,"Native crossing is out of bounds.");
-                var cells=CellCodec.LoadStamp(path).ToDictionary(c=>(c.X,c.Y),c=>c.Cell);
+                var cells=CellCodec.LoadStamp(path,assets.Format).ToDictionary(c=>(c.X,c.Y),c=>c.Cell);
                 var references=new HashSet<(int,int)>();
                 foreach(var spriteProof in source.GetProperty("sprites").EnumerateArray())
                 {
-                    cancellation.ThrowIfCancellationRequested();int library=Number(spriteProof,"library"),image=Number(spriteProof,"image");
+                    cancellation.ThrowIfCancellationRequested();int library=AssetLibraryIds.Resolve(Number(spriteProof,"library"),MapLayer.Objects,assets.Format),image=Number(spriteProof,"image");
                     var sprite=assets.Libraries.TryGetValue(library,out var lib)?lib.Decode(image-1):null;
                     Require(sprite!=null&&sprite.Width==Number(spriteProof,"width")&&sprite.Height==Number(spriteProof,"height"),"Missing native crossing sprite.");
                     Require(references.Add((library,image)),"Duplicate native crossing reference.");
@@ -124,7 +124,7 @@ internal sealed class NativeCoastSupport
             int x=Number(saved,"x"),y=Number(saved,"y");Require((x&1)==0&&(y&1)==0&&x>=0&&y>=0,"Invalid closing-module alignment.");
             // Offline composition gives this verified whole closing module the
             // last ground layer. This checks the saved result; it places nothing.
-            foreach(var cell in CellCodec.LoadStamp(path))if((cell.Cell.BackImage&0x1fffffff)!=0)
+            foreach(var cell in CellCodec.LoadStamp(path,assets.Format))if((cell.Cell.BackImage&0x1fffffff)!=0)
             {
                 Require(x+cell.X<width&&y+cell.Y<height,"Closing module ground is out of bounds.");
                 result.Ground[(x+cell.X,y+cell.Y)]=(cell.Cell.BackLibrary,cell.Cell.BackImage&0x1fffffff);
@@ -133,7 +133,7 @@ internal sealed class NativeCoastSupport
         if(proof.TryGetProperty("nativeCliffGrass",out var grass)&&grass.ValueKind!=JsonValueKind.Null)
         {
             Require(result.Front.Count>0&&grass.GetProperty("nativeCrossingGroundPreserved").GetBoolean()&&!grass.GetProperty("runtimePainting").GetBoolean(),"Invalid saved cliff grass proof.");
-            var terrain=TerrainCatalogue.Load();var dirt=terrain.Sets.Single(s=>s.Id=="0:0:0");var edge=terrain.Sets.Single(s=>s.Id=="0:0:950");var centre=terrain.Sets.Single(s=>s.Id=="0:0:1400");
+            var terrain=TerrainCatalogue.Load(format:assets.Format);var dirt=terrain.Sets.Single(s=>s.Id=="0:0:0");var edge=terrain.Sets.Single(s=>s.Id=="0:0:950");var centre=terrain.Sets.Single(s=>s.Id=="0:0:1400");
             Require(terrain.CanBlend(dirt,edge)&&terrain.MatchesAssets(edge,assets)&&terrain.MatchesAssets(centre,assets),"Saved cliff grass needs reviewed original terrain.");
             foreach(var tile in grass.GetProperty("tiles").EnumerateArray())
             {

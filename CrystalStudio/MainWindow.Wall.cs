@@ -16,7 +16,7 @@ public partial class MainWindow
         {
             // Reading, deserializing and validating all native wall definitions
             // takes seconds on a cold launch. Only publish the result on the UI thread.
-            var catalogue = await Task.Run(() => WallCatalogue.Read(WallCatalogue.ResolvePath()));
+            var catalogue = await Task.Run(() => WallCatalogue.Read(WallCatalogue.ResolvePath(), settings.AssetFormat));
             if (closed) return;
             wallFamilies = catalogue.Families;
             Viewport.WallFamily = wallFamilies.FirstOrDefault();

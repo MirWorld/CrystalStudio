@@ -79,8 +79,8 @@ public sealed class AssetSourceFormatTests
     {
         using var files = new TemporaryAssets();
         files.Write("Tiles.Lib", 5, 18, 32);
-        files.Write("SmTiles2.Lib", 5, 38, 52);
-        files.Write("Objects3.Lib", 5, 58, 72);
+        files.Write("SmTiles.Lib", 5, 38, 52);
+        files.Write("Objects.Lib", 5, 58, 72);
         using var assets = AssetStore.Load(files.Root, AssetSourceFormat.Sanxiu);
 
         Cell[] layers =
@@ -95,8 +95,8 @@ public sealed class AssetSourceFormatTests
             CellCodec.SaveStamp(path, [new StampCell(0, 0, layers[i])]);
             var converted = CellCodec.LoadStamp(path, AssetSourceFormat.Sanxiu).Single().Cell;
             Assert.Equal(0, converted.BackLibrary);
-            Assert.Equal(i == 1 ? 1001 : 0, converted.MiddleLibrary);
-            Assert.Equal(i == 2 ? (short?)2002 : null, converted.Foreground?.Library);
+            Assert.Equal(i == 1 ? 1000 : 0, converted.MiddleLibrary);
+            Assert.Equal(i == 2 ? (short?)2000 : null, converted.Foreground?.Library);
             var preview = await MainWindow.RenderCategoryPreviewAsync(path, assets, CancellationToken.None);
             Assert.NotNull(preview);
             using (preview)
@@ -116,6 +116,49 @@ public sealed class AssetSourceFormatTests
         var alreadyConverted = CellCodec.LoadStamp(nativePath, AssetSourceFormat.Sanxiu).Single().Cell;
         Assert.Equal(1001, alreadyConverted.MiddleLibrary);
         Assert.Equal((short?)2002, alreadyConverted.Foreground?.Library);
+    }
+
+    [Fact]
+    public void SanxiuStampMapsCrystalGroundMiddleAndObjectLibraryIdsToTheirBaseLibraries()
+    {
+        using var files = new TemporaryAssets();
+        files.Write("Tiles.Lib", 5, 18, 32);
+        files.Write("SmTiles.Lib", 5, 38, 52);
+        files.Write("Objects.Lib", 5, 58, 72);
+        using var assets = AssetStore.Load(files.Root, AssetSourceFormat.Sanxiu);
+        string path = Path.Combine(files.Root, "three-layers.X");
+        CellCodec.SaveStamp(path, [new StampCell(0, 0, new Cell
+        {
+            BackLibrary = 0, BackImage = 1,
+            MiddleLibrary = 1, MiddleImage = 1,
+            Foreground = new Front(2, 1)
+        })]);
+
+        var converted = Assert.Single(CellCodec.LoadStamp(path, assets.Format)).Cell;
+        Assert.Equal(0, converted.BackLibrary);
+        Assert.Equal(1000, converted.MiddleLibrary);
+        Assert.Equal((short)2000, converted.Foreground!.Library);
+        Assert.NotNull(assets.Libraries[converted.BackLibrary].Decode(0));
+        Assert.NotNull(assets.Libraries[converted.MiddleLibrary].Decode(0));
+        Assert.NotNull(assets.Libraries[converted.Foreground.Library].Decode(0));
+    }
+
+    [Fact]
+    public void SanxiuGeneratorCataloguesMapToTheirMatchingLibraryFamilies()
+    {
+        var terrain = TerrainCatalogue.Load(format: AssetSourceFormat.Sanxiu);
+        Assert.All(terrain.Sets, set => Assert.Equal(0, set.Library));
+        Assert.All(terrain.Water!.Sprites, sprite => Assert.Equal(2000, sprite.Library));
+        Assert.All(terrain.Water.States.SelectMany(state => state.Fragments), fragment => Assert.Equal(2000, fragment.Library));
+
+        var towns = TownCatalogue.Load(format: AssetSourceFormat.Sanxiu);
+        Assert.All(towns.Families.SelectMany(family => family.SpriteProofs), proof => Assert.InRange(proof.Library, 2000, 2999));
+        Assert.All(towns.Families.SelectMany(family => family.Pieces).SelectMany(piece => piece.Cells)
+            .SelectMany(cell => cell.Cell.ForegroundImages), front => Assert.InRange(front.Library, (short)2000, (short)2999));
+
+        var walls = WallCatalogue.Read(WallCatalogue.ResolvePath(), AssetSourceFormat.Sanxiu);
+        Assert.All(walls.Families.SelectMany(family => family.Pieces).SelectMany(piece => piece.Cells)
+            .SelectMany(cell => cell.Cell.ForegroundImages), front => Assert.InRange(front.Library, (short)2000, (short)2999));
     }
 
     [Fact]

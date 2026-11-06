@@ -27,7 +27,7 @@ public sealed class RiverForkComponents
         {
             string path=Path.Combine(directory,file);
             Require(Convert.ToHexStringLower(SHA256.HashData(File.ReadAllBytes(path)))==hash,"Saved diagonal fork join changed.");
-            var cells=CellCodec.LoadStamp(path);
+            var cells=CellCodec.LoadStamp(path,catalogue.Format);
             Require(cells.Count is >0 and <=256&&cells.Select(c=>(c.X,c.Y)).Distinct().Count()==cells.Count,"Invalid fork join footprint.");
             var expectedBanks=Commands(banks,"bank");var expectedCovers=Commands(covers,"cover");
             var storedBanks=cells.Where(c=>c.Cell.MiddleImage!=0).ToDictionary(c=>(c.X,c.Y));
