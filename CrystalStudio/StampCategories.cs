@@ -7,7 +7,11 @@ namespace CrystalStudio;
 public sealed record StampCategoryIndex(int SchemaVersion, string ObjectRoot, string PreviewRoot, List<CategorizedStamp> Objects);
 public sealed record CategorizedStamp(string Id, string File, string Name, string? Type, string? Subtype,
     List<string> Regions, List<string> RegionGroups, List<string> Environments, List<string> Tags,
-    string? Direction, string DirectionStatus, string? Preview, bool PreviewComplete, string ReviewStatus);
+    string? Direction, string DirectionStatus, string? Preview, bool PreviewComplete, string ReviewStatus)
+{
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public ModuleConnections? Connections { get; init; }
+}
 
 public static class StampCategories
 {
