@@ -1,7 +1,7 @@
 using System.Diagnostics;
 namespace CrystalStudio;
 
-public enum EditorTool { Brush, Pencil, Bucket, Eraser, Select, Stamp, Pickup, Clone, SpecialBrush, Wall, TownStamp }
+public enum EditorTool { Brush, Pencil, Bucket, Eraser, Select, Stamp, Pickup, Clone, SpecialBrush, Wall, TownStamp, Eyedropper, Pan }
 public sealed partial class MapViewport : SceneControl
 {
     public MapDocument Document { get; private set; } = new(256, 256);
@@ -330,7 +330,7 @@ public sealed partial class MapViewport : SceneControl
                 }
                 dc.Pop();
             }
-            if(Tool!=EditorTool.Wall&&Tool!=EditorTool.SpecialBrush&&Tool!=EditorTool.Stamp&&!IsStampPickingTool&&Tool!=EditorTool.Select){var footprint = PaintFootprint(hover.X, hover.Y);
+            if(Tool!=EditorTool.Wall&&Tool!=EditorTool.SpecialBrush&&Tool!=EditorTool.Stamp&&!IsStampPickingTool&&Tool!=EditorTool.Select&&Tool!=EditorTool.Eyedropper&&Tool!=EditorTool.Pan){var footprint = PaintFootprint(hover.X, hover.Y);
             dc.DrawRectangle(null, cursor, new(footprint.X * 48, footprint.Y * 32, footprint.Width * 48, footprint.Height * 32));}
         }
         dc.Pop(); dc.Pop();
@@ -400,6 +400,7 @@ public sealed partial class MapViewport : SceneControl
     public bool PickTile(int x, int y)
     {
         if (!Document.Contains(x, y) || Layer is not (MapLayer.Ground or MapLayer.Middle)) return false;
+        if (Layer == MapLayer.Ground) { x &= ~1; y &= ~1; }
         var cell = Document.Get(x, y);
         int library = Layer == MapLayer.Ground ? cell.BackLibrary : cell.MiddleLibrary;
         int image = Layer == MapLayer.Ground ? (cell.BackImage & 0x1FFFFFFF) - 1 : cell.MiddleImage - 1;
@@ -420,9 +421,10 @@ public sealed partial class MapViewport : SceneControl
     protected override void OnPointerPressed(PointerPressedEventArgs e)
     {
         base.OnPointerPressed(e); Focus(); mouse = e.GetPosition(this);
-        hover = CellAt(mouse); if(e.GetCurrentPoint(this).Properties.IsRightButtonPressed) { if (PickTile(hover.X, hover.Y)) { e.Handled = true; return; } if (!SelectionContains(hover.X, hover.Y)) Deselect(); return; } panning = e.GetCurrentPoint(this).Properties.IsMiddleButtonPressed || InputState.IsKeyDown(Key.Space);
+        hover = CellAt(mouse); if(e.GetCurrentPoint(this).Properties.IsRightButtonPressed) { if (PickTile(hover.X, hover.Y)) { e.Handled = true; return; } if (!SelectionContains(hover.X, hover.Y)) Deselect(); return; } panning = e.GetCurrentPoint(this).Properties.IsMiddleButtonPressed || InputState.IsKeyDown(Key.Space) || Tool == EditorTool.Pan && !PastingRegion && e.GetCurrentPoint(this).Properties.IsLeftButtonPressed;
         if (panning) { panStart = mouse; originStart = origin; CapturePointer(e.Pointer); dragging = true; return; }
         if (!e.GetCurrentPoint(this).Properties.IsLeftButtonPressed) return;
+        if (Tool == EditorTool.Eyedropper && !PastingRegion) { PickTile(hover.X, hover.Y); e.Handled = true; return; }
         if(PastingRegion){PlaceRegion();e.Handled=true;return;}
         if(IsStampPickingTool){if(PickedStampId==null)PickupAt(hover.X,hover.Y);else if(Tool==EditorTool.Clone)ClonePickedTo(hover.X,hover.Y);else MovePickedTo(hover.X,hover.Y);e.Handled=true;return;}
         if (Tool == EditorTool.TownStamp) { PlaceTownAt(hover.X, hover.Y); e.Handled = true; return; }
