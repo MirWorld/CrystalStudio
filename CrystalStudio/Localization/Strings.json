@@ -4366,5 +4366,13 @@
   "AlienThemeDescription": {"English": "Offset impact basins, fractured routes and crystalline life", "Chinese": "偏心环坑、断裂通道、异形晶体生态"},
   "ClassicThemeDescription": {"English": "Classic dungeon and cave layouts", "Chinese": "经典房间与自然洞穴布局"},
   "ThemeDetailsCount": {"English": " · {0} scene details", "Chinese": " · {0} 处主题细节"},
-  "ThemeObjectsUnavailable": {"English": "No reviewed visible objects are available for this dungeon theme.", "Chinese": "当前素材库没有此主题所需的已审查可见物件。"}
+  "ThemeObjectsUnavailable": {"English": "No reviewed visible objects are available for this dungeon theme.", "Chinese": "当前素材库没有此主题所需的已审查可见物件。"},
+  "MinimapExportAction": {"English": "Export", "Chinese": "导出"},
+  "MinimapSizePreset": {"English": "Size preset", "Chinese": "尺寸预设"},
+  "MinimapSmallSize": {"English": "Small (¼)", "Chinese": "小（宽高 1/4）"},
+  "MinimapMediumSize": {"English": "Medium (½)", "Chinese": "中（宽高 1/2）"},
+  "MinimapLargeSize": {"English": "Large (1:1)", "Chinese": "大（1:1）"},
+  "MinimapWidthPixels": {"English": "Width (pixels)", "Chinese": "宽度（像素）"},
+  "MinimapHeightPixels": {"English": "Height (pixels)", "Chinese": "高度（像素）"},
+  "MinimapInvalidDimensions": {"English": "Enter positive whole-number dimensions. If the image is too large, reduce its width or height.", "Chinese": "宽高请输入正整数；若图像尺寸过大，请减小宽度或高度。"}
 }
