@@ -339,10 +339,16 @@ public sealed class AssetStore : IDisposable
             stop.Dispose();
         }, CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
     }
-    public static AssetStore Load(string root, AssetSourceFormat format = AssetSourceFormat.Default)
+    public static AssetStore Load(string root, AssetSourceFormat format = AssetSourceFormat.Default, string? attachmentsRoot = null)
     {
         var store = new AssetStore(format);
-        try { store.Register(root); StudioLog.Info("Assets.Load", $"Root={root}; Format={format}; Libraries={store.Libraries.Count}"); return store; }
+        try
+        {
+            store.Register(root);
+            AttachedAssets.Register(store, attachmentsRoot ?? DataPaths.ResolveEditor("Attachments"));
+            StudioLog.Info("Assets.Load", $"Root={root}; Format={format}; Libraries={store.Libraries.Count}");
+            return store;
+        }
         catch (Exception ex) { StudioLog.Error("Assets.Load", ex, $"Root={root}; Format={format}"); store.Dispose(); throw; }
     }
     private void Add(int id, string root, string relative) { string path = System.IO.Path.Combine(root, relative.Replace('\\', System.IO.Path.DirectorySeparatorChar) + ".lib"); if (File.Exists(path)) Libraries[id] = new(path); }
