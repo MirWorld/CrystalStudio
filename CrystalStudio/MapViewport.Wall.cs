@@ -339,8 +339,8 @@ public sealed partial class MapViewport
                 foreach(var front in cell.ForegroundImages)
                 {
                     int index=MapPreview.FrontImage(cell,front,DoorsOpen);
-                    if(index>=0 && Assets?.Get(front.Library,index) is Sprite sprite)
-                        area = EditorGeometry.Union(area, MapSpriteDrawing.Bounds(sprite,point.X,point.Y,front.Library,index,true,true,MapSpriteDrawing.FrontBlend(front.Frames)));
+                    if(index>=0 && !MapSpriteDrawing.SkipFront(front.Library, Document.SourceFormat) && Assets?.Get(front.Library,index) is Sprite sprite)
+                        area = EditorGeometry.Union(area, MapSpriteDrawing.Bounds(sprite,point.X,point.Y,front.Library,index,true,true,MapSpriteDrawing.FrontBlend(front.Frames),Document.SourceFormat));
                 }
             }
             var drawing=new SceneGroup();
@@ -385,8 +385,8 @@ public sealed partial class MapViewport
                 context.DrawDrawing(scene);context.Pop();
                 void Paint(int x,int y,int library,int index,bool anchored,bool front,bool blend=false)
                 {
-                    if(index<0 || Assets?.Get(library,index) is not Sprite sprite)return;
-                    var bounds=MapSpriteDrawing.Bounds(sprite,x,y,library,index,anchored,front,blend);
+                    if(index<0 || MapSpriteDrawing.SkipFront(library, Document.SourceFormat) || Assets?.Get(library,index) is not Sprite sprite)return;
+                    var bounds=MapSpriteDrawing.Bounds(sprite,x,y,library,index,anchored,front,blend,Document.SourceFormat);
                     if(bounds.Intersects(area))MapSpriteDrawing.Append(scene,sprite,bounds,blend,detailEffects);
                 }
             }

@@ -118,6 +118,8 @@ public sealed partial class MapViewport : SceneControl
     }
     private bool SelectionContains(int x, int y) => Selection is Rect area && x >= area.Left && x < area.Right && y >= area.Top && y < area.Bottom;
     public event Action<int, int>? Hover;
+    // Raised when the user right-clicks a ground or middle tile to select its source asset.
+    public event Action<int, int, MapLayer>? AssetPicked;
     public event Action? Changed;
     public event Action? AssetUsed;
     public event Action<double, int>? Rendered;
@@ -365,16 +367,16 @@ public sealed partial class MapViewport : SceneControl
     }
     private void AppendSprite(SceneGroup scene, MapSpriteDrawing.BackgroundIndex background, int x, int y, int lib, int index, bool anchored, bool front, bool blend)
     {
-        if (index < 0 || Assets?.Get(lib, index) is not Sprite sprite) return;
-        var bounds=MapSpriteDrawing.Bounds(sprite,x,y,lib,index,anchored,front,blend);
+        if (index < 0 || MapSpriteDrawing.SkipFront(lib, Document.SourceFormat) || Assets?.Get(lib, index) is not Sprite sprite) return;
+        var bounds=MapSpriteDrawing.Bounds(sprite,x,y,lib,index,anchored,front,blend,Document.SourceFormat);
         if(blend&&!bounds.Intersects(detailCoverage))return;
         MapSpriteDrawing.Append(scene,sprite,bounds,blend,detailEffects,background);drawn++;
     }
     private void DrawSprite(SceneContext dc, int x, int y, int lib, int index, bool anchored) => DrawSprite(dc, x, y, lib, index, anchored, false);
     private void DrawSprite(SceneContext dc, int x, int y, int lib, int index, bool anchored, bool front, bool blend = false)
     {
-        if (index < 0) return; var s = Assets?.Get(lib, index); if (s == null) return;
-        var bounds = MapSpriteDrawing.Bounds(s, x, y, lib, index, anchored, front, blend);
+        if (index < 0 || MapSpriteDrawing.SkipFront(lib, Document.SourceFormat)) return; var s = Assets?.Get(lib, index); if (s == null) return;
+        var bounds = MapSpriteDrawing.Bounds(s, x, y, lib, index, anchored, front, blend, Document.SourceFormat);
         dc.DrawImage(blend ? MapSpriteDrawing.Additive(s, bounds, new SceneGroup()) : s.Bitmap, bounds); drawn++;
     }
     public (int X, int Y) CellAt(Point p) => ((int)Math.Floor((p.X - origin.X) / Zoom / 48), (int)Math.Floor((p.Y - origin.Y) / Zoom / 32));
@@ -395,6 +397,18 @@ public sealed partial class MapViewport : SceneControl
         selectionStart = (x, y); selectionDragged = false;
         return true;
     }
+    public bool PickTile(int x, int y)
+    {
+        if (!Document.Contains(x, y) || Layer is not (MapLayer.Ground or MapLayer.Middle)) return false;
+        var cell = Document.Get(x, y);
+        int library = Layer == MapLayer.Ground ? cell.BackLibrary : cell.MiddleLibrary;
+        int image = Layer == MapLayer.Ground ? (cell.BackImage & 0x1FFFFFFF) - 1 : cell.MiddleImage - 1;
+        if (library < 0 || image < 0) return false;
+        Library = library;
+        SpriteIndex = image;
+        AssetPicked?.Invoke(library, image, Layer);
+        return true;
+    }
     private void UpdateSelection(int x, int y)
     {
         if ((x, y) != selectionStart) selectionDragged = true;
@@ -406,7 +420,7 @@ public sealed partial class MapViewport : SceneControl
     protected override void OnPointerPressed(PointerPressedEventArgs e)
     {
         base.OnPointerPressed(e); Focus(); mouse = e.GetPosition(this);
-        hover = CellAt(mouse); if(e.GetCurrentPoint(this).Properties.IsRightButtonPressed) { if (!SelectionContains(hover.X, hover.Y)) Deselect(); return; } panning = e.GetCurrentPoint(this).Properties.IsMiddleButtonPressed || InputState.IsKeyDown(Key.Space);
+        hover = CellAt(mouse); if(e.GetCurrentPoint(this).Properties.IsRightButtonPressed) { if (PickTile(hover.X, hover.Y)) { e.Handled = true; return; } if (!SelectionContains(hover.X, hover.Y)) Deselect(); return; } panning = e.GetCurrentPoint(this).Properties.IsMiddleButtonPressed || InputState.IsKeyDown(Key.Space);
         if (panning) { panStart = mouse; originStart = origin; CapturePointer(e.Pointer); dragging = true; return; }
         if (!e.GetCurrentPoint(this).Properties.IsLeftButtonPressed) return;
         if(PastingRegion){PlaceRegion();e.Handled=true;return;}
