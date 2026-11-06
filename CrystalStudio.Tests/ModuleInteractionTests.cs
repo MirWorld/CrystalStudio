@@ -218,7 +218,7 @@ public sealed class ModuleInteractionTests
     public async Task SearchPreservesSelectionAndStaleOrFailedPreviewsCannotApply()
     {
         using var fixture = new PoolFixture();
-        var dialog = new ModuleGenerationWindow(new(128, 128), fixture.Index, null); dialog.Show();
+        var dialog = new ModuleGenerationWindow(fixture.Index, null); dialog.Show();
         try
         {
             dialog.SelectModules(["room"]); dialog.SearchBox.Text = "terminal";
@@ -256,7 +256,7 @@ public sealed class ModuleInteractionTests
         using var fixture = new PoolFixture();
         var entry = fixture.Index.Objects[0];
         var bad = entry with { Connections = entry.Connections! with { Points = [new("broken", 1, 1, ModuleEdge.North, "path")] } };
-        var dialog = new ModuleGenerationWindow(new(64, 64), fixture.Index with { Objects = [bad] }, null); dialog.Show();
+        var dialog = new ModuleGenerationWindow(fixture.Index with { Objects = [bad] }, null); dialog.Show();
         try
         {
             await dialog.GeneratePreviewAsync(); Assert.Equal(ModuleGenerationViewState.Failed, dialog.ViewState);

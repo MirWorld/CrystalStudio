@@ -188,6 +188,96 @@ public sealed class ModuleGenerationTests
         Assert.Throws<InvalidDataException>(() => ModuleGeneration.Generate(new(64, 64), [Room()], new(count, 1, new(0, 0, width, height), ModuleLayout.Compact)));
 
     [Fact]
+    public void NoRootReportsAreaSizeInsteadOfSuggestingAnotherSeed()
+    {
+        var error = Assert.Throws<InvalidDataException>(() => ModuleGeneration.Generate(new(64, 64), [Room()],
+            Options() with { Area = new(8, 10, 3, 3) }));
+        var problem = Assert.IsType<ModuleProblem>(ModuleDiagnostics.Read(error));
+        Assert.Equal("generation-area-size", problem.Code); Assert.Equal(8, problem.X); Assert.Equal(10, problem.Y);
+        Assert.Contains("3 × 3", error.Message); Assert.Contains("Room: 4 × 4", error.Message);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void NoRootReportsExistingArtworkOrCollisionWithoutChangingIt(bool collision)
+    {
+        var map = new MapDocument(8, 8);
+        for (int y = 0; y < 8; y++) for (int x = 0; x < 8; x++)
+            map.Set(x, y, new Cell { BackImage = collision ? 0x20000000 : 1 });
+        long revision = map.PickupRevision;
+        var error = Assert.Throws<InvalidDataException>(() => ModuleGeneration.Generate(map, [Room()], Options() with { Area = new(0, 0, 8, 8) }));
+        Assert.Equal("generation-area-occupied", ModuleDiagnostics.Read(error)?.Code);
+        Assert.Contains("64 cells", error.Message); Assert.Contains("blank map", error.Message);
+        Assert.Equal(revision, map.PickupRevision); Assert.Empty(map.PlacedStamps);
+        Assert.All(map.Cells, c => Assert.Equal(collision ? 0x20000000 : 1, c.Value.BackImage));
+    }
+
+    [Fact]
+    public void NoRootDistinguishesGroundAlignmentFromOccupiedArea()
+    {
+        var error = Assert.Throws<InvalidDataException>(() => ModuleGeneration.Generate(new(64, 64), [Room(ground: true)],
+            Options() with { Area = new(1, 1, 4, 4) }));
+        Assert.Equal("generation-ground-alignment", ModuleDiagnostics.Read(error)?.Code);
+    }
+
+    [Fact]
+    public void UnsearchedOriginsAreNotReportedAsImpossibleOrOccupied()
+    {
+        var map = new MapDocument(64, 64); map.Set(30, 30, new Cell { MiddleImage = 1 });
+        var error = Assert.Throws<InvalidDataException>(() => ModuleGeneration.Generate(map, [Room()], Options() with { SearchLimit = 1 }));
+        Assert.Equal("generation-search-limit", ModuleDiagnostics.Read(error)?.Code);
+        Assert.Contains("best attempt: 0", error.Message);
+        Assert.Equal(12, ModuleGeneration.Generate(map, [Room()], Options()).Placement.Placements.Count);
+    }
+
+    [Fact]
+    public void IncompatibleWidthsExplainWhySeedChangesCannotConnectThePool()
+    {
+        var module = Room() with { Connections = new(1, [
+            new("north", 1, 0, ModuleEdge.North, "path", 1),
+            new("south", 1, 3, ModuleEdge.South, "path", 2)]) };
+        var error = Assert.Throws<InvalidDataException>(() => ModuleGeneration.Generate(new(64, 64), [module], Options()));
+        Assert.Equal("generation-connections", ModuleDiagnostics.Read(error)?.Code);
+        Assert.Contains("equal width", error.Message); Assert.Contains("Target: 12", error.Message);
+    }
+
+    [AvaloniaFact]
+    public async Task ReferenceDimensionsInvalidatePreviewAndAdaptToSmallOrLargeHints()
+    {
+        using var fixture = new CatalogueFixture();
+        var dialog = new ModuleGenerationWindow(fixture.Index, null); dialog.Show();
+        try
+        {
+            dialog.WidthBox.Text = "64"; dialog.HeightBox.Text = "32";
+            await dialog.GeneratePreviewAsync();
+            var plan = Assert.IsType<ModuleGenerationPlan>(dialog.Plan);
+            Assert.Equal(64, plan.Placement.Source.Width); Assert.Equal(32, plan.Placement.Source.Height);
+            Assert.Empty(plan.Placement.Source.Cells); Assert.Equal(new ModuleArea(0, 0, 64, 32), plan.Options.Area);
+            foreach (var dimensions in new[] { ("bad", "32"), ("0", "32"), ("-1", "32") })
+            {
+                dialog.WidthBox.Text = dimensions.Item1; dialog.HeightBox.Text = dimensions.Item2;
+                Assert.Null(dialog.Plan); Assert.False(dialog.TryAccept());
+                await dialog.GeneratePreviewAsync();
+                Assert.Equal(ModuleGenerationViewState.Failed, dialog.ViewState);
+                Assert.Same(plan, dialog.DisplayedPlan); Assert.False(dialog.ApplyButton.IsEnabled);
+            }
+            dialog.WidthBox.Text = "32"; dialog.HeightBox.Text = "64"; await dialog.GeneratePreviewAsync();
+            Assert.True(dialog.TryAccept()); Assert.Equal(32, dialog.Plan!.Placement.Source.Width);
+            Assert.NotSame(plan.Placement.Source, dialog.Plan.Placement.Source);
+            foreach (string hint in new[] { "1", "4096" })
+            {
+                dialog.WidthBox.Text = hint; dialog.HeightBox.Text = hint; await dialog.GeneratePreviewAsync();
+                Assert.True(dialog.TryAccept()); Assert.Equal(12, dialog.Plan!.Placement.Placements.Count);
+                Assert.InRange((long)dialog.Plan.Placement.Source.Width * dialog.Plan.Placement.Source.Height, 256, 1_000_000);
+                Assert.Contains("Actual new map:", dialog.Feedback.Text);
+                Assert.Equal(hint, dialog.WidthBox.Text); // Keep the user's hint, show actual dimensions separately.
+            }
+        }
+        finally { dialog.Close(); }
+    }
+
+    [Fact]
     public void CancellationAndInvalidPoolsAreRejectedBeforeModifyingTheMap()
     {
         var map = new MapDocument(64, 64);
@@ -240,13 +330,13 @@ public sealed class ModuleGenerationTests
     [AvaloniaFact]
     public async Task AutomaticDialogLoadsThePoolAndGeneratesWithoutManualModuleOrPortSelection()
     {
-        using var fixture = new CatalogueFixture(); var map = new MapDocument(64, 64);
-        var dialog = new ModuleGenerationWindow(map, fixture.Index, null); dialog.Show();
+        using var fixture = new CatalogueFixture();
+        var dialog = new ModuleGenerationWindow(fixture.Index, null); dialog.Show();
         try
         {
             dialog.SeedBox.Text = "17"; await dialog.GeneratePreviewAsync();
             Assert.NotNull(dialog.Plan); Assert.Equal(12, dialog.Plan.Placement.Placements.Count); Assert.True(dialog.TryAccept());
-            Assert.Empty(map.Cells); Assert.True(dialog.ApplyButton.IsEnabled);
+            Assert.Empty(dialog.Plan.Placement.Source.Cells); Assert.True(dialog.ApplyButton.IsEnabled);
             dialog.LayoutBox.SelectedItem = ModuleLayout.Chain; Assert.Null(dialog.Plan); Assert.False(dialog.ApplyButton.IsEnabled);
             await dialog.GeneratePreviewAsync(); Assert.NotNull(dialog.Plan);
             Assert.All(dialog.Plan.Links, link => Assert.Equal(link.Second - 1, link.First));
@@ -260,28 +350,29 @@ public sealed class ModuleGenerationTests
     [AvaloniaFact]
     public async Task ChangesAndClosingCancelInflightGenerationAndInvalidInputsCannotApply()
     {
-        using var fixture = new CatalogueFixture(); var map = new MapDocument(64, 64);
-        var dialog = new ModuleGenerationWindow(map, fixture.Index, null); dialog.Show();
+        using var fixture = new CatalogueFixture();
+        var dialog = new ModuleGenerationWindow(fixture.Index, null); dialog.Show();
         var work = dialog.GeneratePreviewAsync(); dialog.SeedBox.Text = "21"; await work;
         Assert.Null(dialog.Plan); Assert.False(dialog.ApplyButton.IsEnabled);
         dialog.CountBox.Text = "bad"; await dialog.GeneratePreviewAsync(); Assert.False(dialog.TryAccept());
         dialog.CountBox.Text = "129"; await dialog.GeneratePreviewAsync(); Assert.Null(dialog.Plan);
+        Assert.Contains("placed module instances", dialog.Feedback.Text);
         dialog.CountBox.Text = "12"; work = dialog.GeneratePreviewAsync(); dialog.Close(); await work;
-        Assert.Null(dialog.Plan); Assert.Empty(map.Cells);
+        Assert.Null(dialog.Plan);
     }
 
     [AvaloniaFact]
-    public async Task DialogRejectsStaleMapAndRereadsChangedModuleFiles()
+    public async Task DialogRejectsMutatedPlanAndRereadsChangedModuleFiles()
     {
-        using var fixture = new CatalogueFixture(); var map = new MapDocument(64, 64);
-        var dialog = new ModuleGenerationWindow(map, fixture.Index, null); dialog.Show();
+        using var fixture = new CatalogueFixture();
+        var dialog = new ModuleGenerationWindow(fixture.Index, null); dialog.Show();
         try
         {
             await dialog.GeneratePreviewAsync(); Assert.NotNull(dialog.Plan);
-            map.Set(0, 0, new Cell { MiddleImage = 9 }); Assert.False(dialog.TryAccept()); Assert.Null(dialog.Plan);
+            dialog.Plan.Placement.Source.Set(0, 0, new Cell { MiddleImage = 9 }); Assert.False(dialog.TryAccept()); Assert.Null(dialog.Plan);
             File.WriteAllText(Path.Combine(fixture.Root, "room.X"), "bad");
             await dialog.GeneratePreviewAsync(); Assert.Null(dialog.Plan); Assert.False(dialog.ApplyButton.IsEnabled);
-            Assert.Contains("Room", dialog.Feedback.Text); Assert.Single(map.Cells);
+            Assert.Contains("Room", dialog.Feedback.Text);
         }
         finally { dialog.Close(); }
     }
@@ -290,9 +381,10 @@ public sealed class ModuleGenerationTests
     public async Task AutomaticPreviewRendersArtworkAndAllConnections()
     {
         using var fixture = new CatalogueFixture(); using var assets = AssetStore.Load(Path.Combine(TestApplication.Root, "Data"));
-        var dialog = new ModuleGenerationWindow(new(64, 64), fixture.Index, assets); dialog.Show();
+        var dialog = new ModuleGenerationWindow(fixture.Index, assets); dialog.Show();
         try
         {
+            dialog.WidthBox.Text = "16"; dialog.HeightBox.Text = "16";
             dialog.SeedBox.Text = "18"; await dialog.GeneratePreviewAsync(); Dispatcher.UIThread.RunJobs(); Assert.NotNull(dialog.Plan);
             for (int attempt = 0; attempt < 100 && assets.Get(1, 0) == null; attempt++) { await Task.Delay(20); Dispatcher.UIThread.RunJobs(); }
             dialog.GetVisualDescendants().OfType<MapViewport>().Single().RefreshAssets();
@@ -310,7 +402,7 @@ public sealed class ModuleGenerationTests
     }
 
     [AvaloniaFact]
-    public async Task ToolsMenuOpensAutomaticGenerationWithTheCurrentSelection()
+    public async Task ToolsMenuIgnoresOriginalSelectionAndLocksAndCancelPreservesTheMap()
     {
         var window = new MainWindow(new AssetHistoryStore(Path.Combine(TestApplication.Root, "automatic-assets.json")),
             new RecentMapStore(Path.Combine(TestApplication.Root, "automatic-maps.json"))); window.Show();
@@ -319,21 +411,83 @@ public sealed class ModuleGenerationTests
             for (int i = 0; i < 500 && (window.FindControl<MapViewport>("Viewport")!.Assets == null || !window.FindControl<MenuItem>("NewButton")!.IsEnabled); i++)
             { await Task.Delay(20); Dispatcher.UIThread.RunJobs(); }
             var viewport = window.FindControl<MapViewport>("Viewport")!;
-            typeof(MapViewport).GetProperty("Selection")!.SetValue(viewport, new Rect(8, 10, 32, 24));
+            var original = viewport.Document; original.Set(8, 10, new Cell { MiddleImage = 9 });
+            var selection = new Rect(8, 10, 32, 24);
+            viewport.SetLayerLocked(MapLayer.Ground, true);
+            typeof(MapViewport).GetProperty("Selection")!.SetValue(viewport, selection);
+            var tabs = window.GetVisualDescendants().OfType<TabControl>().Single(t => t.Name == "MapTabs");
+            int tabCount = tabs.Items.Count;
             bool opened = false;
             using var handler = Window.WindowOpenedEvent.AddClassHandler<ModuleGenerationWindow>((dialog, _) => Dispatcher.UIThread.Post(() =>
             {
-                Assert.Equal("8", dialog.XBox.Text); Assert.Equal("10", dialog.YBox.Text);
-                Assert.Equal("32", dialog.WidthBox.Text); Assert.Equal("24", dialog.HeightBox.Text);
+                Assert.Equal("256", dialog.WidthBox.Text); Assert.Equal("256", dialog.HeightBox.Text);
+                Assert.Equal(LocalText.T("Create new map"), dialog.ApplyButton.Content);
                 opened = true; dialog.DialogResult = false;
             }));
             var button = window.FindControl<MenuItem>("GenerateModulesButton")!;
             Assert.Null(window.FindControl<MenuItem>("JoinModulesButton"));
+            Assert.NotNull(window.FindControl<MenuItem>("SplitMapModulesButton"));
             Assert.True(button.IsEnabled); button.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent, button));
             for (int i = 0; i < 500 && !opened; i++) { await Task.Delay(20); Dispatcher.UIThread.RunJobs(); }
             Assert.True(opened); Assert.False(viewport.History.Dirty);
+            Assert.Equal(tabCount, tabs.Items.Count); Assert.Same(original, viewport.Document);
+            Assert.Equal(selection, viewport.Selection); Assert.True(viewport.IsLayerLocked(MapLayer.Ground));
+            Assert.Equal((ushort)9, original.Get(8, 10).MiddleImage);
         }
         finally { window.Close(); }
+    }
+
+    [AvaloniaFact]
+    public async Task CreatingGeneratedMapOpensANewTabWithIndependentUndoAndPreservesOriginalState()
+    {
+        using var fixture = new CatalogueFixture();
+        var window = new MainWindow(new AssetHistoryStore(Path.Combine(TestApplication.Root, "new-module-assets.json")),
+            new RecentMapStore(Path.Combine(TestApplication.Root, "new-module-maps.json"))); window.Show();
+        try
+        {
+            for (int i = 0; i < 500 && !window.FindControl<MenuItem>("NewButton")!.IsEnabled; i++)
+            { await Task.Delay(20); Dispatcher.UIThread.RunJobs(); }
+            var viewport = window.FindControl<MapViewport>("Viewport")!;
+            var original = viewport.Document; var originalHistory = viewport.History;
+            original.Set(8, 10, new Cell { MiddleImage = 9 }); originalHistory.MarkUnsaved();
+            long revision = original.PickupRevision;
+            var selection = new Rect(8, 10, 32, 24);
+            viewport.SetLayerLocked(MapLayer.Ground, true);
+            typeof(MapViewport).GetProperty("Selection")!.SetValue(viewport, selection);
+            var tabs = window.GetVisualDescendants().OfType<TabControl>().Single(t => t.Name == "MapTabs");
+            var originalTab = tabs.SelectedItem; int tabCount = tabs.Items.Count;
+            Exception? failure = null; bool created = false;
+            using var handler = Window.WindowOpenedEvent.AddClassHandler<ModuleGenerationWindow>((dialog, _) => Dispatcher.UIThread.Post(async () =>
+            {
+                try
+                {
+                    dialog.WidthBox.Text = "64"; dialog.HeightBox.Text = "48";
+                    await dialog.GeneratePreviewAsync(); Assert.True(dialog.TryAccept());
+                    Dispatcher.UIThread.RunJobs();
+                    var point = dialog.ApplyButton.TranslatePoint(new Point(dialog.ApplyButton.Bounds.Width / 2, dialog.ApplyButton.Bounds.Height / 2), dialog)!.Value;
+                    Assert.InRange(point.Y, 0, dialog.Bounds.Height);
+                    dialog.MouseDown(point, Avalonia.Input.MouseButton.Left); dialog.MouseUp(point, Avalonia.Input.MouseButton.Left);
+                    Assert.False(dialog.IsVisible);
+                    created = true;
+                }
+                catch (Exception error) { failure = error; dialog.DialogResult = false; }
+            }));
+            typeof(MainWindow).GetMethod("ShowModuleGeneration", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!
+                .Invoke(window, [fixture.Index]);
+            Assert.Null(failure); Assert.True(created); Assert.Equal(tabCount + 1, tabs.Items.Count);
+            var generated = viewport.Document;
+            Assert.NotSame(original, generated); Assert.Equal(64, generated.Width); Assert.Equal(48, generated.Height);
+            Assert.Equal(12, generated.PlacedStamps.Count); Assert.True(viewport.History.Dirty);
+            Assert.False(viewport.AnyLayerLocked); Assert.Null(viewport.Selection);
+            Assert.Equal(revision, original.PickupRevision); Assert.Single(original.Cells);
+            viewport.Undo(); Assert.Empty(generated.Cells); Assert.Empty(generated.PlacedStamps);
+            viewport.Redo(); Assert.Equal(12, generated.PlacedStamps.Count);
+            viewport.History.Saved(); tabs.SelectedItem = originalTab;
+            Assert.Same(original, viewport.Document); Assert.Same(originalHistory, viewport.History);
+            Assert.True(viewport.History.Dirty); Assert.Equal(selection, viewport.Selection);
+            Assert.True(viewport.IsLayerLocked(MapLayer.Ground)); Assert.Equal((ushort)9, original.Get(8, 10).MiddleImage);
+        }
+        finally { window.FindControl<MapViewport>("Viewport")!.History.Saved(); window.Close(); }
     }
 
     private sealed class CatalogueFixture : IDisposable

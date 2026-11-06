@@ -20,7 +20,7 @@ public partial class MainWindow
             if (dialog.Saved == null) return;
             categoryIndex = StampCategories.Read(index); selectedStampPath = null; selectedStampPreview = null;
             await DiscoverStampsAsync(); if (CategoryPalette) BuildPage(); UpdateLabels(); UpdateMapTabLabels();
-            Status.Text = LocalText.T("Module saved. Open a blank map and use Tools → Generate modules automatically.");
+            Status.Text = LocalText.T("Module saved. Use Tools → Generate modules automatically to create a new map.");
         });
     }
 }

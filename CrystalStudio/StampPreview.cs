@@ -3,14 +3,26 @@ namespace CrystalStudio;
 
 public static class StampPreview
 {
-    public static RasterImage? Create(IReadOnlyList<StampCell> cells, AssetStore assets, int width = 160, int height = 112, CancellationToken cancellation = default, Rect? area = null, bool waitForAssets = false, bool fastRaster = false)
+    public static RasterImage? Create(IReadOnlyList<StampCell> cells, AssetStore assets, int width = 160, int height = 112, CancellationToken cancellation = default, Rect? area = null, bool waitForAssets = false, bool fastRaster = false, bool mapGroundGrid = false)
     {
         if(width < 16 || height < 16 || width > 4096 || height > 4096) throw new ArgumentOutOfRangeException(nameof(width));
+        if (mapGroundGrid && cells.Count > 0)
+        {
+            // Equivalent cropped modules must rasterize identically. Normalize the
+            // even origin before scaling, avoiding different floating-point rounding
+            // for negative .X coordinates and positive map coordinates.
+            int ox = cells.Min(c => c.X) & ~1, oy = cells.Min(c => c.Y) & ~1;
+            if (ox != 0 || oy != 0)
+            {
+                cells = cells.Select(c => c with { X = checked(c.X - ox), Y = checked(c.Y - oy) }).ToArray();
+                if (area is { } crop) area = new(crop.X - ox * 48.0, crop.Y - oy * 32.0, crop.Width, crop.Height);
+            }
+        }
         var commands = new List<(int Layer,int X,int Y,int Library,int Image,bool Blend)>();
         foreach (var s in cells)
         {
             cancellation.ThrowIfCancellationRequested();
-            if ((s.Cell.BackImage & 0x1FFFFFFF) > 0) commands.Add((0,s.X,s.Y,s.Cell.BackLibrary,(s.Cell.BackImage & 0x1FFFFFFF)-1,false));
+            if ((s.Cell.BackImage & 0x1FFFFFFF) > 0 && (!mapGroundGrid || ((s.X & 1) == 0 && (s.Y & 1) == 0))) commands.Add((0,s.X,s.Y,s.Cell.BackLibrary,(s.Cell.BackImage & 0x1FFFFFFF)-1,false));
             if (s.Cell.MiddleImage > 0) commands.Add((1,s.X,s.Y,s.Cell.MiddleLibrary,s.Cell.MiddleImage-1,MapSpriteDrawing.MiddleBlend(s.Cell.MiddleFrames)));
             foreach(var f in s.Cell.ForegroundImages) if((f.Image & 0x7FFF)>0) commands.Add((2,s.X,s.Y,f.Library,(f.Image & 0x7FFF)-1,MapSpriteDrawing.FrontBlend(f.Frames)));
         }

@@ -9,6 +9,8 @@ internal sealed record ModuleLink(int First, int FirstPort, int Second, int Seco
 internal sealed record ModuleGenerationPlan(ModuleJoinPlan Placement, ModuleGenerationOptions Options,
     IReadOnlyList<ModuleLink> Links, int WalkableCells, int SearchSteps);
 
+internal sealed record ModuleGenerationAttempt(ModuleGenerationPlan? Plan, InvalidDataException? Failure, int BestCount);
+
 internal static class ModuleGeneration
 {
     private sealed record Definition(JoinModule Module, ModuleConnectionRules.Bounds Bounds, int WalkableCount, int? GroundX, int? GroundY);
@@ -44,12 +46,23 @@ internal static class ModuleGeneration
     internal static ModuleGenerationPlan Generate(MapDocument source, IReadOnlyList<JoinModule> modules,
         ModuleGenerationOptions options, CancellationToken cancellation = default)
     {
+        var attempt = TryGenerate(source, modules, options, cancellation);
+        return attempt.Plan ?? throw attempt.Failure!;
+    }
+
+    // Expected layout misses are results, so automatic sizing can retry without throwing UI exceptions.
+    internal static ModuleGenerationAttempt TryGenerate(MapDocument source, IReadOnlyList<JoinModule> modules,
+        ModuleGenerationOptions options, CancellationToken cancellation = default)
+    {
         var area = options.Area;
-        if (options.Count is < 2 or > 128 || !Enum.IsDefined(options.Layout) || options.SearchLimit is < 1 or > 200_000 ||
-            area.X < 0 || area.Y < 0 || area.Width < 2 || area.Height < 2 ||
+        if (options.Count is < 2 or > 128)
+            throw ModuleDiagnostics.Error("generation-count", LocalText.T("Enter 2–128 placed module instances. One selected module type can be reused."));
+        if (!Enum.IsDefined(options.Layout) || options.SearchLimit is < 1 or > 200_000)
+            throw ModuleDiagnostics.Error("generation-options", LocalText.T("Choose a valid layout and search limit."));
+        if (area.X < 0 || area.Y < 0 || area.Width < 2 || area.Height < 2 ||
             (long)area.X + area.Width > source.Width || (long)area.Y + area.Height > source.Height ||
             (long)area.Width * area.Height > 1_000_000)
-            throw new InvalidDataException(LocalText.T("Choose 2–128 modules and a valid generation area of at most 1,000,000 cells."));
+            throw ModuleDiagnostics.Error("generation-area", LocalText.T("The generation area must be inside the target map, at least 2 × 2 and at most 1,000,000 cells."));
         if (modules.Count is < 1 or > 256)
             throw new InvalidDataException(LocalText.T("Select between 1 and 256 modules for automatic generation."));
         if (source.PlacedStamps.Count + options.Count > 100_000)
@@ -89,10 +102,14 @@ internal static class ModuleGeneration
                 list.Add((m, p));
             }
         var random = new Random(options.Seed);
+        bool hasMatchingPorts = compatible.Keys.Any(key =>
+            compatible.ContainsKey(((ModuleEdge)(((int)key.Edge + 2) % 4), key.Kind, key.Width)));
         var positions = new List<Position>();
         var used = new HashSet<(int Module, int Port)>();
         var links = new List<ModuleLink>();
         int steps = 0, best = 0, rootStart = 0;
+        ModuleGenerationAttempt Failed(InvalidDataException error) => new(null, error, best);
+        bool hasSizedRoot = false, hasAlignedRoot = false, searchExhausted = false;
         int rootLimit = Math.Min(options.SearchLimit, Math.Max(options.Count * 32, options.SearchLimit / 32));
         void Step()
         {
@@ -108,6 +125,7 @@ internal static class ModuleGeneration
                 left < area.X || top < area.Y || right >= (long)area.X + area.Width || bottom >= (long)area.Y + area.Height)
                 return false;
             if (definition.GroundX is int gx && ((x & 1) != gx || (y & 1) != definition.GroundY)) return false;
+            if (depth == 0) hasAlignedRoot = true;
             int l = (int)left - area.X, t = (int)top - area.Y, r = (int)right - area.X + 1, b = (int)bottom - area.Y + 1;
             if (occupied[b * stride + r] - occupied[t * stride + r] - occupied[b * stride + l] + occupied[t * stride + l] != 0) return false;
             if (positions.Any(p => left <= p.Bounds.Right && right >= p.Bounds.Left && top <= p.Bounds.Bottom && bottom >= p.Bounds.Top)) return false;
@@ -179,6 +197,7 @@ internal static class ModuleGeneration
                 int total = columns <= 0 || rows <= 0 ? 0 : checked(columns * rows);
                 return (Root: root, Bounds: bounds, Columns: columns, Rows: rows, Total: total, Start: total > 0 ? random.Next(total) : 0);
             }).Where(s => s.Total > 0).ToArray();
+            hasSizedRoot = starts.Length > 0;
             // Alternate root definitions; retry from the corner and other seeded origins when a central layout gets stuck.
             int rootOrigins = starts.Select(s => s.Total).DefaultIfEmpty(0).Max();
             for (int n = -2; n < rootOrigins && !success; n++)
@@ -189,6 +208,13 @@ internal static class ModuleGeneration
                     int cell = n == -2 ? center : n == -1 ? 0 : (start.Start + n) % start.Total;
                     if (n >= 0 && (cell == center || cell == 0)) continue;
                     if (!Fits(start.Root, (long)area.X + cell % start.Columns - start.Bounds.Left, (long)area.Y + cell / start.Columns - start.Bounds.Top, 0, out var position)) continue;
+                    // Once a root fits, incompatible ports cannot be fixed by trying other origins or seeds.
+                    if (!hasMatchingPorts)
+                    {
+                        best = 1;
+                        return Failed(ModuleDiagnostics.Error("generation-connections", LocalText.Format(
+                            "Cannot connect the selected modules: no pair has opposite directions, the same type and equal width. Target: {0}; only one module can be placed. Edit connections or select compatible modules; changing the seed will not help.", options.Count)));
+                    }
                     positions.Add(position);
                     rootStart = steps;
                     try { if (Search()) { success = true; break; } }
@@ -196,9 +222,27 @@ internal static class ModuleGeneration
                     positions.Clear(); used.Clear(); links.Clear();
                 }
         }
-        catch (SearchExhausted) { }
+        catch (SearchExhausted) { searchExhausted = true; }
         if (!success)
-            throw new InvalidDataException(LocalText.Format("Could not generate {0} connected modules (best attempt: {1}). Try a larger area, fewer modules, another seed or more matching modules.", options.Count, best));
+        {
+            if (searchExhausted)
+                return Failed(ModuleDiagnostics.Error("generation-search-limit", LocalText.Format(
+                    "Search limit reached for {0} modules (best attempt: {1}). This does not prove no layout exists. Try an empty area, fewer modules or another seed.", options.Count, best)));
+            if (best == 0)
+            {
+                if (!hasSizedRoot)
+                    return Failed(ModuleDiagnostics.Error("generation-area-size", LocalText.Format(
+                        "No module fits the {0} × {1} generation area. Module sizes: {2}. Expand the area or select smaller modules; reducing the count will not help.",
+                        area.Width, area.Height, string.Join("; ", definitions.Take(8).Select(d => $"{d.Module.Name}: {d.Bounds.Right - d.Bounds.Left + 1} × {d.Bounds.Bottom - d.Bounds.Top + 1}"))), x: area.X, y: area.Y));
+                if (!hasAlignedRoot)
+                    return Failed(ModuleDiagnostics.Error("generation-ground-alignment", LocalText.T(
+                        "No first module can align its ground tiles inside this area. Expand the area or shift its origin by one cell."), x: area.X, y: area.Y));
+                return Failed(ModuleDiagnostics.Error("generation-area-occupied", LocalText.Format(
+                    "No first module fits an empty footprint in area ({0}, {1}), {2} × {3}; {4} cells contain map content. Ground, objects and collision flags all count as occupied. Use a blank map or an empty region, not the source selection used to capture modules.",
+                    area.X, area.Y, area.Width, area.Height, occupied[^1]), x: area.X, y: area.Y));
+            }
+            return Failed(ModuleDiagnostics.Error("generation-layout", LocalText.Format("Could not generate {0} connected modules (best attempt: {1}). Try a larger area, fewer modules, another seed or more matching modules.", options.Count, best)));
+        }
 
         cancellation.ThrowIfCancellationRequested();
         var generated = MapRecoveryStore.Capture(source);
@@ -225,7 +269,7 @@ internal static class ModuleGeneration
             throw new InvalidOperationException(LocalText.T("The map changed after the module preview. Generate a fresh preview."));
         var joined = new ModuleJoinPlan(source, sourceRevision, generated, placements, cells, openings,
             new(positions.Min(p => p.Bounds.Left), positions.Min(p => p.Bounds.Top), positions.Max(p => p.Bounds.Right), positions.Max(p => p.Bounds.Bottom)));
-        return new(joined, options, links.ToArray(), walkable, Math.Min(steps, options.SearchLimit));
+        return new(new(joined, options, links.ToArray(), walkable, Math.Min(steps, options.SearchLimit)), null, positions.Count);
     }
 
     internal static void ValidateModule(JoinModule module, CancellationToken cancellation = default) => Prepare(module, cancellation);
@@ -243,19 +287,21 @@ internal static class ModuleGeneration
             if ((long)width * height > 1_000_000)
                 throw new InvalidDataException(LocalText.T("Preview at most 1,000,000 module cells at once."));
             var mask = new byte[width * height]; Array.Fill(mask, (byte)1);
-            int? gx = null, gy = null;
+            var (gx, gy) = ModuleTerrain.GroundParity(module);
             foreach (var cell in module.Cells)
             {
                 if (cell.Cell.Empty) continue;
                 if (Blocked(cell.Cell)) mask[(cell.Y - bounds.Top) * width + cell.X - bounds.Left] = 0;
-                if ((cell.Cell.BackImage & 0x1FFFFFFF) == 0) continue;
-                if (gx.HasValue && (gx != (cell.X & 1) || gy != (cell.Y & 1)))
-                    throw new InvalidDataException(LocalText.T("The connection would misalign ground tiles. Use even ground coordinates and compatible module sizes."));
-                gx = cell.X & 1; gy = cell.Y & 1;
+
             }
             int walkable = mask.Count(value => value != 0);
             if (walkable == 0 || Flood(mask, width, cancellation) != walkable)
-                throw ModuleDiagnostics.Error("connectivity", LocalText.T("All walkable cells and connections inside a module must be connected without leaving its footprint."));
+                {
+                int isolated = Array.IndexOf(mask, (byte)1);
+                throw ModuleDiagnostics.Error("connectivity", LocalText.T("All walkable cells and connections inside a module must be connected without leaving its footprint."),
+                    x: isolated < 0 ? bounds.Left : bounds.Left + isolated % width,
+                    y: isolated < 0 ? bounds.Top : bounds.Top + isolated / width);
+            }
             var copy = new JoinModule(module.Name, module.Cells.Where(c => !c.Cell.Empty).Select(c => c with { Cell = c.Cell.Copy() }).ToArray(),
                 module.Connections with { Points = module.Connections.Points.ToList() });
             return new(copy, bounds, walkable, gx, gy);
@@ -289,8 +335,7 @@ internal static class ModuleGeneration
         return count;
     }
 
-    private static bool Blocked(Cell cell) => (cell.BackImage & 0x60000000) != 0 ||
-        cell.Foreground is { } front && (front.Image & 0x8000) != 0;
+    private static bool Blocked(Cell cell) => ModuleTerrain.Blocked(cell);
     private static int Flood(byte[] mask, int width, CancellationToken cancellation)
     {
         int first = Array.IndexOf(mask, (byte)1);

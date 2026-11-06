@@ -34,7 +34,7 @@ internal static class ModuleCapture
         var footprint = new ModuleFootprint(parityX, parityY, area.Width, area.Height);
         var lookup = cells.ToDictionary(c => (c.X, c.Y), c => c.Cell);
         bool Walkable(int x, int y) => !lookup.TryGetValue((x, y), out var cell) ||
-            ((cell.BackImage & 0x60000000) == 0 && (cell.Foreground == null || (cell.Foreground.Image & 0x8000) == 0));
+            !ModuleTerrain.Blocked(cell);
         var points = new List<ModuleConnection>();
         var claimed = new HashSet<(int X, int Y)>();
         // North/south own walkable corners. Adjacent edges never propose overlapping openings.
@@ -73,7 +73,7 @@ internal static class ModuleCapture
             Flush(length);
         }
         token.ThrowIfCancellationRequested();
-        var result = new ModuleCaptureDraft(source, revision, cells, new(1, points) { Footprint = footprint });
+        var result = new ModuleCaptureDraft(source, revision, cells, new(1, points) { Footprint = footprint, MapGroundGrid = true });
         EnsureCurrent(result);
         return result;
     }
@@ -89,7 +89,7 @@ internal static class ModuleCapture
     {
         token.ThrowIfCancellationRequested(); EnsureCurrent(draft);
         ValidateName(name);
-        var reviewed = connections with { Footprint = draft.Connections.Footprint };
+        var reviewed = connections with { Footprint = draft.Connections.Footprint, MapGroundGrid = true };
         ModuleGeneration.ValidateModule(new(name.Trim(), draft.Cells, reviewed), token);
         return ModuleConnectionRules.PrepareSave(draft.Cells, reviewed);
     }
@@ -100,48 +100,68 @@ internal static class ModuleCapture
     }
 }
 
+internal sealed record ModuleCaptureRequest(ModuleCaptureDraft Draft, string Name, ModuleConnections Connections,
+    string Tag = "from-selection");
+
 internal static class ModuleCaptureStore
 {
     private static readonly JsonSerializerOptions json = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase, WriteIndented = true };
 
     internal static CategorizedStamp Save(string indexPath, ModuleCaptureDraft draft, string name, ModuleConnections connections,
+        CancellationToken token = default, Action<string>? fault = null) =>
+        SaveBatch(indexPath, [new(draft, name, connections)], token, fault)[0];
+
+    internal static IReadOnlyList<CategorizedStamp> SaveBatch(string indexPath, IReadOnlyList<ModuleCaptureRequest> requests,
         CancellationToken token = default, Action<string>? fault = null)
     {
-        var prepared = ModuleCapture.Prepare(draft, name, connections, token);
+        if (requests.Count is < 1 or > 256)
+            throw new InvalidDataException(LocalText.T("Select between 1 and 256 modules for saving."));
+        long total = 0;
+        var prepared = requests.Select(request =>
+        {
+            var bounds = ModuleConnectionRules.GetBounds(request.Draft.Cells, request.Connections);
+            total += ((long)bounds.Right - bounds.Left + 1) * (bounds.Bottom - bounds.Top + 1);
+            if (total > 4_000_000) throw new InvalidDataException(LocalText.T("The selected module pool is too large. Select fewer modules."));
+            return ModuleCapture.Prepare(request.Draft, request.Name, request.Connections, token);
+        }).ToArray();
         indexPath = Path.GetFullPath(indexPath);
         using var writerLock = new FileStream(indexPath + ".extraction.lock", FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
         byte[] before = File.ReadAllBytes(indexPath);
         var root = JsonNode.Parse(before)?.AsObject() ?? throw new InvalidDataException("Empty catalogue.");
         var index = StampCategories.Read(indexPath);
         var entries = root["objects"]?.AsArray() ?? throw new InvalidDataException("Missing catalogue objects.");
-        string id = "module_" + Guid.NewGuid().ToString("N");
-        if (index.Objects.Any(s => s.Id.Equals(id, StringComparison.OrdinalIgnoreCase)))
-            throw new IOException("Module ID already exists.");
-        string file = "Modules/" + id + ".X";
-        var entry = new CategorizedStamp(id, file, name.Trim(), "Module", null, [], [], [], ["module", "from-selection"],
-            null, "unknown", null, false, "reviewed") { Connections = prepared.Connections };
-        string output = StampCategories.Resolve(index.ObjectRoot, file), temporary = output + "." + Guid.NewGuid().ToString("N") + ".tmp";
-        bool created = false, committed = false;
+        var ids = index.Objects.Select(s => s.Id).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var created = new List<string>(); var temporary = new List<string>(); var saved = new List<CategorizedStamp>();
+        bool committed = false;
         try
         {
-            Directory.CreateDirectory(Path.GetDirectoryName(output)!);
-            CellCodec.SaveStamp(temporary, prepared.Cells);
-            token.ThrowIfCancellationRequested();
-            File.Move(temporary, output); created = true;
-            fault?.Invoke("object");
-            entries.Add(StudioJson.SerializeToNode(entry, json));
-            fault?.Invoke("index");
-            token.ThrowIfCancellationRequested(); ModuleCapture.EnsureCurrent(draft);
+            for (int i = 0; i < requests.Count; i++)
+            {
+                token.ThrowIfCancellationRequested();
+                string id = "module_" + Guid.NewGuid().ToString("N");
+                if (!ids.Add(id)) throw new IOException("Module ID already exists.");
+                string file = "Modules/" + id + ".X";
+                var request = requests[i];
+                var entry = new CategorizedStamp(id, file, request.Name.Trim(), "Module", null, [], [], [], ["module", request.Tag],
+                    null, "unknown", null, false, "reviewed") { Connections = prepared[i].Connections };
+                string output = StampCategories.Resolve(index.ObjectRoot, file), temp = output + "." + Guid.NewGuid().ToString("N") + ".tmp";
+                temporary.Add(temp); Directory.CreateDirectory(Path.GetDirectoryName(output)!);
+                CellCodec.SaveStamp(temp, prepared[i].Cells);
+                token.ThrowIfCancellationRequested(); File.Move(temp, output); created.Add(output);
+                fault?.Invoke("object"); entries.Add(StudioJson.SerializeToNode(entry, json)); saved.Add(entry);
+            }
+            fault?.Invoke("index"); token.ThrowIfCancellationRequested();
+            foreach (var request in requests) ModuleCapture.EnsureCurrent(request.Draft);
             if (!File.ReadAllBytes(indexPath).AsSpan().SequenceEqual(before))
                 throw new IOException(LocalText.T("The catalogue changed during module saving. Open the preview again."));
             AtomicFile.Write(indexPath, stream => StudioJson.Serialize(stream, root, json));
             committed = true;
-            return entry;
+            return saved;
         }
         finally
         {
-            if (File.Exists(temporary)) File.Delete(temporary);
-            if (created && !committed) File.Delete(output);
+            foreach (string path in temporary) if (File.Exists(path)) File.Delete(path);
+            if (!committed) foreach (string path in created) File.Delete(path);
         }
     }
 }

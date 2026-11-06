@@ -9,6 +9,7 @@ internal sealed class ModuleConnectionEditorState
     private readonly Dictionary<(long, long), Cell> lookup = [];
     internal IReadOnlyList<StampCell> Cells { get; }
     internal ModuleFootprint? Footprint { get; }
+    private readonly bool mapGroundGrid;
     internal ModuleConnectionRules.Bounds Bounds { get; }
     internal List<ModuleConnectionEntry> Entries { get; } = [];
     internal string? SelectedId { get; private set; }
@@ -17,14 +18,14 @@ internal sealed class ModuleConnectionEditorState
     internal bool Adding { get; private set; }
     internal ModuleProblem? Problem { get; private set; }
     internal event Action? Changed;
-    internal ModuleConnections Connections => new(1, Entries.Where(e => e.Enabled).Select(e => e.Point).ToList()) { Footprint = Footprint };
+    internal ModuleConnections Connections => new(1, Entries.Where(e => e.Enabled).Select(e => e.Point).ToList()) { Footprint = Footprint, MapGroundGrid = mapGroundGrid };
     internal ModuleConnections PreviewConnections
     {
         get
         {
             var points = Entries.Where(e => e.Enabled && (Draft == null || e.Point.Id != DraftTarget)).Select(e => e.Point).ToList();
             if (Draft != null && (DraftTarget == null || Entries.Any(e => e.Point.Id == DraftTarget && e.Enabled))) points.Add(Draft);
-            return new(1, points) { Footprint = Footprint };
+            return new(1, points) { Footprint = Footprint, MapGroundGrid = mapGroundGrid };
         }
     }
     internal ModuleConnection? Selected => Entries.FirstOrDefault(e => e.Point.Id == SelectedId)?.Point;
@@ -35,6 +36,7 @@ internal sealed class ModuleConnectionEditorState
         if (saved != null && (saved.Version != 1 || saved.Points == null || saved.Points.Any(p => p == null)))
             throw new System.IO.InvalidDataException(LocalText.T("Unsupported connections or more than 64 openings."));
         Cells = cells.Select(c => c with { Cell = c.Cell.Copy() }).ToArray(); Footprint = saved?.Footprint;
+        mapGroundGrid = saved?.MapGroundGrid == true;
         foreach (var cell in Cells)
             if (!lookup.TryAdd((cell.X, cell.Y), cell.Cell)) throw new System.IO.InvalidDataException(LocalText.T("Module contains duplicate cells."));
         Bounds = Cells.Any(c => !c.Cell.Empty) ? ModuleConnectionRules.GetBounds(Cells, saved) : new(0, 0, 0, 0);

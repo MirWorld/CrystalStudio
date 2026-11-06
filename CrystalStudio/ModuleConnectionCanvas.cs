@@ -3,6 +3,7 @@ using System.Globalization;
 namespace CrystalStudio;
 
 internal sealed record ModulePreviewRegion(string Label, ModuleConnectionRules.Bounds Bounds, bool Selected = false);
+internal sealed record ModuleCutPreview(ModuleArea Area, bool Vertical, int Position, bool Invalid = false);
 
 internal sealed class ModuleConnectionCanvas : Grid, IDisposable
 {
@@ -24,6 +25,12 @@ internal sealed class ModuleConnectionCanvas : Grid, IDisposable
     internal bool ShowRegions { get; set; } = true;
     internal Point PointerCellPosition { get; private set; }
     internal IReadOnlyList<ModulePreviewRegion> Regions { get; set; } = [];
+    internal ModuleTerrainAnalysis? Terrain { get; set; }
+    internal bool ShowTerrain { get; set; }
+    internal IReadOnlyList<ModuleArea> ProtectedRegions { get; set; } = [];
+    internal ModuleArea? ProtectionDraft { get; set; }
+    internal ModuleCutPreview? CutPreview { get; set; }
+    internal IReadOnlyList<ModuleConnection> CutOpenings { get; set; } = [];
     internal event Action<int, int>? Pressed, Moved, Released;
     internal event Action? CaptureCancelled;
     internal event Action<Key, KeyModifiers>? Shortcut;
@@ -49,12 +56,12 @@ internal sealed class ModuleConnectionCanvas : Grid, IDisposable
         return ((int)Math.Floor(world.X / 48) + offsetX, (int)Math.Floor(world.Y / 32) + offsetY);
     }
     internal void Fit()
+        => Frame(new(Area.Left, Area.Top, Area.Right - Area.Left + 1, Area.Bottom - Area.Top + 1));
+    internal void Frame(ModuleArea area)
     {
         if (Bounds.Width <= 0 || Bounds.Height <= 0) return;
-        Viewport.SetPreviewZoom(Math.Min((Bounds.Width - 80) / ((Area.Right - Area.Left + 1) * 48.0),
-            (Bounds.Height - 80) / ((Area.Bottom - Area.Top + 1) * 32.0)));
-        Viewport.CenterOnWorld(new((Area.Left + (double)Area.Right + 1 - offsetX * 2.0) * 24,
-            (Area.Top + (double)Area.Bottom + 1 - offsetY * 2.0) * 16));
+        Viewport.SetPreviewZoom(Math.Min((Bounds.Width - 80) / (area.Width * 48.0), (Bounds.Height - 80) / (area.Height * 32.0)));
+        Viewport.CenterOnWorld(new((area.X - offsetX + area.Width / 2.0) * 48, (area.Y - offsetY + area.Height / 2.0) * 32));
         Refresh();
     }
     internal void Locate(int x, int y)
@@ -110,6 +117,32 @@ internal sealed class ModuleConnectionCanvas : Grid, IDisposable
                 dc.DrawRectangle(new SolidColorBrush(Color.FromArgb(210, 15, 20, 26)), null, new Rect(point.X - 2, point.Y - 1, text.Width + 4, text.Height + 2));
                 dc.DrawText(text, point);
             }
+            if (owner.ShowTerrain && owner.Terrain is { } terrain)
+            {
+                var a = owner.CellAt(default); var b = owner.CellAt(new(Bounds.Width, Bounds.Height));
+                int main = terrain.MainId;
+                for (int y = Math.Max(0, a.Y); y <= Math.Min(terrain.Height - 1, b.Y); y++)
+                    for (int x = Math.Max(0, a.X); x <= Math.Min(terrain.Width - 1, b.X);)
+                    {
+                        int id = terrain.Labels[y * terrain.Width + x], end = x + 1;
+                        while (end <= Math.Min(terrain.Width - 1, b.X) && terrain.Labels[y * terrain.Width + end] == id) end++;
+                        var color = id <= 0 ? Color.FromArgb(70, 220, 50, 50) : id == main ? Color.FromArgb(95, 40, 220, 120) : Color.FromArgb(150, 255, 175, 40);
+                        dc.DrawRectangle(new SolidColorBrush(color), null, CellRect(x, y, end - x)); x = end;
+                    }
+                foreach (var region in terrain.Regions.Where(r => r.Id != main))
+                {
+                    var rect = CellRect(region.X, region.Y);
+                    if (!rect.Intersects(new Rect(Bounds.Size))) continue;
+                    dc.DrawEllipse(null, new Pen(Brushes.Orange, 2), rect.Center, 7, 7);
+                    Text($"! {region.Id} · {region.Count}", rect.TopLeft, Brushes.Orange);
+                }
+            }
+            foreach (var area in owner.ProtectedRegions.Concat(owner.ProtectionDraft is { } pd ? [pd] : []))
+            {
+                var rect = CellRect(area.X, area.Y, area.Width, area.Height);
+                dc.DrawRectangle(new SolidColorBrush(Color.FromArgb(45, 180, 130, 240)), new Pen(Brushes.Violet, 2, DashStyle.Dash), rect);
+                Text(LocalText.T("Protected"), rect.BottomLeft - new Vector(0, 18), Brushes.Violet);
+            }
             if (owner.ShowRegions)
             {
                 var regions = owner.Regions.Count == 0 ? new[] { new ModulePreviewRegion("", owner.Area) } : owner.Regions;
@@ -120,12 +153,20 @@ internal sealed class ModuleConnectionCanvas : Grid, IDisposable
                     if (region.Label.Length > 0) Text(region.Label, rect.TopLeft + new Vector(4, 4), Brushes.White);
                 }
             }
+            if (owner.CutPreview is { } cut)
+            {
+                var area = cut.Area; Brush color = cut.Invalid ? Brushes.Red : Brushes.Orange;
+                var a = owner.Screen(cut.Vertical ? cut.Position : area.X, cut.Vertical ? area.Y : cut.Position);
+                var b = owner.Screen(cut.Vertical ? cut.Position : area.X + area.Width, cut.Vertical ? area.Y + area.Height : cut.Position);
+                dc.DrawLine(new Pen(color, 3, DashStyle.Dash), a, b);
+                Text((cut.Invalid ? "! " : "+ ") + cut.Position, a + new Vector(4, 4), color);
+            }
             if (!owner.ShowConnections) return;
-            void Opening(ModuleConnection p, bool draft)
+            void Opening(ModuleConnection p, bool draft, bool cut = false)
             {
                 if (p.Width is < 1 or > 4096 || !Enum.IsDefined(p.Edge)) return;
                 bool selected = p.Id == owner.SelectedId, disabled = owner.Disabled.Contains(p.Id);
-                Brush color = draft ? owner.InvalidDraft ? Brushes.Red : Brushes.Orange : p.Id == owner.InvalidId ? Brushes.Red : disabled ? Brushes.Gray : selected ? Brushes.Cyan : Brushes.LimeGreen;
+                Brush color = draft ? (cut ? owner.CutPreview?.Invalid == true : owner.InvalidDraft) ? Brushes.Red : Brushes.Orange : p.Id == owner.InvalidId ? Brushes.Red : disabled ? Brushes.Gray : selected ? Brushes.Cyan : Brushes.LimeGreen;
                 bool horizontal = p.Edge is ModuleEdge.North or ModuleEdge.South;
                 var rect = CellRect(p.X, p.Y, horizontal ? p.Width : 1, horizontal ? 1 : p.Width);
                 var pen = new Pen(color, selected || draft ? 3 : 2, draft || disabled ? DashStyle.Dash : null);
@@ -150,6 +191,7 @@ internal sealed class ModuleConnectionCanvas : Grid, IDisposable
             foreach (var point in owner.Points)
                 if (owner.Draft == null || point.Id != owner.DraftTarget) Opening(point, false);
             if (owner.Draft is { } draft) Opening(draft, true);
+            foreach (var point in owner.CutOpenings) Opening(point, true, true);
         }
         protected override void OnPointerPressed(PointerPressedEventArgs e)
         {

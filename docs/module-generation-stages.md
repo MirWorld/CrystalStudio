@@ -300,3 +300,228 @@ dotnet test CrystalStudio.Tests/CrystalStudio.Tests.csproj -c Release --no-resto
 dotnet test CrystalStudio.Tests/CrystalStudio.Tests.csproj -c Release --no-restore --filter 'FullyQualifiedName~SelectionIsBidirectionalAndDisabledConnectionsRemainEditableAndVisible' --nologo --logger 'console;verbosity=normal'
 git diff --check
 ```
+
+## 阶段 11：自动生成失败原因诊断（2026-11-06）
+
+## 修改内容
+
+- 针对“目标 12 个、最多放置 0 个”的笼统报错，增加结构化原因：区域尺寸不足、地面格子无法对齐、已有地图内容占用、搜索次数达到上限。
+- 区域不足提示当前大小和模块尺寸；占用提示区域坐标、大小和已有内容格数，说明地面、对象及碰撞均算占用，应使用空白地图或空白区域。
+- 找到可放置的首个模块后，若整个模块池没有方向相反、类型相同且宽度相等的接口对，立即说明匹配条件，避免继续无效搜索和更换种子。
+- 保留地图内容保护规则，未引入覆盖已有地图的行为；接口、素材和目录格式不变。失败通过现有窗口反馈，不产生可应用的部分布局。
+- 排查时确认运行的是旧 worktree 的 Debug 程序；该目录内 3 个自建模块的接口宽度没有相对方向匹配对。仅只读检查数据，没有修改这些模块、切换运行中的程序或恢复 stash。缺少当时地图及选区参数，未断言本次“0 个”的具体成因。
+- 更新生成使用说明。本阶段实现位于 `D:/Code/Mir` 的 `codex/automatic-module-generation` 分支。
+
+## 验证结果
+
+- 仅运行 `ModuleGenerationTests`，**36／36 通过**，包含新增 7 项诊断与窗口验收；未执行全量测试。
+- 新增覆盖小区域、已有地面、碰撞标记、地面奇偶对齐、搜索未完成时不得误报无解、接口宽度不匹配，以及窗口显示失败并禁止应用。
+- 原有三种布局、种子复现、负坐标、精确目标数量、地图内容保护、取消、应用及整体撤销测试继续通过。
+- CrystalStudio Release 构建通过，0 个错误；保留原有依赖 NU1903 警告。
+- `git diff --check` 与本地化 JSON 解析检查通过。
+- 原有 stash 保留，未推送或创建 PR。本轮未进行真实地图人工操作验收。
+
+本阶段验收命令：
+
+```powershell
+dotnet test CrystalStudio.Tests/CrystalStudio.Tests.csproj -c Release --no-restore --filter 'FullyQualifiedName~ModuleGenerationTests' --nologo --logger 'console;verbosity=normal'
+dotnet build CrystalStudio/CrystalStudio.csproj -c Release --no-restore --nologo -v:q
+git diff --check
+```
+
+## 阶段 12：自动生成独立新地图（2026-11-06）
+
+## 修改内容
+
+- 用户确认报错时使用原地图且保留了截取选区，并明确自动生成应创建新地图。入口改为独立新地图流程，不再把当前地图和选区传入生成器，也不受原地图图层锁限制。
+- 生成窗口直接设置新地图宽度／高度，默认 256×256；单边 16～4096，总格数不超过 100 万。每次预览使用新的空白文档，不复制原地图内容。
+- 确认按钮改为“创建新地图”，固定在窗口左下方，避免长提示把按钮挤出可视区域。预览成功后点击按钮才新增标签页；取消或失败不创建地图。
+- 新标签页保留整次布局的单步撤销／重做；原地图内容、选区、图层锁、未保存状态和编辑历史保留。新地图通过现有 Ctrl+S 保存流程保存。
+- 更新使用说明及中英文文案，不再要求用户先手动新建空白地图或取消原选区；接口匹配及连通规则继续保留。
+
+## 验证结果
+
+- 仅测试修改及直接受影响功能，**40／40 通过**：`ModuleGenerationTests` 37 项，生成交互相关测试 2 项，制作模块入库后生成测试 1 项。未运行其他功能的全量测试。
+- 实际鼠标点击“创建新地图”后新增标签页，尺寸正确；整体撤销回到空白地图，重做恢复全部实例。切回原标签页后，原内容、选区、图层锁及未保存历史保持。
+- 菜单入口在原地图有内容、有选区及锁层时仍可打开；取消后不新增标签页，原状态保持。
+- 非整数、过小、单边过大及总格数超限尺寸被拒绝；尺寸变化使旧预览过期，失败保留旧画面且禁止创建。
+- 已导出并查看合成素材截图 `crystal-module-ux/generation-new-map.png`，确认新地图尺寸输入及固定确认按钮可见；不是实际用户素材的人工试玩。
+- Release 编译通过，0 个错误；保留现有依赖 NU1903 警告。本地化 JSON 解析与 `git diff --check` 通过。
+- 修改位于 `D:/Code/Mir` 的 `codex/automatic-module-generation` 分支；原 stash 保留，未提交、推送或创建 PR，没有替换正在运行的旧 Debug 程序及其自建模块数据。
+
+本阶段验收命令：
+
+```powershell
+dotnet test CrystalStudio.Tests/CrystalStudio.Tests.csproj -c Release --no-restore --filter 'FullyQualifiedName~ModuleGenerationTests|FullyQualifiedName~SearchPreservesSelectionAndStaleOrFailedPreviewsCannotApply|FullyQualifiedName~InvalidModuleDiagnosticsIdentifyTheModuleConnectionAndCell|FullyQualifiedName~ReviewWindowUpdatesPreviewRejectsEmptySelectionAndSavesTheReviewedPorts' --nologo --logger 'console;verbosity=normal'
+dotnet build CrystalStudio/CrystalStudio.csproj -c Release --no-restore --nologo -v:q
+git diff --check
+```
+
+## 阶段 13：根据模块占地自动调整地图尺寸（2026-11-06）
+
+## 修改内容
+
+- 将新地图宽高改为参考尺寸，结合所选模块的完整占地及生成实例数量估算起始地图；保留空白边缘及负局部坐标，按偶数地面格对齐。
+- 参考宽高接受正整数；过小值由模块占地与数量推高，过大值归一化，不再直接因为参考尺寸超过 100 万格而拒绝。
+- 初次放置失败时尝试更大区域，并尝试横向／纵向长条区域以适应长走廊。最多尝试 8 种尺寸，每轮最多 25,000 次放置搜索，始终限制单边 4096、总格数 100 万。
+- 窗口显示当前尝试尺寸；预览顶部显示参考值和实际新地图大小。参考输入保持原值，过期预览仍不能创建新地图，停止生成仍有效。
+- 拆分实例数量、区域、搜索参数及最小占地容量诊断；明确 2～128 是生成实例数，一种模块也能重复使用。接口不匹配不触发无效扩图。
+- 搜索未找到布局改为内部结果，自动尝试下一尺寸时不抛出 InvalidDataException；最终失败汇总本轮最佳实例数量，不返回可应用的部分地图，不声称绝对无解。
+- 本次仍在 `D:/Code/Mir` 实施。再次确认用户运行的是旧 worktree 的 Debug 程序；没有替换该进程或迁移其自建模块数据。
+
+## 验证结果
+
+- **49／49 定向测试通过**：`ModuleGenerationTests` 37 项、`ModuleMapGenerationTests` 9 项、生成窗口交互 2 项、制作模块入库后生成 1 项；未运行全量测试。
+- 覆盖三种布局的占地估算、空白边缘、负坐标与地面对齐；长走廊经多轮扩大后达到精确数量，同种子复现结果。
+- 超大参考整数归一化不溢出；最小占地超过容量和实例数量超限分别报错；接口不匹配仅尝试一轮。
+- 尺寸重试中取消立即终止；耗尽尝试汇总最佳数量并保留旧预览，无法创建部分地图。新标签页、原地图状态保留及整体撤销／重做回归通过。
+- 已查看合成素材截图 `crystal-module-ux/generation-auto-size.png`：参考 16×16，实际 18×18；顶部显示实际尺寸，固定创建按钮可见。未描述为真实用户素材的人工验收。
+- Release 编译通过，0 个错误；保留现有 NU1903 依赖警告。本地化 JSON 解析及 `git diff --check` 通过。
+- 原 stash 保留，尚未提交、推送或创建 PR。
+
+本阶段验收命令：
+
+```powershell
+dotnet test CrystalStudio.Tests/CrystalStudio.Tests.csproj -c Release --no-restore --filter 'FullyQualifiedName~ModuleMapGenerationTests|FullyQualifiedName~ModuleGenerationTests|FullyQualifiedName~SearchPreservesSelectionAndStaleOrFailedPreviewsCannotApply|FullyQualifiedName~InvalidModuleDiagnosticsIdentifyTheModuleConnectionAndCell|FullyQualifiedName~ReviewWindowUpdatesPreviewRejectsEmptySelectionAndSavesTheReviewedPorts' --nologo --logger 'console;verbosity=normal'
+dotnet build CrystalStudio/CrystalStudio.csproj -c Release --no-restore --nologo -v:q
+git diff --check
+```
+
+## 阶段 14：模块菜单独立分组（2026-11-06）
+
+## 修改内容
+
+- 在“工具”菜单中，将“从选区生成模块”和“自动生成模块地图”归为同一组，前后用分隔线与其他工具区分。
+
+## 验证结果
+
+- 菜单 XML 结构检查通过：分隔线 → 从选区生成模块 → 自动生成模块地图 → 分隔线。
+- CrystalStudio Release 编译通过，0 个错误；保留现有编译警告。
+- `git diff --check` 通过。仅检查本次菜单改动，未运行无关功能测试。
+
+## 阶段 15：从 .map 批量拆分模块并随机生成（2026-11-06）
+
+## 修改内容
+
+- 按用户选择实现可调整尺寸的网格分块，在模块菜单分组中新增“从地图批量拆分模块”。选择一个 `.map` 文件后读取独立副本，给出分块尺寸建议并自动预览，不修改原文件或当前地图。
+- 分块宽高为 4～512 的偶数，最多 256 块，源地图最多 400 万格；一格边缘余数并入前一块，保留源格子及地面网格对齐。
+- 相邻块的接口成对计算，检查共享边界两侧和各自向内一格的碰撞；避开角点重叠，长接口按最多 64 格拆分。空白块、内部不连通、接口过多或没有有效相邻接口的块标明原因并禁止入库。
+- 列表与画布双向定位，显示分块边界、当前块接口及不可用原因；可勾选分块、批量选择有效块、调整尺寸重新预览。过期结果不能保存。
+- 支持“所选模块入库”和“入库并随机生成”。后者只使用本批保存的模块，自动进入生成预览；沿用实例数量、种子、布局和自适应地图尺寸，确认后创建新地图。
+- 批量保存复用单模块保存入口，统一持有目录写锁，先准备并校验所有模块，最后一次提交目录。失败、取消或源内容变化时回滚本批新增文件，不覆盖已有模块，保留目录扩展字段。
+- 保存中关闭窗口会等待事务结果，关闭后不自动继续生成。补齐中英文提示和使用文档，并修正旧入库提示中“先打开空白地图”的过时步骤。
+
+## 验证结果
+
+- 定向验收 **88／88 通过**：`ModuleMapSplitTests` 16 项、`ModuleCaptureTests` 33 项、`ModuleGenerationTests` 37 项、生成交互相关 2 项；未运行全量测试。
+- `.map` 读取 → 分块 → 批量保存 → 模块重新加载 → 随机生成 → 应用／撤销／重做 → 保存重开流程通过，源地图文件字节保持不变。
+- 覆盖边界及向内格碰撞、前景碰撞、余数边缘、空白块、断连分块及孤立接口清理、地面对齐、超量限制、取消和输入错误。
+- 故障注入覆盖写到第二个对象时失败、取消、目录并发变化和源数据变化；确认所有本批文件回滚，旧目录和旧模块保留。
+- 实际鼠标检查画布选择、列表勾选及“入库并随机生成”按钮；最后针对按钮点击及关闭行为单独复验 **1／1 通过**。尺寸变化禁用保存、无效分块不可勾选、错误原因持续显示和关闭时事务结果明确的测试通过。
+- 已导出并查看合成素材截图 `crystal-module-ux/map-split-preview.png`，确认分块范围、选中高亮、接口、计数和底部操作按钮可见；未进行真实用户地图的人工效果验收。
+- Release 编译通过，0 个错误；保留现有 nullable／XAML／NU1903 警告。菜单分组结构、本地化 JSON 及 `git diff --check` 检查通过。
+- 修改位于 `D:/Code/Mir` 的 `codex/automatic-module-generation` 分支，原 stash 保留；未提交、推送或创建 PR，未迁移旧 Debug 目录里的用户数据。
+
+本阶段验收命令：
+
+```powershell
+dotnet test CrystalStudio.Tests/CrystalStudio.Tests.csproj -c Release --no-restore --filter 'FullyQualifiedName~ModuleMapSplitTests|FullyQualifiedName~ModuleCaptureTests|FullyQualifiedName~ModuleGenerationTests|FullyQualifiedName~SearchPreservesSelectionAndStaleOrFailedPreviewsCannotApply|FullyQualifiedName~InvalidModuleDiagnosticsIdentifyTheModuleConnectionAndCell' --nologo --logger 'console;verbosity=normal'
+dotnet test CrystalStudio.Tests/CrystalStudio.Tests.csproj -c Release --no-restore --filter 'FullyQualifiedName~SplitPreviewSupportsCanvasSelectionCheckboxesAndInvalidatesBeforeSaving' --nologo --logger 'console;verbosity=normal'
+dotnet build CrystalStudio/CrystalStudio.csproj -c Release --no-restore --nologo -v:q
+git diff --check
+```
+
+## 阶段 16：通道拆分规划与真实地图分析（2026-11-06）
+
+## 修改内容
+
+- 明确升级现有“从地图批量拆分模块”功能；用户所指是候选模块选择与拆分，不是选择 AI 模型。
+- 新增 `docs/module-channel-splitting-plan.md`，按地面兼容性与诊断、通道矩形分区、人工选择与调整、入库生成验收四个阶段组织后续工作。
+- 只读分析用户指定的 `D:/客户端/全文件/WWW/Map/632.map`，把实际失败原因纳入方案。此次只增加规划与分析记录，没有把规划中的算法写入产品。
+
+## 验证结果
+
+- 源图为 200×200；模块通行规则下共有 7,509 个可通行格，主通路 7,504 格，另有三处小岛共 5 格。
+- 使用现有代码，以 48×32 分块复现 35 块全部不可用：22 块首先被地面对齐检查拒绝，13 块没有可用接口。其他多组固定尺寸也全部不可用。
+- 检出 10,218 个非偶偶坐标位置的地面图片引用，现有地面奇偶一致性校验会拒绝包含这些数据的模块。
+- 仅对内存副本进行地面引用对照处理后，48×32 网格可用数为 12／35，32×32 为 22／49；这不是正式兼容修复，尚未验证真实素材渲染等价。
+- 已生成并查看碰撞／通行分析图，标出三处孤岛。原 `.map` 分析前后 SHA-256 一致，未保存或覆盖源文件，也未将地图复制进仓库。
+- 只运行临时只读分析程序及文档差异检查，没有重跑无关功能测试；`git diff --check` 通过。
+- 当前产品算法、未提交功能改动及原 stash 保留。后续阶段仍需按方案实施和验收。
+
+
+## 阶段 17：地面兼容与可定位诊断（2026-11-06）
+
+## 修改内容
+
+- 统一模块捕获、接口、拼接与生成的碰撞判断；通路分析按四邻域计算连通区域及距墙距离，保留空白格可通行语义。
+- 地面引用不再因旧地图同时含多个奇偶坐标而全部被拒绝，保留原图片引用和碰撞位。截取模块采用偶数格平移，旧对象继续按原有地面相位对齐。
+- 为区分“原图网格”与旧对象的主动坐标偏移，增加可选 `connections.mapGroundGrid`；目录版本、`.X` 格式及 `footprint` 不变，旧记录无需迁移。接口编辑与保存重开保留该标记。
+- 内部断连及地面诊断携带模块、原因和坐标；画布可显示主通路、其他连通区域与阻挡，并通过区域列表或问题定位检查。
+- 模块缩略图使用主画布的地面格规则，并在绘制前归一化偶数坐标原点，消除裁剪前后负坐标缩放的像素取整差异。
+
+## 验证结果
+
+- 新增 `ModuleTerrainTests` 5 项通过：原始地面引用保留、奇数起点捕获、负坐标、保存重开、旧对象奇数地面对齐、可选字段与编辑保留、前景碰撞和空白通路。
+- 真实 `632.map` 模块保存前与 `.X` 重开后的素材图逐像素相同；原图 SHA-256 保持 `A1AAE49399A94F5EC4E21A47A76222D1A58A17D3E5177D7D4F62BCC7835EA347`。
+- 相关捕获、接口、生成和拼接回归通过；没有修改普通地图检查功能的邻接规则。
+
+## 阶段 18：按通道提出矩形分区（2026-11-06）
+
+## 修改内容
+
+- 原拆分窗口增加“固定网格／按通道拆分”，通道模式将尺寸作为参考。
+- 按距墙距离、开口宽度、横截面稳定性和局部连通情况排序水平／垂直切线；有限深度搜索允许尚未完成细分的中间节点不连通，最终叶子统一校验。
+- 共用矩形分区和接口配对，支持不同大小矩形之间的部分公共边。共享开口两侧及各自向内一格共同通过碰撞检查，避开角点、按 64 格切分长开口，并移除失效邻居的孤立接口。
+- 保证整图覆盖、无重叠与无漏格，最多 256 块；保护已知对象和人工框选区域，无法合法细分的块保留原因，不删除小岛或改写碰撞。
+
+## 验证结果
+
+- 10 种通路样例通过：直道、L/S 弯、T/十字岔路、平行通道、环路、孤岛、尽头及宽度变化；检查完整覆盖、原始格子、有效模块连通性及每个保留接口的实际配对位置。
+- 保护范围、取消、奇数切线、不合法矩形合并、缺口与重叠校验通过。
+- `632.map` 对比（可用模块数／覆盖原图通行格）：48×32 固定网格 **12／4,059**，通道 **33／7,453**；32×32 固定 **22／4,681**，通道 **40／7,455**；64×64 固定 **4／3,391**，通道 **19／7,473**。
+- 48×32 通道模式共 64 个候选，余下 30 块无有效配对接口、1 块内部断连；均保留诊断且不可入库，未声称全部区域都能成为模块。
+
+## 阶段 19：候选选择与人工调整（2026-11-06）
+
+## 修改内容
+
+- 模块列表显示按需加载的素材缩略图、尺寸、接口及候选类型；列表与画布选择联动，勾选独立控制入库。
+- 添加横向／竖向切线、双侧 A/B 开口草稿、完整公共边移动、相邻矩形合并、保护区反向框选和清除。
+- 橙色虚线预览操作，校验失败保留红色草稿及原因并禁止保存；松开提交合法操作，Esc 或失去捕获取消。修改不会绘制或移动地图素材。
+- 局部撤销／重做按一次手势记录，按操作数和格子数限制历史内存。文本框保留文本编辑快捷键；未改变矩形的勾选状态在局部调整及重新预览后保留。
+- 支持网格和通路覆盖开关、通行区域定位、缩放平移与适应画面；参数变化保留旧画面并标记过期，禁止保存或通过撤销恢复过期结果。
+
+## 验证结果
+
+- 实际鼠标／键盘事件验证反向切线拖动、移动、合并、保护、非法切口、Esc、捕获丢失、列表选择、勾选保留、撤销／重做及文本框快捷键。
+- 检查缩放平移后的命中坐标，确认画布只读；草稿与提交前后截图有可辨识变化，双侧开口方向和宽度匹配。
+- 已查看 `channel-cut-draft.png`、`channel-cut-rejected.png` 和真实矿洞的 `channel-real-map-preview.png`，核对线条、开口、高亮、缩略图、中文提示及操作区。
+- 最后将双侧草稿与保存使用的接口计算合并为同一实现，直接受影响的 **42／42** 项复验通过。
+
+## 阶段 20：批量入库与新地图生成验收（2026-11-06）
+
+## 修改内容
+
+- 候选命名改为“前缀-序号”，不再依赖固定网格行列；复用批量事务、目录锁、失败回滚和本批模块生成流程。
+- 补齐使用说明、实施限制与本地真实素材验收入口；测试默认使用合成地图，可通过环境变量指定真实地图和素材目录。
+
+## 验证结果
+
+- 定向模块回归 **178／178** 通过：地形兼容 5、通道拆分 14、网格拆分 16、捕获 33、生成 37、自适应尺寸 9、接口 30、共用拼接 22、原接口／生成交互 12。没有运行仓库全量测试。
+- 最后的配对草稿改动另对受影响 42 项复验，全通过；无外部地图环境变量的合成验收独立 **1／1** 通过。
+- 真实 `632.map`：33 个有效模块批量入库，在新地图生成 12 个实例，实际尺寸 **98×98**；整体应用、撤销、重做、保存重开通过。
+- 素材截图验证模块 `.X` 往返及生成地图 `.map` 往返像素一致；生成地图保存重开后的碰撞逐格一致。原文件哈希和内存修订号不变，实际入库写入临时测试目录，未污染用户模块库。
+- Release 项目编译通过，0 个错误；保留原有 nullable／XAML 编译警告及 `Tmds.DBus.Protocol 0.21.2` 的 NU1903 警告。`git diff --check` 通过。
+- 工作保存在 `D:/Code/Mir` 的 `codex/automatic-module-generation` 分支；原 stash 保留，未提交、推送或创建 PR。
+
+验收报告与截图：`%TEMP%/crystal-module-ux/channel-acceptance.json`、`channel-real-map-preview.png`、`channel-source-module.png`、`channel-reloaded-module.png`、`channel-generated-map.png`；测试结果 `module-channel-final.trx`。生成结果不自动补墙、封闭未使用开口或修补素材接缝，仍需地图设计检查。
+
+```powershell
+$env:CRYSTALSTUDIO_REAL_SPLIT_MAP = 'D:\客户端\全文件\WWW\Map\632.map'
+$env:CRYSTALSTUDIO_REAL_SPLIT_ASSETS = 'D:\客户端\全文件\WWW\Data'
+$env:CRYSTALSTUDIO_MODULE_UX_ARTIFACTS = "$env:TEMP\crystal-module-ux"
+dotnet test CrystalStudio.Tests/CrystalStudio.Tests.csproj -c Release --no-restore --filter 'FullyQualifiedName~ModuleTerrainTests|FullyQualifiedName~ModuleChannelSplitTests|FullyQualifiedName~ModuleMapSplitTests|FullyQualifiedName~ModuleCaptureTests|FullyQualifiedName~ModuleGenerationTests|FullyQualifiedName~ModuleJoiningTests|FullyQualifiedName~ModuleConnectionTests|FullyQualifiedName~ModuleInteractionTests|FullyQualifiedName~ModuleMapGenerationTests' --nologo
+dotnet build CrystalStudio/CrystalStudio.csproj -c Release --no-restore --nologo -v:q
+git diff --check
+```

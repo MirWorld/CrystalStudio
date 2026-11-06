@@ -9,6 +9,10 @@ public sealed record ModuleConnections(int Version, List<ModuleConnection> Point
 {
     [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
     public ModuleFootprint? Footprint { get; init; }
+    // Optional in schema version 1. Older catalogues retain inferred ground phase;
+    // map captures explicitly preserve the renderer's even/even source grid.
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingDefault)]
+    public bool MapGroundGrid { get; init; }
 }
 
 internal static class ModuleConnectionRules
@@ -63,7 +67,7 @@ internal static class ModuleConnectionRules
         var openings = new HashSet<(long, long)>();
         bool Inside(long x, long y) => x >= bounds.Left && x <= bounds.Right && y >= bounds.Top && y <= bounds.Bottom;
         bool Walkable(long x, long y) => !lookup.TryGetValue((x, y), out var cell) ||
-            ((cell.BackImage & 0x60000000) == 0 && (cell.Foreground == null || (cell.Foreground.Image & 0x8000) == 0));
+            !ModuleTerrain.Blocked(cell);
         foreach (var point in connections.Points)
         {
             if (point == null || !Token(point.Id) || !Token(point.Kind) || !ids.Add(point.Id) ||

@@ -8,12 +8,11 @@ internal enum ModuleGenerationViewState { Empty, Generating, Ready, Stale, Faile
 
 internal sealed class ModuleGenerationWindow : EditorWindow
 {
-    private readonly MapDocument source;
     private readonly StampCategoryIndex catalogue;
     private readonly AssetStore? assets;
     private readonly List<ModulePoolItem> choices = [];
     private readonly ContentControl previewHost = new();
-    private readonly TextBlock selectedCount = new(), areaSummary = new(), previewStatus = new() { TextWrapping = TextWrapping.Wrap };
+    private readonly TextBlock selectedCount = new(), previewStatus = new() { TextWrapping = TextWrapping.Wrap };
     private readonly TextBlock instanceInfo = new() { TextWrapping = TextWrapping.Wrap };
     private readonly ProgressBar progress = new() { IsIndeterminate = true, Height = 4, IsVisible = false };
     private readonly Button generate = new() { Content = LocalText.T("Generate connected layout"), Name = "GenerateModuleLayoutButton" };
@@ -31,24 +30,19 @@ internal sealed class ModuleGenerationWindow : EditorWindow
     internal ListBox PoolList { get; } = new() { Height = 240 };
     internal TextBox CountBox { get; } = new() { Text = "12" };
     internal TextBox SeedBox { get; } = new() { Text = Random.Shared.Next(int.MaxValue).ToString(CultureInfo.InvariantCulture) };
-    internal TextBox XBox { get; } = new();
-    internal TextBox YBox { get; } = new();
-    internal TextBox WidthBox { get; } = new();
-    internal TextBox HeightBox { get; } = new();
+    internal TextBox WidthBox { get; } = new() { Text = "256" };
+    internal TextBox HeightBox { get; } = new() { Text = "256" };
     internal ComboBox LayoutBox { get; } = new() { ItemsSource = Enum.GetValues<ModuleLayout>(), SelectedItem = ModuleLayout.Compact };
-    internal Button ApplyButton { get; } = new() { Content = LocalText.T("Apply to map"), IsEnabled = false };
+    internal Button ApplyButton { get; } = new() { Content = LocalText.T("Create new map"), IsEnabled = false };
     internal TextBlock Feedback { get; } = new() { TextWrapping = TextWrapping.Wrap };
     internal ModuleGenerationPlan? Plan { get; private set; }
     internal IReadOnlyList<string> SelectedModuleIds => choices.Where(c => c.Selected).Select(c => c.Entry.Id).ToArray();
 
-    internal ModuleGenerationWindow(MapDocument source, StampCategoryIndex catalogue, AssetStore? assets, ModuleArea? selectedArea = null)
+    internal ModuleGenerationWindow(StampCategoryIndex catalogue, AssetStore? assets)
     {
-        this.source = source; this.catalogue = catalogue; this.assets = assets;
+        this.catalogue = catalogue; this.assets = assets;
         Title = LocalText.T("Generate modules automatically"); Width = 1240; Height = 880; MinWidth = 980; MinHeight = 700;
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
-        var area = selectedArea ?? new ModuleArea(Math.Max(0, (source.Width - 128) / 2), Math.Max(0, (source.Height - 128) / 2), Math.Min(128, source.Width), Math.Min(128, source.Height));
-        XBox.Text = area.X.ToString(CultureInfo.InvariantCulture); YBox.Text = area.Y.ToString(CultureInfo.InvariantCulture);
-        WidthBox.Text = area.Width.ToString(CultureInfo.InvariantCulture); HeightBox.Text = area.Height.ToString(CultureInfo.InvariantCulture);
         var root = new Grid { ColumnDefinitions = new ColumnDefinitions("370,*"), Margin = new Thickness(14) };
         var form = new StackPanel { Spacing = 8, Margin = new Thickness(0, 0, 14, 0) };
         form.Children.Add(new TextBlock { Text = LocalText.T("Module pool (instances may repeat)") });
@@ -87,8 +81,8 @@ internal sealed class ModuleGenerationWindow : EditorWindow
             Grid.SetColumn(b, 1); row.Children.Add(b); parent.Children.Add(row);
         }
         Pair(form, "Module count", CountBox, "Generation seed", SeedBox);
-        var settings = new StackPanel { Spacing = 6 }; Pair(settings, "Area left X", XBox, "Area top Y", YBox); Pair(settings, "Area width", WidthBox, "Area height", HeightBox);
-        form.Children.Add(areaSummary); form.Children.Add(new Expander { Header = LocalText.T("Generation area settings"), Content = settings });
+        Pair(form, "Reference width", WidthBox, "Reference height", HeightBox);
+        form.Children.Add(new TextBlock { Text = LocalText.T("Map size is estimated from module footprints and count. These dimensions are a reference; the generator adjusts them as needed, up to 4096 per side and 1,000,000 cells. The original map is preserved."), TextWrapping = TextWrapping.Wrap });
         form.Children.Add(new TextBlock { Text = LocalText.T("Layout style") }); form.Children.Add(LayoutBox);
         form.Children.Add(new TextBlock { Text = LocalText.T("The generator chooses modules and connections automatically. Chain extends the latest module; Branching spreads outward from the start; Compact prefers nearby connections. Only empty footprints are used."), TextWrapping = TextWrapping.Wrap });
         var commands = new WrapPanel();
@@ -96,10 +90,11 @@ internal sealed class ModuleGenerationWindow : EditorWindow
         var shuffle = new Button { Content = LocalText.T("New seed"), Margin = new Thickness(6, 0, 6, 0) };
         shuffle.Click += (_, _) => SeedBox.Text = Random.Shared.Next(int.MaxValue).ToString(CultureInfo.InvariantCulture); commands.Children.Add(shuffle);
         stop.Click += (_, _) => pending?.Cancel(); commands.Children.Add(stop); form.Children.Add(commands); form.Children.Add(progress); form.Children.Add(Feedback);
-        var actions = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
+        var actions = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Margin = new Thickness(0, 8, 0, 0) };
         ApplyButton.Click += (_, _) => { if (TryAccept()) DialogResult = true; };
-        actions.Children.Add(ApplyButton); actions.Children.Add(new Button { Content = LocalText.T("Cancel"), IsCancel = true }); form.Children.Add(actions);
-        root.Children.Add(new ScrollViewer { Content = form });
+        actions.Children.Add(ApplyButton); actions.Children.Add(new Button { Content = LocalText.T("Cancel"), IsCancel = true });
+        var left = new Grid { RowDefinitions = new RowDefinitions("*,Auto") };
+        left.Children.Add(new ScrollViewer { Content = form }); Grid.SetRow(actions, 1); left.Children.Add(actions); root.Children.Add(left);
         var right = new Grid { RowDefinitions = new RowDefinitions("Auto,Auto,*,Auto") };
         right.Children.Add(previewStatus);
         var toolbar = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 10, Margin = new Thickness(0, 8) };
@@ -109,7 +104,7 @@ internal sealed class ModuleGenerationWindow : EditorWindow
         regions.IsCheckedChanged += (_, _) => Overlays(); connections.IsCheckedChanged += (_, _) => Overlays();
         Grid.SetRow(toolbar, 1); right.Children.Add(toolbar); Grid.SetRow(previewHost, 2); right.Children.Add(previewHost);
         Grid.SetRow(instanceInfo, 3); right.Children.Add(instanceInfo); Grid.SetColumn(right, 1); root.Children.Add(right); Content = root;
-        foreach (var box in new[] { CountBox, SeedBox, XBox, YBox, WidthBox, HeightBox })
+        foreach (var box in new[] { CountBox, SeedBox, WidthBox, HeightBox })
             box.PropertyChanged += (_, change) => { if (change.Property == TextBox.TextProperty) InvalidatePreview(); };
         LayoutBox.SelectionChanged += (_, _) => InvalidatePreview();
         SearchBox.PropertyChanged += (_, change) => { if (change.Property == TextBox.TextProperty) FilterPool(); };
@@ -140,7 +135,6 @@ internal sealed class ModuleGenerationWindow : EditorWindow
     {
         revision++; pending?.Cancel(); Plan = null; Problem = null;
         selectedCount.Text = LocalText.Format("Selected: {0} / {1}", choices.Count(c => c.Selected), choices.Count);
-        areaSummary.Text = LocalText.Format("Area: ({0}, {1}) · {2} × {3}", XBox.Text, YBox.Text, WidthBox.Text, HeightBox.Text);
         SetState(DisplayedPlan == null ? ModuleGenerationViewState.Empty : ModuleGenerationViewState.Stale, LocalText.T("Generate a preview before applying."));
     }
     internal async Task GeneratePreviewAsync()
@@ -149,21 +143,33 @@ internal sealed class ModuleGenerationWindow : EditorWindow
         var selected = choices.Where(c => c.Selected).Select(c => c.Entry).ToArray();
         void Fail(string message) => SetState(ModuleGenerationViewState.Failed, message);
         if (selected.Length is < 1 or > 256) { Fail(LocalText.T("Select between 1 and 256 modules for automatic generation.")); return; }
-        if (!int.TryParse(CountBox.Text, out int count) || !int.TryParse(SeedBox.Text, out int seed) || !int.TryParse(XBox.Text, out int x) || !int.TryParse(YBox.Text, out int y) ||
+        if (!int.TryParse(CountBox.Text, out int count) || !int.TryParse(SeedBox.Text, out int seed) ||
             !int.TryParse(WidthBox.Text, out int width) || !int.TryParse(HeightBox.Text, out int height) || LayoutBox.SelectedItem is not ModuleLayout layout)
-        { Fail(LocalText.T("Enter whole numbers for module count, seed and generation area.")); return; }
+        { Fail(LocalText.T("Enter whole numbers for module count, seed and reference dimensions.")); return; }
+        if (count is < 2 or > 128)
+        { Fail(LocalText.T("Enter 2–128 placed module instances. One selected module type can be reused.")); return; }
+        if (width <= 0 || height <= 0)
+        { Fail(LocalText.T("Enter positive whole numbers for the reference width and height.")); return; }
         int request = revision; using var job = new CancellationTokenSource(); pending = job;
         SetState(ModuleGenerationViewState.Generating, LocalText.T("Selecting and connecting modules…"));
         try
         {
-            var result = await Task.Run(() => ModuleGeneration.Generate(source, ModuleGeneration.LoadPool(catalogue, selected, job.Token), new(count, seed, new(x, y, width, height), layout), job.Token), job.Token);
+            var result = await Task.Run(() => ModuleMapGeneration.Generate(ModuleGeneration.LoadPool(catalogue, selected, job.Token),
+                new(count, seed, width, height, layout), job.Token, area => Dispatcher.UIThread.Post(() =>
+                {
+                    if (!closed && request == revision && ViewState == ModuleGenerationViewState.Generating)
+                        Feedback.Text = LocalText.Format("Trying a {0} × {1} new map based on module footprints…", area.Width, area.Height);
+                })), job.Token);
             if (closed || request != revision || job.IsCancellationRequested) return;
             Plan = DisplayedPlan = result; Preview?.Dispose(); instanceInfo.Text = ""; PoolList.SelectedItem = null;
             Preview = new(result.Placement.Cells, result.Placement.Bounds, assets) { Points = result.Placement.Openings,
                 ShowConnections = connections.IsChecked == true, ShowRegions = regions.IsChecked == true };
             Preview.SetMap(result.Placement.Generated, result.Placement.Bounds);
             UpdateRegions(-1); Preview.Pressed += InspectInstance; previewHost.Content = Preview;
-            SetState(ModuleGenerationViewState.Ready, LocalText.Format("Generated {0} modules and {1} connections. All {2} walkable cells are connected. Seed: {3}. Ctrl+Z undoes the whole layout.", result.Placement.Placements.Count, result.Links.Count, result.WalkableCells, seed));
+            SetState(ModuleGenerationViewState.Ready, LocalText.Format("Reference: {0} × {1}. Actual new map: {2} × {3}.", width, height, result.Placement.Source.Width, result.Placement.Source.Height) + "\n" +
+                LocalText.Format("Generated {0} modules and {1} connections. All {2} walkable cells are connected. Seed: {3}. Ctrl+Z undoes the whole layout.", result.Placement.Placements.Count, result.Links.Count, result.WalkableCells, seed));
+            previewStatus.Text = LocalText.Format("Reference: {0} × {1}. Actual new map: {2} × {3}.", width, height, result.Placement.Source.Width, result.Placement.Source.Height) + "\n" +
+                LocalText.T("Preview ready · click a module to inspect its connections.");
             Dispatcher.UIThread.Post(() => { if (!closed) Preview?.Fit(); });
         }
         catch (OperationCanceledException)
@@ -201,7 +207,7 @@ internal sealed class ModuleGenerationWindow : EditorWindow
     internal bool TryAccept()
     {
         if (Plan == null || ViewState != ModuleGenerationViewState.Ready) return false;
-        if (source.PickupRevision != Plan.Placement.SourceRevision)
+        if (Plan.Placement.Source.PickupRevision != Plan.Placement.SourceRevision)
         { InvalidatePreview(); Feedback.Text = LocalText.T("The map changed after the module preview. Generate a fresh preview."); return false; }
         return true;
     }

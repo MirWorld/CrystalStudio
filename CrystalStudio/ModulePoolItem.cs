@@ -44,7 +44,9 @@ internal sealed class ModulePoolItem : INotifyPropertyChanged, IDisposable
                 {
                     var cells = CellCodec.LoadStamp(StampCategories.Resolve(catalogue.ObjectRoot, Entry.File), job.Token);
                     var b = ModuleConnectionRules.GetBounds(cells, Entry.Connections);
-                    var bitmap = assets == null ? null : StampPreview.Create(cells, assets, 100, 72, job.Token, waitForAssets: true);
+                    var phase = ModuleTerrain.GroundParity(new(Entry.Name, cells, Entry.Connections ?? new(1, [])));
+                    var displayCells = cells.Select(c => c with { X = checked(c.X + (phase.X ?? 0)), Y = checked(c.Y + (phase.Y ?? 0)) }).ToArray();
+                    var bitmap = assets == null ? null : StampPreview.Create(displayCells, assets, 100, 72, job.Token, waitForAssets: true, mapGroundGrid: true);
                     return (Text: Description($"{b.Right - b.Left + 1} × {b.Bottom - b.Top + 1}"), Image: bitmap);
                 }
                 finally { readers.Release(); }

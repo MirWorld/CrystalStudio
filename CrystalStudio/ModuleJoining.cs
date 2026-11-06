@@ -60,10 +60,9 @@ internal static class ModuleJoining
             throw new InvalidDataException(LocalText.T("Too many stamp instances."));
         foreach (var placement in placements)
         {
-            foreach (var cell in placement.Module.Cells)
-                if ((cell.Cell.BackImage & 0x1FFFFFFF) != 0 &&
-                    (((cell.X + placement.X) & 1) != 0 || ((cell.Y + placement.Y) & 1) != 0))
-                    throw new InvalidDataException(LocalText.T("The connection would misalign ground tiles. Use even ground coordinates and compatible module sizes."));
+            var phase = ModuleTerrain.GroundParity(placement.Module);
+            if (phase.X.HasValue && (((placement.X & 1) != phase.X) || ((placement.Y & 1) != phase.Y)))
+                throw ModuleDiagnostics.Error("ground-placement", LocalText.T("The connection would misalign ground tiles. Use even ground coordinates and compatible module sizes."), x: placement.X, y: placement.Y);
         }
         foreach (var area in bounds)
         {
@@ -92,7 +91,7 @@ internal static class ModuleJoining
             { ModuleEdge.North => (0, 1), ModuleEdge.East => (-1, 0), ModuleEdge.South => (0, -1), _ => (1, 0) };
             foreach (var (cx, cy) in ModuleConnectionRules.Opening(opening))
                 foreach (var cell in new[] { generated.Get((int)cx, (int)cy), generated.Get((int)cx + ix, (int)cy + iy) })
-                    if ((cell.BackImage & 0x60000000) != 0 || cell.Foreground is { } front && (front.Image & 0x8000) != 0)
+                    if (ModuleTerrain.Blocked(cell))
                         throw new InvalidDataException(LocalText.T("The joined passage is blocked."));
         }
         cancellation.ThrowIfCancellationRequested();

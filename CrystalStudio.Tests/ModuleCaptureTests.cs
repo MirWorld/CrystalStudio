@@ -241,7 +241,7 @@ public sealed class ModuleCaptureTests
             Assert.True(await dialog.SaveAsync()); Assert.NotNull(dialog.Saved);
             Assert.Equal(2, Assert.Single(StampCategories.Read(fixture.IndexPath).Objects).Connections!.Points.Count);
             Assert.False(await dialog.SaveAsync());
-            var generator = new ModuleGenerationWindow(new(64, 64), StampCategories.Read(fixture.IndexPath), null);
+            var generator = new ModuleGenerationWindow(StampCategories.Read(fixture.IndexPath), null);
             generator.Show();
             try
             {
