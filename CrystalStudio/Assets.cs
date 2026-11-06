@@ -244,7 +244,7 @@ public sealed class AssetStore : IDisposable
     {
         using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, stopToken);
         cancellation.Token.ThrowIfCancellationRequested();
-        level = Math.Clamp(level, 2, 16);
+        level = Math.Clamp(level, 0, 16);
         var result = new ConcurrentDictionary<(int Library, int Image), Sprite>();
         var missing = new List<(int Library, int Image)>();
         foreach (var key in images.Distinct())

@@ -6,17 +6,20 @@ internal static class MinimapExporter
     internal static string DefaultFileName(string? mapPath) =>
         (mapPath == null ? "Untitled" : Path.GetFileNameWithoutExtension(mapPath)) + ".png";
 
-    internal static async Task ExportAsync(MapDocument document, AssetStore assets, string path)
+    internal static async Task ExportAsync(MapDocument document, AssetStore assets, string path, int? width = null, int? height = null)
     {
-        var bitmap = await CreateAsync(document, assets).ConfigureAwait(false);
+        using var bitmap = await CreateAsync(document, assets, width, height).ConfigureAwait(false);
         AtomicFile.Write(path, bitmap.Save);
     }
 
-    internal static async Task<RasterImage> CreateAsync(MapDocument document, AssetStore assets)
+    internal static bool ValidSize(int width, int height) =>
+        width > 0 && height > 0 && (long)width * height <= Array.MaxLength / 4;
+
+    internal static async Task<RasterImage> CreateAsync(MapDocument document, AssetStore assets, int? outputWidth = null, int? outputHeight = null)
     {
-        int width = checked(document.Width * 12), height = checked(document.Height * 8);
+        int width = outputWidth ?? checked(document.Width * 12), height = outputHeight ?? checked(document.Height * 8);
         // Validate before decoding artwork or allocating the output buffer.
-        if (width <= 0 || height <= 0 || (long)width * height * 4 > Array.MaxLength)
+        if (!ValidSize(width, height))
             throw new InvalidOperationException("This map is too large to export as a single PNG.");
 
         var cells = document.Cells.OrderBy(c => c.Key).ToArray();
@@ -41,7 +44,9 @@ internal static class MinimapExporter
         }
 
         // Decode at export resolution, retaining native dimensions and offsets.
-        var sprites = await assets.PrepareOverviewAsync(commands.Select(c => (c.Library, c.Image)), 2, default).ConfigureAwait(false);
+        double scale = Math.Min(width / (document.Width * 48.0), height / (document.Height * 32.0));
+        int level = scale >= 1 ? 0 : Math.Clamp((int)Math.Floor(Math.Log2(1 / scale)), 0, 16);
+        var sprites = await assets.PrepareOverviewAsync(commands.Select(c => (c.Library, c.Image)), level, default).ConfigureAwait(false);
         var drawings = commands.Where(c => sprites.ContainsKey((c.Library, c.Image))).Select(c =>
         {
             var sprite = sprites[(c.Library, c.Image)];
