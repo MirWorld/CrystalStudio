@@ -37,7 +37,8 @@ public partial class MainWindow
         try
         {
             if(version!=pageVersion || (!StampMode && !SavedPalette && !CategoryPalette))return;
-            var cells=await Task.Run(()=>CellCodec.LoadStamp(choice.StampPath!));
+            var format=assets?.Format??AssetSourceFormat.Default;
+            var cells=await Task.Run(()=>CellCodec.LoadStamp(choice.StampPath!,format));
             await Dispatcher.UIThread.InvokeAsync(()=>{
             if(version!=pageVersion || (!StampMode && !SavedPalette && !CategoryPalette))return;
             choice.StampCells=cells;

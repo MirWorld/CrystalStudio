@@ -74,6 +74,50 @@ public sealed class AssetSourceFormatTests
         Assert.Equal(18, Fixture.Pixels(overview[(0, 0)].Bitmap)[0]);
     }
 
+    [AvaloniaFact]
+    public async Task SanxiuCategoryPreviewsResolveAllThreeLayerLibraryIds()
+    {
+        using var files = new TemporaryAssets();
+        files.Write("Tiles.Lib", 5, 18, 32);
+        files.Write("SmTiles2.Lib", 5, 38, 52);
+        files.Write("Objects3.Lib", 5, 58, 72);
+        using var assets = AssetStore.Load(files.Root, AssetSourceFormat.Sanxiu);
+
+        Cell[] layers =
+        [
+            new() { BackLibrary = 0, BackImage = 1 },
+            new() { MiddleLibrary = 1, MiddleImage = 1 },
+            new() { Foreground = new Front(2, 1) }
+        ];
+        for (int i = 0; i < layers.Length; i++)
+        {
+            string path = Path.Combine(files.Root, $"category-layer-{i}.X");
+            CellCodec.SaveStamp(path, [new StampCell(0, 0, layers[i])]);
+            var converted = CellCodec.LoadStamp(path, AssetSourceFormat.Sanxiu).Single().Cell;
+            Assert.Equal(0, converted.BackLibrary);
+            Assert.Equal(i == 1 ? 1001 : 0, converted.MiddleLibrary);
+            Assert.Equal(i == 2 ? (short?)2002 : null, converted.Foreground?.Library);
+            var preview = await MainWindow.RenderCategoryPreviewAsync(path, assets, CancellationToken.None);
+            Assert.NotNull(preview);
+            using (preview)
+            {
+                byte[] pixels = new byte[preview!.PixelWidth * preview.PixelHeight * 4];
+                preview.CopyPixels(pixels, preview.PixelWidth * 4, 0);
+                Assert.True(Enumerable.Range(0, pixels.Length / 4).Any(pixel => pixels[pixel * 4 + 3] != 0),
+                    $"The category preview for layer {i} was transparent.");
+            }
+        }
+
+        string nativePath = Path.Combine(files.Root, "category-native.X");
+        CellCodec.SaveStamp(nativePath, [new StampCell(0, 0, new Cell
+        {
+            MiddleLibrary = 1001, MiddleImage = 1, Foreground = new Front(2002, 1)
+        })]);
+        var alreadyConverted = CellCodec.LoadStamp(nativePath, AssetSourceFormat.Sanxiu).Single().Cell;
+        Assert.Equal(1001, alreadyConverted.MiddleLibrary);
+        Assert.Equal((short?)2002, alreadyConverted.Foreground?.Library);
+    }
+
     [Fact]
     public void SanxiuV6GifUsesItsOwnDimensionsWhenMetadataIsEmpty()
     {

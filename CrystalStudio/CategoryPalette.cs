@@ -363,7 +363,7 @@ public partial class MainWindow
         return Task.Run(() =>
         {
             token.ThrowIfCancellationRequested();
-            var cells=CellCodec.LoadStamp(stampPath,token);
+            var cells=CellCodec.LoadStamp(stampPath,previewAssets.Format,token);
             return StampPreview.Create(cells,previewAssets,120,84,token,waitForAssets:true);
         }, token);
     }
