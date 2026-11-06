@@ -8,7 +8,7 @@ internal sealed partial class NewMapWindow
     {
         if (preferences == null) return;
         bool wasApplying = applyingSelection; applyingSelection = true;
-        PresetBox.ItemsSource = new[] { "Last used settings" }.Concat(preferences.Data.Presets.Keys.OrderBy(name => name)).ToList();
+        PresetBox.ItemsSource = new object[] { new LastSettingsChoice() }.Concat(preferences.Data.Presets.Keys.OrderBy(name => name).Cast<object>()).ToList();
         PresetBox.SelectedItem = selected; applyingSelection = wasApplying;
     }
 

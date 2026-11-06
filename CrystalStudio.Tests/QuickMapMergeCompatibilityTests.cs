@@ -1,11 +1,79 @@
 using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
+using Avalonia.Interactivity;
 using Avalonia.LogicalTree;
+using CrystalStudio.Rendering;
 
 namespace CrystalStudio.Tests;
 
 public sealed class QuickMapMergeCompatibilityTests
 {
+    [AvaloniaFact]
+    public void ReturningBeforeArtworkLoadsKeepsEditsAndPendingResourceSelections()
+    {
+        using var assets = AssetStore.Load(Path.Combine(TestApplication.Root, "Data"));
+        var parameters = new Dictionary<string, string> { ["SeedBox"] = "17", ["BaseList"] = "terrain:pending" };
+        var session = new MapCreationSession(new(MapCreationKind.Terrain), parameters);
+        using var candidates = session.Candidates;
+        var window = new TerrainGeneratorWindow(new(256, 256), assets, new TerrainCatalogue(), parameters);
+        try
+        {
+            QuickMapPreview.Configure(window, session, _ => false);
+            window.FindControl<TextBox>("SeedBox")!.Text = "424242";
+            window.FindControl<Slider>("CoverageSlider")!.Value = .63;
+            window.GetLogicalDescendants().OfType<Button>().Single(button => button.Name == "QuickMapBack")
+                .RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            Assert.False(window.PreferencesRestored);
+            Assert.Equal("424242", session.Parameters["SeedBox"]);
+            Assert.Equal("0.63", session.Parameters["CoverageSlider"]);
+            Assert.Equal("terrain:pending", session.Parameters["BaseList"]);
+        }
+        finally { window.Close(); }
+    }
+
+    [AvaloniaTheory]
+    [InlineData(MapCreationKind.Terrain)]
+    [InlineData(MapCreationKind.Province)]
+    [InlineData(MapCreationKind.Dungeon)]
+    public void QuickPreviewKeepsPrecisionControlsAndInspectionAfterWrappingTheImage(MapCreationKind kind)
+    {
+        using var assets = AssetStore.Load(Path.Combine(TestApplication.Root, "Data"));
+        var terrain = TerrainCatalogue.Load();
+        var walls = WallCatalogue.Read(WallCatalogue.ResolvePath());
+        EditorWindow window = kind switch
+        {
+            MapCreationKind.Terrain => new TerrainGeneratorWindow(new(256, 256), assets, terrain),
+            MapCreationKind.Province => new ProvinceGeneratorWindow(new(256, 256), assets, walls),
+            _ => new TempleGeneratorWindow(new(256, 256), assets, walls, terrain)
+        };
+        using var overview = RasterImage.Create(128, 128, 96, 96, RasterFormats.Bgra32, null, new byte[128 * 128 * 4], 128 * 4);
+        using var alternate = RasterImage.Create(128, 128, 96, 96, RasterFormats.Bgra32, null, new byte[128 * 128 * 4], 128 * 4);
+        using var detail = RasterImage.Create(64, 64, 96, 96, RasterFormats.Bgra32, null, new byte[64 * 64 * 4], 64 * 4);
+        var session = new MapCreationSession(new(kind, 256, 256, SaveImmediately: false));
+        using var candidates = session.Candidates;
+        try
+        {
+            QuickMapPreview.Configure(window, session, _ => false);
+            var controls = window.GetLogicalDescendants().ToArray();
+            var viewport = Assert.Single(controls.OfType<MapPreviewViewport>());
+            Assert.NotEmpty(controls.OfType<GeneratorValueEditor>());
+            Assert.Single(controls.OfType<Button>(), button => button.Name == "QuickMapBack");
+            Assert.Single(controls.OfType<Button>(), button => button.Name == "QuickMapInspectCentre");
+            Assert.Single(controls.OfType<TextBlock>(), text => text.Name == "QuickMapResourceFeedback");
+            var parameters = GeneratorPreferences.Capture(window);
+            var image = window.FindControl<Image>("PreviewImage")!;
+            image.Source = overview;
+            viewport.ChangeZoom(2);
+            image.Source = alternate;
+            Assert.Equal(2, viewport.Zoom);
+            image.Source = detail;
+            Assert.Equal(1, viewport.Zoom);
+            Assert.Equal(parameters.OrderBy(pair => pair.Key), GeneratorPreferences.Capture(window).OrderBy(pair => pair.Key));
+            Assert.Equal(0, session.GenerationRevision);
+        }
+        finally { window.Close(); }
+    }
+
     [AvaloniaFact]
     public void DungeonPrimarySelectorsStayTogetherAndThemeParametersRoundTrip()
     {

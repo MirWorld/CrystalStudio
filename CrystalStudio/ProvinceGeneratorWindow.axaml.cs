@@ -28,6 +28,7 @@ public partial class ProvinceGeneratorWindow : EditorWindow
     private RasterImage? overview, detailPreview;
     private bool ready, closed, changingSettings;
     private int revision;
+    private readonly GeneratorChoiceDrafts sceneDrafts = new("SceneList");
     public ProvincePlan? Plan { get; private set; }
     internal bool PreferencesRestored { get; private set; }
     private readonly IReadOnlyDictionary<string, string>? savedParameters;
@@ -36,9 +37,11 @@ public partial class ProvinceGeneratorWindow : EditorWindow
     {
         this.document = document; this.assets = assets; suppliedWalls = wallCatalogue; savedParameters = parameters;
         InitializeComponent();
+        PreviewMapInfo.Text = LocalText.Format("{0} × {1} cells · Changes apply only after confirmation.", document.Width, document.Height);
         TownCountSlider.Maximum = Math.Clamp(document.Width * document.Height / (128 * 128), 1, 8);
         StyleList.ItemsSource = ProvinceStyle.All; StyleList.SelectedIndex = 0;
         SceneList.SelectedIndex = parameters is { Count: > 0 } && !parameters.ContainsKey("SceneList") ? 0 : 1;
+        GeneratorPreferences.Restore(this, savedParameters);
         timer.Tick += Generate;
         Loaded += Load;
         Closed += (_, _) => { closed = true; timer.Stop(); pending?.Cancel(); lifetime.Cancel(); };
@@ -61,7 +64,6 @@ public partial class ProvinceGeneratorWindow : EditorWindow
             }, lifetime.Token);
             if (closed) return;
             resourceCache = new(terrain, assets);
-            GeneratorPreferences.Restore(this, savedParameters);
             var style = (ProvinceStyle)StyleList.SelectedItem!;
             var required = await Task.Run(() => MapResourcePreflight.ProvinceGround(style, resourceCache), lifetime.Token);
             if (closed) return;
@@ -74,6 +76,14 @@ public partial class ProvinceGeneratorWindow : EditorWindow
     private void SceneChanged(object sender, SelectionChangedEventArgs e)
     {
         if (TownCountSlider == null) return;
+        bool wasChanging = changingSettings;
+        changingSettings = true;
+        try { sceneDrafts.Switch(this, SceneList.SelectedIndex, ConfigureScene); }
+        finally { changingSettings = wasChanging; }
+        UpdateDoorOptions(); Schedule();
+    }
+    private void ConfigureScene()
+    {
         bool village = SceneList.SelectedIndex == (int)ProvinceScene.VillageCountryside;
         bool forestRuins = SceneList.SelectedIndex == (int)ProvinceScene.ForestRuins;
         bool mining = SceneList.SelectedIndex == (int)ProvinceScene.MiningQuarry;
@@ -100,7 +110,6 @@ public partial class ProvinceGeneratorWindow : EditorWindow
             ForestSlider.Value = 65; CliffSlider.Value = 35; BeachSlider.Value = 20;
             RiverSlider.Value = 45; VegetationSlider.Value = 70;
         }
-        UpdateDoorOptions(); Schedule();
     }
     private void SettingsChanged(object sender, RoutedEventArgs e)
     {

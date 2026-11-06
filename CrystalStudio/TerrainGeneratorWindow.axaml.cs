@@ -36,7 +36,9 @@ public partial class TerrainGeneratorWindow : EditorWindow
     {
         this.document = document; this.assets = assets; this.catalogue = catalogue; savedParameters = parameters;
         InitializeComponent();
+        PreviewMapInfo.Text = LocalText.Format("{0} × {1} cells · Changes apply only after confirmation.", document.Width, document.Height);
         RouteList.SelectedIndex = 0;
+        GeneratorPreferences.Restore(this, savedParameters);
         previewTimer.Tick += PreviewTimerTick;
         Loaded += LoadAvailable;
         Closed += (_, _) => { closed = true; previewTimer.Stop(); previewCancellation?.Cancel(); cancellation.Cancel(); };
@@ -55,6 +57,14 @@ public partial class TerrainGeneratorWindow : EditorWindow
             RandomizeButton.IsEnabled = BiomeList.Items.Count > 0;
             PreviewHint.Text = LocalText.T("The current libraries do not contain matching catalogue terrain artwork.");
             BiomeList.SelectedItem = available.Any(s => s.Base && s.Biome == "Province") ? "Province" : BiomeList.Items.Cast<string>().FirstOrDefault();
+            if (savedParameters != null)
+            {
+                var parameters = new Dictionary<string, string>(savedParameters);
+                var current = GeneratorPreferences.Capture(this);
+                foreach (string name in new[] { "SeedBox", "CoverageSlider", "ScaleSlider", "WidthSlider", "RouteList", "DetailToggle" })
+                    if (current.TryGetValue(name, out string? value)) parameters[name] = value;
+                GeneratorPreferences.Restore(this, parameters);
+            }
             // Make terrain controls usable before optional water artwork loads.
             waterReady=await Task.Run(()=>catalogue.Water?.MatchesAssets(assets)==true,cancellation.Token);
             var water=await TerrainWaterResources.Load(assets,cancellation.Token);
@@ -62,7 +72,12 @@ public partial class TerrainGeneratorWindow : EditorWindow
             coastPieces=water.Banks;bridgePieces=water.Bridges;shoreComponents=water.Shore;coastError=water.Error;
             islandCoast=water.Island;islandError=water.IslandError;
             ReportResources();
-            if(!closed){UpdateWaterChoices();if(IsIsland)SchedulePreview();}
+            if(!closed)
+            {
+                UpdateWaterChoices();
+                GeneratorPreferences.Restore(this, savedParameters?.Where(pair => pair.Key is "RiverToggle" or "BeachToggle" or "BridgeToggle").ToDictionary(pair => pair.Key, pair => pair.Value));
+                if(IsIsland)SchedulePreview();
+            }
         }
         catch (OperationCanceledException) { }
         catch (Exception ex) { if (!closed) { PreviewHint.Text = LocalText.T("Terrain artwork could not be loaded."); FeedbackText.Text = (ex.Message); } }
@@ -70,7 +85,7 @@ public partial class TerrainGeneratorWindow : EditorWindow
         {
             if (ready && !closed)
             {
-                GeneratorPreferences.Restore(this, savedParameters); PreferencesRestored = true;
+                PreferencesRestored = true;
                 if (ApplyButton.IsEnabled && Plan != null && int.TryParse(SeedBox.Text, out int seed) && Plan.Seed == seed) PreviewState.Complete();
                 else PreviewState.Notify();
             }

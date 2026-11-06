@@ -71,7 +71,11 @@ internal sealed class MapPreviewViewport : Control
         this.SetTip(LocalText.T("Keyboard: + / - to zoom, arrows to pan, Home to fit, Enter to inspect the view centre."));
         source.PropertyChanged += (_, args) =>
         {
-            if (args.Property == Image.SourceProperty) { navigation.Reset(); ViewChanged?.Invoke(); }
+            if (args.Property == Image.SourceProperty)
+            {
+                if (args.OldValue is not IImage previous || args.NewValue is not IImage current || previous.Size != current.Size) navigation.Reset();
+                ViewChanged?.Invoke();
+            }
             if (args.Property == Image.SourceProperty || args.Property == OpacityProperty) InvalidateVisual();
         };
     }
@@ -102,9 +106,10 @@ internal sealed class MapPreviewViewport : Control
     protected override void OnPointerPressed(PointerPressedEventArgs args)
     {
         base.OnPointerPressed(args);
-        if (!args.GetCurrentPoint(this).Properties.IsLeftButtonPressed || source.Source == null) return;
+        var properties = args.GetCurrentPoint(this).Properties;
+        if ((!properties.IsLeftButtonPressed && !properties.IsMiddleButtonPressed) || source.Source == null) return;
         Focus(); var point = args.GetPosition(this);
-        if (args.ClickCount == 2 && navigation.TryMap(point, Bounds.Size, source.Source.Size, out var normalized)) InspectRequested?.Invoke(normalized);
+        if (properties.IsLeftButtonPressed && args.ClickCount == 2 && navigation.TryMap(point, Bounds.Size, source.Source.Size, out var normalized)) InspectRequested?.Invoke(normalized);
         else { drag = point; args.Pointer.Capture(this); }
         args.Handled = true;
     }

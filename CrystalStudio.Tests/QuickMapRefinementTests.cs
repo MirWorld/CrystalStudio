@@ -273,7 +273,7 @@ public sealed class QuickMapRefinementTests
         {
             window.Show(); await Until(() => window.PreferencesRestored && window.Plan != null);
             Assert.Single(history.Items);
-            var shuffle = window.GetLogicalDescendants().OfType<Button>().Single(button => Equals(button.Content, LocalText.T("Shuffle")));
+            var shuffle = window.GetLogicalDescendants().OfType<Button>().Single(button => Equals(button.Content, LocalText.T("Change seed")));
             shuffle.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
             Assert.Single(history.Items);
             var seed = window.GetLogicalDescendants().OfType<TextBox>().Single(control => control.Name == "SeedBox");

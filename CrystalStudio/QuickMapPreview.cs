@@ -39,7 +39,17 @@ internal sealed class QuickMapPreview
                 TempleGeneratorWindow dungeon => dungeon.PreferencesRestored,
                 _ => true
             };
-            if (preferencesReady) session.RememberParameters(GeneratorPreferences.Capture(window));
+            var captured = GeneratorPreferences.Capture(window);
+            if (preferencesReady) session.RememberParameters(captured);
+            else
+            {
+                var parameters = new Dictionary<string, string>(session.Parameters);
+                foreach (var control in window.GetLogicalDescendants().OfType<Control>().Where(control =>
+                    control is Slider or TextBox { Name: "SeedBox" } or CheckBox { Name: "DetailToggle" } or
+                        ComboBox { Name: "SceneList" or "ThemeList" or "DungeonTypeList" or "WidthList" or "RouteList" }))
+                    if (control.Name is { } name && captured.TryGetValue(name, out string? value)) parameters[name] = value;
+                session.RememberParameters(parameters);
+            }
             int revision = session.GenerationRevision;
             if (!editSetup(window)) return;
             navigation.RestartRequested = session.GenerationRevision != revision;
@@ -85,10 +95,12 @@ internal sealed class QuickMapPreview
         var report = new TextBlock { Name = "QuickMapResourceFeedback", TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 12) };
         settings?.Children.Insert(1, report);
         var image = window.GetLogicalDescendants().OfType<Image>().Single(control => control.Name == "PreviewImage");
-        if (image.Parent is not Grid preview) return;
+        Control previewContent = image.GetLogicalAncestors().OfType<GeneratorPreview>().FirstOrDefault() is { } navigator ? navigator : image;
+        if (previewContent.Parent is not Grid preview) return;
+        previewContent.IsVisible = false;
         image.IsVisible = false;
-        var viewport = new MapPreviewViewport(image) { Name = "QuickMapViewport", Margin = image.Margin };
-        Grid.SetRow(viewport, Grid.GetRow(image)); preview.Children.Insert(preview.Children.IndexOf(image) + 1, viewport);
+        var viewport = new MapPreviewViewport(image) { Name = "QuickMapViewport", Margin = previewContent.Margin };
+        Grid.SetRow(viewport, Grid.GetRow(previewContent)); preview.Children.Insert(preview.Children.IndexOf(previewContent) + 1, viewport);
         var detail = window.GetLogicalDescendants().OfType<CheckBox>().Single(control => control.Name == "DetailToggle");
         detail.Content = LocalText.T("Local detail");
         var zoom = new TextBlock { VerticalAlignment = VerticalAlignment.Center, MinWidth = 48 };

@@ -5,6 +5,10 @@ namespace CrystalStudio;
 
 internal sealed partial class NewMapWindow : EditorWindow
 {
+    private sealed record LastSettingsChoice
+    {
+        public override string ToString() => LocalText.T("Last used settings");
+    }
     internal readonly ComboBox KindBox = new() { Name = "MapKind" };
     internal readonly ComboBox TemplateBox = new() { Name = "MapTemplate", PlaceholderText = LocalText.T("Custom settings") };
     internal readonly TextBox WidthBox = new() { Name = "MapWidth" };
@@ -43,6 +47,7 @@ internal sealed partial class NewMapWindow : EditorWindow
         panel.Children.Add(new TextBlock { Text = LocalText.T("Use a purpose template, or choose your own map settings. Blank maps can be created immediately."), TextWrapping = TextWrapping.Wrap });
         if (store != null)
         {
+            PresetBox.ItemTemplate = new FuncDataTemplate<object>((choice, _) => new TextBlock { Text = choice?.ToString() });
             RefreshPresets();
             var presetRow = new DockPanel(); var manage = BuildPresetActions();
             DockPanel.SetDock(manage, Dock.Right); presetRow.Children.Add(manage); presetRow.Children.Add(PresetBox);
@@ -80,7 +85,8 @@ internal sealed partial class NewMapWindow : EditorWindow
             panel.Children.Add(new Expander { Header = LocalText.T("Advanced creation options"), Content = advanced, HorizontalAlignment = HorizontalAlignment.Stretch });
         }
         root.Children.Add(new ScrollViewer { Content = panel, VerticalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Auto });
-        Grid.SetRow(feedback, 1); root.Children.Add(feedback);
+        var feedbackScroll = new ScrollViewer { Content = feedback, MaxHeight = 96, VerticalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Auto };
+        Grid.SetRow(feedbackScroll, 1); root.Children.Add(feedbackScroll);
         var actions = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Spacing = 8 };
         actions.Children.Add(new Button { Content = LocalText.T(session == null ? "Cancel" : "Return to preview"), IsCancel = true }); actions.Children.Add(CreateButton);
         Grid.SetRow(actions, 2); root.Children.Add(actions); Content = root;
@@ -222,7 +228,7 @@ internal sealed partial class NewMapWindow : EditorWindow
         if ((PresetNameBox.Text?.Trim().Length ?? 0) > 80) error ??= "Enter a preset name (1–80 characters).";
         if (!string.IsNullOrWhiteSpace(PresetNameBox.Text) && preferences?.Data.Presets.Count >= 50 &&
             !preferences.Data.Presets.ContainsKey(PresetNameBox.Text.Trim())) error ??= "At most 50 map presets can be saved.";
-        bool save = SaveToggle.IsChecked == true; outputPanel.IsVisible = save;
+        bool save = SaveToggle.IsChecked == true; outputPanel.IsVisible = save; outputPanel.IsEnabled = save;
         try
         {
             MapCreationPaths.ValidateName(NameBox.Text ?? "");

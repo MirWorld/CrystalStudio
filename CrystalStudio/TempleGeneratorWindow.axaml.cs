@@ -12,8 +12,9 @@ public partial class TempleGeneratorWindow : EditorWindow
     // wall composition has not yet reached its cancellation checkpoint.
     private readonly SemaphoreSlim worker = new(1);
     private CancellationTokenSource? pending;
-    private bool ready, closed;
+    private bool ready, closed, changingSettings;
     private int revision;
+    private readonly GeneratorChoiceDrafts themeDrafts = new("ThemeList");
     private readonly DungeonThemeResources themes = new();
     private TempleDefinition? classicDefinition;
     private TemplePlan? cached;
@@ -33,11 +34,13 @@ public partial class TempleGeneratorWindow : EditorWindow
         this.document = document; this.assets = assets; this.walls = walls; this.terrain = terrain; savedParameters = parameters;
         resourceCache = new(terrain, assets);
         InitializeComponent();
+        PreviewMapInfo.Text = LocalText.Format("{0} × {1} cells · Changes apply only after confirmation.", document.Width, document.Height);
         WidthList.SelectedIndex = 1; TempleList.ItemsSource = TempleDefinition.All; TempleList.SelectedIndex = 0;
         DungeonTypeList.ItemsSource = Enum.GetValues<DungeonType>(); DungeonTypeList.SelectedIndex = 0;
         ThemeList.SelectedIndex = 0;
+        GeneratorPreferences.Restore(this, savedParameters);
         timer.Tick += GeneratePreview;
-        Loaded += (_, _) => { ready = true; GeneratorPreferences.Restore(this, savedParameters); PreferencesRestored = true; Schedule(); };
+        Loaded += (_, _) => { ready = true; PreferencesRestored = true; Schedule(); };
         Closed += (_, _) => { closed = true; timer.Stop(); pending?.Cancel(); };
     }
 
@@ -47,6 +50,13 @@ public partial class TempleGeneratorWindow : EditorWindow
     private void ThemeChanged(object sender, SelectionChangedEventArgs e)
     {
         if (TempleList == null || DungeonTypeList == null || SizeSlider == null) return;
+        changingSettings = true;
+        try { themeDrafts.Switch(this, ThemeList.SelectedIndex, ConfigureTheme); }
+        finally { changingSettings = false; }
+        UpdateDoorOptions(); Schedule();
+    }
+    private void ConfigureTheme()
+    {
         bool classic = SelectedTheme == DungeonTheme.Classic;
         if (!classic && TempleList.SelectedItem is TempleDefinition current && TempleDefinition.All.Contains(current)) classicDefinition = current;
         TempleList.ItemsSource = classic ? TempleDefinition.All : new[] { DungeonThemes.Definition(SelectedTheme) };
@@ -60,7 +70,6 @@ public partial class TempleGeneratorWindow : EditorWindow
             WidthList.SelectedIndex = 1;
         }
         ThemeDescription.Text = DungeonThemes.Description(SelectedTheme);
-        UpdateDoorOptions(); Schedule();
     }
     private void SettingsChanged(object sender, RoutedEventArgs e)
     {
@@ -77,7 +86,7 @@ public partial class TempleGeneratorWindow : EditorWindow
     }
     private void Schedule()
     {
-        if (!ready || closed) return;
+        if (!ready || closed || changingSettings) return;
         revision++; timer.Stop(); pending?.Cancel(); Plan = null; ApplyButton.IsEnabled = false;
         PreviewImage.Opacity = .4; PreviewHint.IsVisible = true; PreviewHint.Text = LocalText.T("Updating preview…");
         timer.Start();

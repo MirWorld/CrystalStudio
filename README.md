@@ -91,6 +91,40 @@ Game artwork is not included. Select the game client root containing **Data**
 For published releases, keep the `catalogue` and `Objects` folders beside the
 executable. They contain the editor's brushes, objects and generator data.
 
+## Quick Create Map
+
+Use **File > Quick Create Map** (**Ctrl+Alt+N**) to choose a map type, dimensions,
+and optional saved preset. Turn off **Save the map after creation** to create an
+unsaved map without selecting an output folder. When saving immediately, the
+wizard checks for filename collisions and files blocking the output directory;
+existing maps are never overwritten.
+
+Changing settings marks the preset selection as custom. Editing dimensions keeps
+the preset's generator parameters; changing the map type restores that type's
+current draft, or its last-used parameters if no draft exists. User-defined preset names are displayed unchanged in either
+language. Automatic filenames increment existing numeric suffixes, for example
+`NewMap_2` to `NewMap_3`.
+
+Terrain, province, and dungeon previews provide **Back to map settings**, which
+preserves the creation form and current generator parameters without adding a map
+or saving a preset. Returning from map settings without confirming keeps the
+current preview. **Cancel** on the preview exits creation without changing the workspace.
+
+Previews support mouse-wheel zoom, left/middle-button drag to pan, and **Fit
+preview** to return to the whole image. When the preview has keyboard focus,
+`+` / `-` zoom, arrow keys pan, and `0` / `Home` fit the image. Zoom is relative to
+the fitted preview bitmap, not the map's original artwork resolution, and never
+changes the generator parameters. In Quick Create, double-click a location or use
+**Inspect centre** to redraw local detail without replanning the map; **Overview**
+returns to the whole preview. Standalone generator windows retain the fixed detail crop.
+
+Sliders also have exact numeric inputs that follow the same ranges and discrete
+steps. Terrain patch amount is entered as a percentage. Province scenes and
+dungeon themes retain their adjustments when revisited within a preview window;
+first-time selections still use the existing defaults. **Change seed** only
+changes the seed, while **Randomize settings** retains its original broader
+randomization behaviour. Map generation, file formats, and saving rules are unchanged.
+
 ## Basic Controls
 
 - **Mouse wheel:** Zoom.
