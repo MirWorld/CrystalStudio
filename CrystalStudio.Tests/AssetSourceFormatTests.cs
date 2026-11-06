@@ -119,6 +119,30 @@ public sealed class AssetSourceFormatTests
     }
 
     [Fact]
+    public async Task SwitchingOverviewRequestsCancelsOldWorkWithoutPoisoningAssets()
+    {
+        using var files = new TemporaryAssets();
+        files.Write("Tiles.Lib", 6, 18, 32, size: 1024);
+        using var store = AssetStore.Load(files.Root, AssetSourceFormat.Sanxiu);
+        // More jobs than workers keeps the request active until it is canceled.
+        for (int i = 1; i < 256; i++) store.Libraries[i] = store.Libraries[0];
+        var errors = new System.Collections.Concurrent.ConcurrentQueue<string>();
+        store.Error += errors.Enqueue;
+        var images = Enumerable.Range(0, 256).Select(i => (i, 0)).ToArray();
+        for (int i = 0; i < 5; i++)
+        {
+            using var cancellation = new CancellationTokenSource();
+            var pending = store.PrepareOverviewAsync(images, 4, cancellation.Token);
+            cancellation.Cancel();
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => pending);
+            Assert.True(pending.IsCanceled);
+        }
+        var current = await store.PrepareOverviewAsync([(0, 0)], 4, CancellationToken.None);
+        Assert.Equal(18, Fixture.Pixels(current[(0, 0)].Bitmap)[0]);
+        Assert.Empty(errors);
+    }
+
+    [Fact]
     public void SanxiuV6GifUsesItsOwnDimensionsWhenMetadataIsEmpty()
     {
         using var files = new TemporaryAssets();
@@ -273,18 +297,18 @@ public sealed class AssetSourceFormatTests
             file.Write(6); file.Write((byte)0); file.Write(head.Length); file.Write(head); file.Write(image);
         }
 
-        public void Write(string name, int version, byte blue, byte green)
+        public void Write(string name, int version, byte blue, byte green, int size = 2)
         {
             string map = Path.Combine(Root, "Map");
             Directory.CreateDirectory(map);
-            byte[] pixels = Enumerable.Range(0, 4).SelectMany(_ => new byte[] { blue, green, 200, 255 }).ToArray();
+            byte[] pixels = Enumerable.Range(0, size * size).SelectMany(_ => new byte[] { blue, green, 200, 255 }).ToArray();
             using var compressed = new MemoryStream();
             using (var gzip = new GZipStream(compressed, CompressionLevel.SmallestSize, true)) gzip.Write(pixels);
             using var header = new MemoryStream();
             using (var writer = new BinaryWriter(header, System.Text.Encoding.UTF8, true))
             {
                 writer.Write(1);
-                writer.Write((short)2); writer.Write((short)2); writer.Write((short)3); writer.Write((short)-4);
+                writer.Write((short)size); writer.Write((short)size); writer.Write((short)3); writer.Write((short)-4);
                 writer.Write((short)0); writer.Write((short)0); writer.Write((byte)0);
                 if (version == 6) writer.Write((byte)0);
                 writer.Write(checked((int)compressed.Length));
