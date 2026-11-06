@@ -231,9 +231,10 @@ public sealed class AiTests
     [Fact]
     public void RecognitionParsesFencedJsonAndRejectsUnknownCategories()
     {
-        var result = ExtractionAi.Parse("```json\n{\"name\":\"松树\",\"category\":\"tree\",\"reason\":\"针叶树冠\"}\n```", ["Tree", "Building", "Unclassified"]);
+        var result = ExtractionAi.Parse("```json\n{\"name\":\"松树\",\"category\":\"tree\",\"completeness\":\"complete\",\"reason\":\"针叶树冠\"}\n```", ["Tree", "Building", "Unclassified"]);
         Assert.Equal("Tree", result.Category);
         Assert.Equal("松树", result.Name);
+        Assert.Equal(AiObjectCompleteness.Complete, result.Completeness);
         Assert.Throws<InvalidDataException>(() => ExtractionAi.Parse("{\"name\":\"松树\",\"category\":\"invented\"}", ["Tree"]));
         Assert.Throws<InvalidDataException>(() => ExtractionAi.Parse("{\"name\":\"\",\"category\":\"Tree\"}", ["Tree"]));
     }
@@ -244,12 +245,66 @@ public sealed class AiTests
         var candidate = new ExtractionCandidate(Guid.NewGuid(), "Object", "Unclassified", "source", ExtractionKind.Discovered,
             [new(0, 0, new() { Foreground = new(2, 1, 0, 0), BackImage = 0x20000000 })], [], [new("a.map", 5, 5, false)], [], Reviewed: true);
         var review = new ExtractionReview([candidate]);
-        review.ApplyAi(new Dictionary<Guid, AiObjectRecognition> { [candidate.Id] = new("松树", "Tree", "树冠") });
+        review.ApplyAi(new Dictionary<Guid, AiObjectRecognition> { [candidate.Id] = new("松树", "Tree", "树冠", AiObjectCompleteness.Complete) });
         var updated = Assert.Single(review.Candidates);
         Assert.Equal("松树", updated.Name); Assert.Equal("Tree", updated.Category); Assert.False(updated.Reviewed);
         Assert.Equal(candidate.Fingerprint, updated.Fingerprint); Assert.Same(candidate.Occurrences, updated.Occurrences);
         review.Undo(); Assert.Equal(candidate, Assert.Single(review.Candidates));
         review.Redo(); Assert.Equal("松树", Assert.Single(review.Candidates).Name);
+    }
+
+    [Theory]
+    [InlineData("complete", "Complete")]
+    [InlineData("incomplete", "Incomplete")]
+    [InlineData("uncertain", "Uncertain")]
+    public void RecognitionRequiresAnExplicitCompletenessDecision(string value, string expected)
+    {
+        var result = ExtractionAi.Parse(new JsonObject { ["name"] = "屋顶", ["category"] = "Building", ["reason"] = "轮廓证据", ["completeness"] = value }.ToJsonString(), ["Building"]);
+        Assert.Equal(expected, result.Completeness.ToString());
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData(",\"completeness\":null")]
+    [InlineData(",\"completeness\":false")]
+    [InlineData(",\"completeness\":\"yes\"")]
+    [InlineData(",\"completeness\":\"\"")]
+    public void MissingOrMalformedCompletenessCannotSilentlyKeepOrDeleteObjects(string field)
+    {
+        Assert.Throws<InvalidDataException>(() => ExtractionAi.Parse("{\"name\":\"屋顶\",\"category\":\"Building\",\"reason\":\"属于建筑的一部分\"" + field + "}", ["Building"]));
+    }
+
+    [Fact]
+    public void SixRoofSlicesAreExcludedWhileCompleteSlenderObjectsAndUncertainResultsRemainUndoableAndExportable()
+    {
+        string root = Path.Combine(Path.GetTempPath(), "CrystalAiCompleteness-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(Path.Combine(root, "catalogue")); Directory.CreateDirectory(Path.Combine(root, "Objects"));
+        string index = Path.Combine(root, "catalogue", "palette.json");
+        File.WriteAllText(index, "{\"schemaVersion\":1,\"objectRoot\":\"Objects\",\"previewRoot\":\"catalogue\",\"objects\":[]}");
+        try
+        {
+            string[] names = ["传统建筑屋顶", "传统建筑屋顶", "传统建筑", "传统建筑屋顶", "瓦屋顶", "传统建筑屋顶", "旗杆", "柱子", "完整墙段", "待审核物件"];
+            var originals = names.Select((name, i) => new ExtractionCandidate(Guid.NewGuid(), name, "Building", "source", ExtractionKind.Discovered,
+                [new(0, 0, new() { Foreground = new(2, (short)(i + 1), 0, 0), BackImage = 0x20000000 })], [], [new("whitevillage.map", 5 + i, 5, false)], [], Reviewed: true)).ToArray();
+            var results = originals.Select((c, i) => (c.Id, Recognition: new AiObjectRecognition(c.Name, "Building", i < 6 ? "仅屋顶的一条瓦片，缺少主体轮廓" : "可见结构证据",
+                i < 6 ? AiObjectCompleteness.Incomplete : i == 9 ? AiObjectCompleteness.Uncertain : AiObjectCompleteness.Complete))).ToDictionary(p => p.Id, p => p.Recognition);
+            var review = new ExtractionReview(originals);
+            review.ApplyAi(results);
+            Assert.Equal(originals.Skip(6).Select(c => c.Id), review.Candidates.Select(c => c.Id));
+            Assert.All(review.Candidates, c => Assert.False(c.Reviewed));
+            Assert.Equal(originals.Skip(6).Select(c => c.Fingerprint), review.Candidates.Select(c => c.Fingerprint));
+            Assert.All(review.Candidates, c => Assert.Same(originals.Single(o => o.Id == c.Id).Occurrences, c.Occurrences));
+            Assert.Contains("Completeness uncertain", review.Candidates[^1].Reason);
+            review.Undo(); Assert.Equal(originals, review.Candidates);
+            review.Redo(); Assert.Equal(4, review.Candidates.Count);
+            review.Update(review.Candidates.Select(c => c.Id), reviewed: true);
+            var exported = ObjectExtractionExport.Save(index, new("ai-completeness", originals.ToList(), ["whitevillage.map"], []), review.Candidates, default);
+            Assert.Equal(4, exported.Objects.Count);
+            Assert.Equal(originals.Skip(6).Select(c => c.Fingerprint).Order(), exported.Objects.Select(c => c.Fingerprint).Order());
+            Assert.Equal(4, StampCategories.Read(index).Objects.Count);
+            Assert.All(originals.Take(6), c => Assert.DoesNotContain(exported.Objects, output => output.Fingerprint == c.Fingerprint));
+        }
+        finally { Directory.Delete(root, true); }
     }
 
     [AvaloniaFact]
@@ -296,6 +351,9 @@ public sealed class AiTests
     [InlineData("success")]
     [InlineData("cancel")]
     [InlineData("failure")]
+    [InlineData("incomplete")]
+    [InlineData("exclude-all")]
+    [InlineData("invalid-completeness")]
     public async Task ExtractionRecognitionUsesVisionAndCanBeUndone(string mode)
     {
         string root = Path.Combine(Path.GetTempPath(), "CrystalAiUi-" + Guid.NewGuid().ToString("N"));
@@ -318,7 +376,13 @@ public sealed class AiTests
             var body = JsonNode.Parse(await request.Content!.ReadAsStringAsync(token))!;
             Assert.Equal("vision-model", (string?)body["model"]);
             var content = body["messages"]![1]!["content"]!.AsArray(); Assert.Equal(3, content.Count);
-            string text = "{\"name\":\"松树\",\"category\":\"Unclassified\",\"reason\":\"树冠\"}";
+            string system = (string)body["messages"]![0]!["content"]!;
+            Assert.Contains("屋面窄条", system); Assert.Contains("不能把第二张图", system);
+            Assert.Contains("完整的柱子、旗杆", system);
+            string completeness = mode == "exclude-all" || (mode == "incomplete" && requests == 1) ? "incomplete" : "complete";
+            var recognition = new JsonObject { ["name"] = "松树", ["category"] = "Unclassified", ["reason"] = "可见轮廓证据", ["completeness"] = completeness };
+            if (mode == "invalid-completeness" && requests == 2) recognition.Remove("completeness");
+            string text = recognition.ToJsonString();
             return Reply(new JsonObject { ["choices"] = new JsonArray(new JsonObject { ["message"] = new JsonObject { ["content"] = text } }) }.ToJsonString());
         }));
         var cfg = new AiSettings(Endpoint("openai", AiRole.Vision) with { ApiKey = "vision-key", Model = "vision-model" }, Endpoint("sdwebui", AiRole.Image), Endpoint("gemini", AiRole.Chat));
@@ -330,10 +394,15 @@ public sealed class AiTests
             long revision = map.PickupRevision;
             await window.RecognizeAsync(true);
             Assert.Equal(2, requests);
-            if (mode == "success")
+            if (mode is "success" or "incomplete" or "exclude-all")
             {
+                int expected = mode == "success" ? 2 : mode == "incomplete" ? 1 : 0;
+                Assert.Equal(expected, window.Review.Candidates.Count);
                 Assert.All(window.Review.Candidates, c => { Assert.Equal("松树", c.Name); Assert.False(c.Reviewed); });
-                Assert.Equal(originals.Select(c => c.Fingerprint), window.Review.Candidates.Select(c => c.Fingerprint));
+                var retained = mode == "success" ? originals : mode == "incomplete" ? originals.Skip(1).ToArray() : [];
+                Assert.Equal(retained.Select(c => c.Fingerprint), window.Review.Candidates.Select(c => c.Fingerprint));
+                Assert.Equal(expected, window.GetVisualDescendants().OfType<ListBox>().Single(l => l.Name == "ExtractionCandidates").Items.Count);
+                Assert.False(window.GetVisualDescendants().OfType<Button>().Single(b => b.Name == "ExtractionSave").IsEnabled);
                 window.Review.Undo();
             }
             else Assert.False(window.Review.CanUndo);

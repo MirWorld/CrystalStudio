@@ -88,12 +88,16 @@ internal sealed class ExtractionReview
     {
         if(results.Count==0)return;
         if(results.Keys.Any(id=>!Candidates.Any(c=>c.Id==id)) || results.Values.Any(r=>
-            string.IsNullOrWhiteSpace(r.Name)||string.IsNullOrWhiteSpace(r.Category)))
+            string.IsNullOrWhiteSpace(r.Name)||string.IsNullOrWhiteSpace(r.Category)||
+            string.IsNullOrWhiteSpace(r.Reason)||!Enum.IsDefined(r.Completeness)))
             throw new InvalidDataException("Invalid AI recognition results.");
-        Change(Candidates.Select(c=>results.TryGetValue(c.Id,out var result)?c with
+        // Removal and metadata updates share one history entry; undo restores every original candidate.
+        Change(Candidates.Where(c=>!results.TryGetValue(c.Id,out var result)||result.Completeness!=AiObjectCompleteness.Incomplete)
+            .Select(c=>results.TryGetValue(c.Id,out var result)?c with
         {
             Name=result.Name,Category=result.Category,Reviewed=false,
-            Reason=c.Reason+"\n"+LocalText.T("AI recognition")+": "+result.Reason
+            Reason=c.Reason+"\n"+LocalText.T("AI recognition")+": "+
+                LocalText.T(result.Completeness==AiObjectCompleteness.Complete?"Complete object":"Completeness uncertain")+" · "+result.Reason
         }:c).ToList());
     }
     public void Update(IEnumerable<Guid> ids,string? name=null,string? category=null,bool? reviewed=null,bool? boundary=null)
