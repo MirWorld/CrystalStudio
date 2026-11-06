@@ -266,15 +266,20 @@ public sealed class AssetStore : IDisposable
             using var reader = new BinaryReader(new FileStream(library.Path, FileMode.Open, FileAccess.Read, FileShare.Read, 65536));
             foreach (var key in job)
             {
-                token.ThrowIfCancellationRequested();
+                if (token.IsCancellationRequested) break;
                 if (failed.ContainsKey(key)) continue;
                 if (!overviewCache.TryGetValue((key.Library, key.Image, level), out var sprite))
                 {
                     try { sprite = library.DecodeOverview(reader, key.Image, level, token); }
+                    // Handle cooperative cancellation before it crosses the framework's
+                    // synchronous worker callback (which can trigger user-unhandled breaks).
+                    // Parallel.ForEachAsync still completes as canceled via its linked token.
+                    catch (OperationCanceledException) when (token.IsCancellationRequested)
+                    { return ValueTask.CompletedTask; }
                     catch (Exception ex) when (ex is IOException or InvalidDataException or ArgumentException)
                     { failed[key] = 0; StudioLog.Error("Assets.Overview", ex, $"Library={key.Library}; Image={key.Image}; File={library.Path}"); Error?.Invoke(ex.Message); continue; }
                     if (sprite == null) { failed[key] = 0; continue; }
-                    token.ThrowIfCancellationRequested();
+                    if (token.IsCancellationRequested) { sprite.Bitmap.Dispose(); break; }
                     if (overviewCache.TryAdd((key.Library, key.Image, level), sprite))
                     {
                         overviewOrder.Enqueue((key.Library, key.Image, level));

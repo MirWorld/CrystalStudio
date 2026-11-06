@@ -28,31 +28,31 @@
     <ListBoxItem ToolTip.Tip="{local:Loc GroundTiles22Cells_B4899A70}">
       <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="26" /><ColumnDefinition /></Grid.ColumnDefinitions>
         <CheckBox x:Name="GroundVisible" IsChecked="True" Theme="{StaticResource LayerVisibility}" IsCheckedChanged="ViewChanged" ToolTip.Tip="{local:Loc ShowHideGroundTiles_D5824854}" AutomationProperties.Name="{local:Loc GroundTilesVisibility_89376EB4}" />
-        <TextBlock Grid.Column="1" Text="{local:Loc GroundTiles_3931E191}" VerticalAlignment="Center" />
+        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center"><TextBlock Text="{local:Loc GroundTiles_3931E191}" /><TextBlock x:Name="GroundLayerCount" Text=" (0)" /></StackPanel>
       </Grid>
     </ListBoxItem>
     <ListBoxItem ToolTip.Tip="{local:Loc MiddleTiles11Cells_2171C937}">
       <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="26" /><ColumnDefinition /></Grid.ColumnDefinitions>
         <CheckBox x:Name="MiddleVisible" IsChecked="True" Theme="{StaticResource LayerVisibility}" IsCheckedChanged="ViewChanged" ToolTip.Tip="{local:Loc ShowHideMiddleTiles_D2EED407}" AutomationProperties.Name="{local:Loc MiddleTilesVisibility_9DE9E860}" />
-        <TextBlock Grid.Column="1" Text="{local:Loc MiddleTiles_E80971A2}" VerticalAlignment="Center" />
+        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center"><TextBlock Text="{local:Loc MiddleTiles_E80971A2}" /><TextBlock x:Name="MiddleLayerCount" Text=" (0)" /></StackPanel>
       </Grid>
     </ListBoxItem>
     <ListBoxItem ToolTip.Tip="{local:Loc ObjectsForegroundSprites_3D15DC07}">
       <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="26" /><ColumnDefinition /></Grid.ColumnDefinitions>
         <CheckBox x:Name="ObjectsVisible" IsChecked="True" Theme="{StaticResource LayerVisibility}" IsCheckedChanged="ViewChanged" ToolTip.Tip="{local:Loc ShowHideObjects_C3487308}" AutomationProperties.Name="{local:Loc ObjectsVisibility_CD817312}" />
-        <TextBlock Grid.Column="1" Text="{local:Loc Objects_DE5236EE}" VerticalAlignment="Center" />
+        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center"><TextBlock Text="{local:Loc Objects_DE5236EE}" /><TextBlock x:Name="ObjectsLayerCount" Text=" (0)" /></StackPanel>
       </Grid>
     </ListBoxItem>
     <ListBoxItem ToolTip.Tip="{local:Loc LowCollisionsPinkPainttoApplyEraseorDeleteSelectiontoRemove_D1779139}">
       <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="26" /><ColumnDefinition /></Grid.ColumnDefinitions>
         <CheckBox x:Name="LowCollisionVisible" IsChecked="False" IsCheckedChanged="ViewChanged" Theme="{StaticResource LayerVisibility}" ToolTip.Tip="{local:Loc ShowHideLowCollisions_6CE33D66}" AutomationProperties.Name="{local:Loc LowCollisionsVisibility_E9D27257}" />
-        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center"><Border Width="7" Height="7" CornerRadius="2" Background="#F05569" Margin="0,0,6,0" /><TextBlock Text="{local:Loc LowCollisions_CC739D3F}" VerticalAlignment="Center" /></StackPanel>
+        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center"><Border Width="7" Height="7" CornerRadius="2" Background="#F05569" Margin="0,0,6,0" /><TextBlock Text="{local:Loc LowCollisions_CC739D3F}" VerticalAlignment="Center" /><TextBlock x:Name="LowCollisionLayerCount" Text=" (0)" VerticalAlignment="Center" /></StackPanel>
       </Grid>
     </ListBoxItem>
     <ListBoxItem ToolTip.Tip="{local:Loc HighCollisionsBluePainttoApplyEraseorDeleteSelectiontoRemove_5BEA2F66}">
       <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="26" /><ColumnDefinition /></Grid.ColumnDefinitions>
         <CheckBox x:Name="HighCollisionVisible" IsChecked="False" IsCheckedChanged="ViewChanged" Theme="{StaticResource LayerVisibility}" ToolTip.Tip="{local:Loc ShowHideHighCollisions_6B56BF5D}" AutomationProperties.Name="{local:Loc HighCollisionsVisibility_001CF233}" />
-        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center"><Border Width="7" Height="7" CornerRadius="2" Background="#41A5F5" Margin="0,0,6,0" /><TextBlock Text="{local:Loc HighCollisions_830FB039}" VerticalAlignment="Center" /></StackPanel>
+        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center"><Border Width="7" Height="7" CornerRadius="2" Background="#41A5F5" Margin="0,0,6,0" /><TextBlock Text="{local:Loc HighCollisions_830FB039}" VerticalAlignment="Center" /><TextBlock x:Name="HighCollisionLayerCount" Text=" (0)" VerticalAlignment="Center" /></StackPanel>
       </Grid>
     </ListBoxItem>
   </ListBox>

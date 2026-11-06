@@ -52,6 +52,7 @@ public sealed partial class MapDocument
     {
         if (!Contains(x, y)) return;
         int k = y * Width + x;
+        UpdateLayerCounts(x, y, cells.GetValueOrDefault(k), c);
         if (c.Empty) cells.Remove(k); else cells[k] = c;
         if (MapPreview.HasLight(c) || MapPreview.HasDoor(c)) presentationCells[k] = c;
         else presentationCells.Remove(k);

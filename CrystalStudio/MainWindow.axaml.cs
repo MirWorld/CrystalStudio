@@ -409,7 +409,7 @@ public partial class MainWindow : EditorWindow
 
     }
 
-    private void UpdateLabels() { if (!initialized || Viewport == null) return; ZoomLabel.Content = ($"{Viewport.Zoom:P0}"); SelectedLabel.Text = (Viewport.Tool == EditorTool.TownStamp ? (Viewport.Town?.Name ?? LocalText.T("Generate a Town")) : (Viewport.Tool == EditorTool.Wall ? (Viewport.WallCatalogueError ?? LocalText.Format("Wall · {0} · Drag to connect · Shift to remove", LocalText.T(Viewport.WallFamily?.DisplayName ?? "Choose type"))) : (Viewport.Tool == EditorTool.SpecialBrush ? LocalText.Format("Special Brush · {0} · {1} variant(s) · {2}% density",LocalText.T(Viewport.SpecialBrushKind.BrushName()),Viewport.Trees.Count,Viewport.TreeOptions.Density) : (Viewport.IsStampPickingTool ? (Viewport.PickedStamp?.Name ?? ((Viewport.Tool == EditorTool.Clone ? LocalText.T("Choose a placed stamp to clone") : LocalText.T("Choose a placed stamp to move")))) : (StampMode ? (selectedStampName ?? LocalText.T("Choose an object stamp")) : (Viewport.IsCollisionLayer ? LocalText.Format("{0} collision · Paint to apply, erase to remove",LocalText.T(Viewport.Layer == MapLayer.LowCollision ? "Low" : "High")) : (Viewport.SpriteIndex < 0 ? ((PatternPalette ? LocalText.T("Select a terrain set to brush") : LocalText.T("Select a sprite to place"))) : (PatternPalette ? LocalText.Format("Library {0} / Terrain set {1}",Viewport.Library,Viewport.SpriteIndex / AutoTileBrush.BlockSize(AssetLayout(Viewport.Library, Viewport.Layer))) : LocalText.Format("Library {0} / Sprite {1}",Viewport.Library,Viewport.SpriteIndex))))))))); UpdateWorkspace(); UpdateMapBrowserControls(); }
+    private void UpdateLabels() { if (!initialized || Viewport == null) return; UpdateLayerCounts(); ZoomLabel.Content = ($"{Viewport.Zoom:P0}"); SelectedLabel.Text = (Viewport.Tool == EditorTool.TownStamp ? (Viewport.Town?.Name ?? LocalText.T("Generate a Town")) : (Viewport.Tool == EditorTool.Wall ? (Viewport.WallCatalogueError ?? LocalText.Format("Wall · {0} · Drag to connect · Shift to remove", LocalText.T(Viewport.WallFamily?.DisplayName ?? "Choose type"))) : (Viewport.Tool == EditorTool.SpecialBrush ? LocalText.Format("Special Brush · {0} · {1} variant(s) · {2}% density",LocalText.T(Viewport.SpecialBrushKind.BrushName()),Viewport.Trees.Count,Viewport.TreeOptions.Density) : (Viewport.IsStampPickingTool ? (Viewport.PickedStamp?.Name ?? ((Viewport.Tool == EditorTool.Clone ? LocalText.T("Choose a placed stamp to clone") : LocalText.T("Choose a placed stamp to move")))) : (StampMode ? (selectedStampName ?? LocalText.T("Choose an object stamp")) : (Viewport.IsCollisionLayer ? LocalText.Format("{0} collision · Paint to apply, erase to remove",LocalText.T(Viewport.Layer == MapLayer.LowCollision ? "Low" : "High")) : (Viewport.SpriteIndex < 0 ? ((PatternPalette ? LocalText.T("Select a terrain set to brush") : LocalText.T("Select a sprite to place"))) : (PatternPalette ? LocalText.Format("Library {0} / Terrain set {1}",Viewport.Library,Viewport.SpriteIndex / AutoTileBrush.BlockSize(AssetLayout(Viewport.Library, Viewport.Layer))) : LocalText.Format("Library {0} / Sprite {1}",Viewport.Library,Viewport.SpriteIndex))))))))); UpdateWorkspace(); UpdateMapBrowserControls(); }
 
     private async Task Run(Func<Task> action) { if (busy) return; busy = true; UpdateLabels(); try { await action(); } catch (Exception ex) { StudioLog.Error("Editor.Operation",ex,$"Map={mapPath}; Tool={Viewport.Tool}"); MessageBox.Show(this, ex.Message, "Crystal Studio", MessageBoxButton.OK, MessageBoxImage.Warning); Status.Text = LocalText.T("Operation failed"); } finally { busy = false; UpdateLabels(); } }
 
@@ -860,7 +860,13 @@ public partial class MainWindow : EditorWindow
         if (a.StampPath != null) { if (a.StampCells != null) SelectStamp(a); else Status.Text = (a.LoadError ?? LocalText.T("Loading stamp\u2026")); return; }
         if (SavedPalette) { RestoreTile(a); return; }
         Viewport.SpriteIndex = a.Index;
-        if (Viewport.Tool != EditorTool.Pencil && Viewport.Tool != EditorTool.Brush && Viewport.Tool != EditorTool.Bucket) SetTool(EditorTool.Pencil);
+        if (Viewport.Tool != EditorTool.Pencil && Viewport.Tool != EditorTool.Brush && Viewport.Tool != EditorTool.Bucket)
+        {
+            // The raw-sprite palette is already correct. Rebuilding it through SetTool
+            // here clears the items while Avalonia is still committing their selection.
+            Viewport.Tool = EditorTool.Pencil;
+            BrushSize.IsEnabled = false;
+        }
         RememberActiveAsset(); UpdateLabels(); Viewport.InvalidateVisual();
     }
 
