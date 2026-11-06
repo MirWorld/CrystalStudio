@@ -11,10 +11,15 @@ public partial class MainWindow
     {
         canvas.RowDefinitions.Insert(1, new RowDefinition { Height = GridLength.Auto });
         foreach (Control child in canvas.Children) if (child != mapTabs) Grid.SetRow(child, 2);
-        Grid.SetRow(stampProperties, 1);
+        var stampToolbar = new StackPanel { Orientation = Orientation.Horizontal };
+        stampToolbar.Bind(IsVisibleProperty, new Avalonia.Data.Binding("IsVisible") { Source = stampProperties });
+        Grid.SetRow(stampToolbar, 1);
         stampProperties.HorizontalAlignment = HorizontalAlignment.Left;
         stampProperties.Click += (_, _) => EditStampCategories();
-        canvas.Children.Add(stampProperties);
+        stampToolbar.Children.Add(stampProperties);
+        var connections = new Button { Name = "ModuleConnectionsButton", Content = LocalText.T("Module connections"), Margin = new Thickness(4) };
+        connections.Click += (_, _) => EditModuleConnections(); stampToolbar.Children.Add(connections);
+        canvas.Children.Add(stampToolbar);
         AssetList.DoubleTapped += (_, e) =>
         {
             if (e.Source is AvaloniaObject source && FindStampItem(source) is AssetChoice { StampPath: { } path }) OpenStampEditor(path);
@@ -129,7 +134,8 @@ public partial class MainWindow
         {
             static string? Value(ComboBox input) => input.SelectedItem is string { Length: > 0 } text ? text : null;
             if (string.IsNullOrWhiteSpace(name.Text)) { MessageBox.Show(dialog, "Enter a stamp name."); return; }
-            map.Category = new(category?.Id ?? "", category?.File ?? "", name.Text.Trim(), Value(type), Value(subtype), regions.SelectedValues, groups.SelectedValues, environments.SelectedValues, tags.SelectedValues, Value(direction), Value(directionStatus) ?? "unknown", null, false, Value(review) ?? "unreviewed");
+            map.Category = new(category?.Id ?? "", category?.File ?? "", name.Text.Trim(), Value(type), Value(subtype), regions.SelectedValues, groups.SelectedValues, environments.SelectedValues, tags.SelectedValues, Value(direction), Value(directionStatus) ?? "unknown", null, false, Value(review) ?? "unreviewed")
+                { Connections = category?.Connections };
             map.CategoryDirty = true; UpdateLabels(); UpdateMapTabLabels(); dialog.Close();
         };
         dialog.ShowDialog();
@@ -169,11 +175,14 @@ public partial class MainWindow
             var existing = entries.FirstOrDefault(n => string.Equals(n?["file"]?.GetValue<string>(), relative, StringComparison.OrdinalIgnoreCase));
             var category = map.Category ?? new CategorizedStamp("", "", Path.GetFileNameWithoutExtension(target), null, null, [], [], [], [], null, "unknown", null, false, "unreviewed");
             category = category with { Id = existing?["id"]?.GetValue<string>() ?? Path.ChangeExtension(relative, null), File = relative, Preview = null, PreviewComplete = false };
+            var sourceCells = Viewport.Document.Cells.Select(pair => new StampCell(pair.Key % Viewport.Document.Width + map.StampOriginX, pair.Key / Viewport.Document.Width + map.StampOriginY, pair.Value)).ToList();
+            var prepared = ModuleConnectionRules.PrepareSave(sourceCells, category.Connections);
+            category = category with { Connections = prepared.Connections };
             if (existing == null && index.Objects.Any(s => string.Equals(s.Id, category.Id, StringComparison.OrdinalIgnoreCase))) throw new InvalidDataException("The new catalogue ID already exists.");
             var updated = StudioJson.SerializeToNode(category, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase })!.AsObject();
             if (existing is JsonObject entry) foreach (var property in updated) entry[property.Key] = property.Value?.DeepClone();
             else entries.Add((JsonNode)updated);
-            var cells = CellCodec.CropStamp(Viewport.Document.Cells.Select(pair => new StampCell(pair.Key % Viewport.Document.Width + map.StampOriginX, pair.Key / Viewport.Document.Width + map.StampOriginY, pair.Value)));
+            var cells = prepared.Cells;
             string catalogueTarget = StampCategories.Resolve(index.ObjectRoot, relative);
             bool separateCopy = !string.Equals(Path.GetFullPath(target), catalogueTarget, StringComparison.OrdinalIgnoreCase);
             byte[]? catalogueOriginal = separateCopy && File.Exists(catalogueTarget) ? File.ReadAllBytes(catalogueTarget) : null;
@@ -192,6 +201,7 @@ public partial class MainWindow
                 throw;
             }
             map.Path = target; map.Category = category; map.CategoryDirty = false; Viewport.History.Saved(); ForgetRecovery(map);
+            map.StampOriginX -= prepared.OffsetX; map.StampOriginY -= prepared.OffsetY;
             categoryIndex = StampCategories.Read(indexPath);
             selectedStampPath = null; selectedStampPreview = null;
             _ = DiscoverStampsAsync();

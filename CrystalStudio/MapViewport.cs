@@ -170,6 +170,7 @@ public sealed partial class MapViewport : SceneControl
     {
         base.OnSizeChanged(sizeInfo);
         InvalidateVisual();
+        if (IsModulePreview) return;
         if (Zoom >= FitZoom) return;
         var worldCentre = (new Point(sizeInfo.PreviousSize.Width / 2, sizeInfo.PreviousSize.Height / 2) - origin) / Zoom;
         Zoom = FitZoom;
