@@ -28,8 +28,9 @@ public sealed class ProvinceSceneryLoadingTests
             cancelled.Cancel();
             Assert.Throws<OperationCanceledException>(() => ProvinceGenerator.LoadScenery(index, assets, cancelled.Token));
             assets.Libraries.Clear();
-            var error = Assert.Throws<InvalidDataException>(() => ProvinceGenerator.LoadScenery(index, assets));
-            Assert.Contains("No matching outdoor tree stamps", error.Message);
+            // Outdoor scenery is optional for quick map generation; an unavailable
+            // catalogue must return no decorations without losing cancellation support.
+            Assert.Empty(ProvinceGenerator.LoadScenery(index, assets));
         }
         finally { Directory.Delete(root, true); }
     }

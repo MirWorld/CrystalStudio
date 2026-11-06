@@ -88,6 +88,250 @@
   "StabilityAI_20261105": { "English": "Stability AI", "Chinese": "Stability AI" },
   "AiLocalSd_20261105": { "English": "Local SD WebUI / Forge", "Chinese": "本地 SD WebUI / Forge" },
   "AiCustom_20261105": { "English": "Custom request template", "Chinese": "自定义请求模板" },
+  "QuickMapUsability_ProfileSize": {
+    "English": "Map creation preferences are too large.",
+    "Chinese": "地图创建配置已超过容量限制，请精简预设后再保存。"
+  },
+  "QuickMapUsability_Manage": {
+    "English": "Manage presets",
+    "Chinese": "管理预设"
+  },
+  "QuickMapUsability_001": {
+    "English": "Custom settings",
+    "Chinese": "自定义设置"
+  },
+  "QuickMapUsability_002": {
+    "English": "Current draft",
+    "Chinese": "当前草稿"
+  },
+  "QuickMapUsability_003": {
+    "English": "Step 1 of 2 · Choose a starting point",
+    "Chinese": "第 1 步，共 2 步 · 选择创建方案"
+  },
+  "QuickMapUsability_004": {
+    "English": "Use a purpose template, or choose your own map settings. Blank maps can be created immediately.",
+    "Chinese": "可从用途模板开始，也可自行设置。空白地图可直接创建。"
+  },
+  "QuickMapUsability_005": {
+    "English": "Saved preset",
+    "Chinese": "已保存的预设"
+  },
+  "QuickMapUsability_006": {
+    "English": "Purpose template",
+    "Chinese": "用途模板"
+  },
+  "QuickMapUsability_007": {
+    "English": "Suggested sizes",
+    "Chinese": "推荐尺寸"
+  },
+  "QuickMapUsability_008": {
+    "English": "Width",
+    "Chinese": "宽度"
+  },
+  "QuickMapUsability_009": {
+    "English": "Height",
+    "Chinese": "高度"
+  },
+  "QuickMapUsability_010": {
+    "English": "Map width in cells",
+    "Chinese": "地图宽度（格）"
+  },
+  "QuickMapUsability_011": {
+    "English": "Map height in cells",
+    "Chinese": "地图高度（格）"
+  },
+  "QuickMapUsability_012": {
+    "English": "Lock aspect ratio",
+    "Chinese": "锁定宽高比"
+  },
+  "QuickMapUsability_013": {
+    "English": "Swap width / height",
+    "Chinese": "交换宽高"
+  },
+  "QuickMapUsability_014": {
+    "English": "Presets share generation settings only. Names and output folders stay on this computer.",
+    "Chinese": "预设仅共享生成方案，不会覆盖当前地图名称、本机输出目录和保存偏好。"
+  },
+  "QuickMapUsability_015": {
+    "English": "Advanced creation options",
+    "Chinese": "高级创建选项"
+  },
+  "QuickMapUsability_016": {
+    "English": "Return to preview",
+    "Chinese": "返回预览"
+  },
+  "QuickMapUsability_017": {
+    "English": "Name and output changes keep the current preview. Size, type or parameter changes rebuild it.",
+    "Chinese": "修改名称或保存设置会保留当前预览；修改尺寸、类型或生成参数会重新生成。"
+  },
+  "QuickMapUsability_018": {
+    "English": "{0:N0} cells · about {1:N0} base ground tiles (2 × 2 cells each).",
+    "Chinese": "共 {0:N0} 个地图格 · 约 {1:N0} 个基础地表图块（每块覆盖 2 × 2 格）。"
+  },
+  "QuickMapUsability_019": {
+    "English": "Preset name",
+    "Chinese": "预设名称"
+  },
+  "QuickMapUsability_020": {
+    "English": "Rename preset",
+    "Chinese": "重命名预设"
+  },
+  "QuickMapUsability_021": {
+    "English": "Duplicate preset",
+    "Chinese": "复制预设"
+  },
+  "QuickMapUsability_022": {
+    "English": "Delete preset",
+    "Chinese": "删除预设"
+  },
+  "QuickMapUsability_023": {
+    "English": "Import preset…",
+    "Chinese": "导入预设…"
+  },
+  "QuickMapUsability_024": {
+    "English": "Export preset…",
+    "Chinese": "导出预设…"
+  },
+  "QuickMapUsability_025": {
+    "English": "Map preset (*.json)",
+    "Chinese": "地图预设 (*.json)"
+  },
+  "QuickMapUsability_026": {
+    "English": "Delete preset '{0}'? Existing maps are not affected.",
+    "Chinese": "确定删除预设“{0}”吗？不会影响已创建的地图。"
+  },
+  "QuickMapUsability_027": {
+    "English": "Material test area",
+    "Chinese": "素材测试场"
+  },
+  "QuickMapUsability_028": {
+    "English": "An empty 128 × 128 map for checking artwork and collisions. No game artwork is required.",
+    "Chinese": "128 × 128 的空白地图，便于放置素材和检查碰撞；创建时无需游戏素材。"
+  },
+  "QuickMapUsability_029": {
+    "English": "Outdoor exploration",
+    "Chinese": "野外探索区"
+  },
+  "QuickMapUsability_030": {
+    "English": "A medium woodland map with moderate vegetation and a chance of a river. Exact routes depend on generation.",
+    "Chinese": "中型林地，适量植被，有概率生成河流。具体路线以生成预览为准。"
+  },
+  "QuickMapUsability_031": {
+    "English": "Town surroundings",
+    "Chinese": "城镇外围"
+  },
+  "QuickMapUsability_032": {
+    "English": "Light vegetation and one requested town. Placement depends on available artwork and space; no fixed area is reserved.",
+    "Chinese": "较少植被，尝试放置一座城镇。能否放置取决于素材和空间，不会固定预留区域。"
+  },
+  "QuickMapUsability_033": {
+    "English": "Small dungeon",
+    "Chinese": "小型地下城"
+  },
+  "QuickMapUsability_034": {
+    "English": "A compact stone dungeon with six requested rooms and wide corridors. Check the preview for actual room placement.",
+    "Chinese": "紧凑的石质地下城，目标为六个房间和较宽走廊；实际房间布局以预览为准。"
+  },
+  "QuickMapUsability_035": {
+    "English": "Compact test",
+    "Chinese": "紧凑测试区"
+  },
+  "QuickMapUsability_036": {
+    "English": "Small area",
+    "Chinese": "小型区域"
+  },
+  "QuickMapUsability_037": {
+    "English": "Medium area",
+    "Chinese": "中型区域"
+  },
+  "QuickMapUsability_038": {
+    "English": "Large area",
+    "Chinese": "大型区域"
+  },
+  "QuickMapUsability_039": {
+    "English": "Large generated map",
+    "Chinese": "大型生成地图"
+  },
+  "QuickMapUsability_040": {
+    "English": "Large blank map",
+    "Chinese": "大型空白地图"
+  },
+  "QuickMapUsability_041": {
+    "English": "Wide area",
+    "Chinese": "横向区域"
+  },
+  "QuickMapUsability_042": {
+    "English": "Tall area",
+    "Chinese": "纵向区域"
+  },
+  "QuickMapUsability_043": {
+    "English": "Blank map",
+    "Chinese": "空白地图"
+  },
+  "QuickMapUsability_044": {
+    "English": "Base terrain",
+    "Chinese": "基础地形"
+  },
+  "QuickMapUsability_045": {
+    "English": "Outdoor map",
+    "Chinese": "野外地图"
+  },
+  "QuickMapUsability_046": {
+    "English": "Dungeon map",
+    "Chinese": "地下城地图"
+  },
+  "QuickMapUsability_047": {
+    "English": "Step 2 of 2 · {0} · {1} × {2} cells",
+    "Chinese": "第 2 步，共 2 步 · {0} · {1} × {2} 格"
+  },
+  "QuickMapUsability_048": {
+    "English": "Create and save",
+    "Chinese": "创建并保存"
+  },
+  "QuickMapUsability_049": {
+    "English": "Previous: Map settings",
+    "Chinese": "上一步：地图设置"
+  },
+  "QuickMapUsability_050": {
+    "English": "Advanced generation settings",
+    "Chinese": "高级生成参数"
+  },
+  "QuickMapUsability_051": {
+    "English": "Patch density",
+    "Chinese": "地表斑块覆盖程度"
+  },
+  "QuickMapUsability_052": {
+    "English": "Vegetation density",
+    "Chinese": "植被疏密"
+  },
+  "QuickMapUsability_053": {
+    "English": "Room density",
+    "Chinese": "房间疏密"
+  },
+  "QuickMapUsability_054": {
+    "English": "Custom",
+    "Chinese": "自定义"
+  },
+  "QuickMapUsability_055": {
+    "English": "Balanced",
+    "Chinese": "适中"
+  },
+  "QuickMapUsability_056": {
+    "English": "Dense",
+    "Chinese": "密集"
+  },
+  "QuickMapUsability_057": {
+    "English": "Invalid map preset.",
+    "Chinese": "地图预设格式无效。"
+  },
+  "QuickMapUsability_058": {
+    "English": "A preset with this name already exists.",
+    "Chinese": "已存在同名预设，请先重命名或删除同名预设。"
+  },
+  "QuickMapUsability_059": {
+    "English": "Map preset is too large.",
+    "Chinese": "地图预设文件过大。"
+  },
   "OriginalSize_20261105": {
     "English": "Original Size",
     "Chinese": "原始大小"
@@ -3935,6 +4179,150 @@
   "QuickMap_42": {
     "English": " (recovered)",
     "Chinese": "（已恢复）"
+  },
+  "QuickRefinement_01": {
+    "English": "Required artwork missing: {0}. {1}",
+    "Chinese": "缺少必需素材：{0}。{1}"
+  },
+  "QuickRefinement_02": {
+    "English": "Optional artwork unavailable; omitted: {0}. {1}",
+    "Chinese": "可选素材不可用，本次已省略：{0}。{1}"
+  },
+  "QuickRefinement_03": {
+    "English": "Required artwork ready",
+    "Chinese": "必需素材已就绪"
+  },
+  "QuickRefinement_04": {
+    "English": "Cannot generate: restore required artwork",
+    "Chinese": "暂时无法生成：请补齐必需素材"
+  },
+  "QuickRefinement_05": {
+    "English": "Base ground",
+    "Chinese": "基础地表"
+  },
+  "QuickRefinement_06": {
+    "English": "Patch ground",
+    "Chinese": "混合地表"
+  },
+  "QuickRefinement_07": {
+    "English": "Cliffs and plateau",
+    "Chinese": "悬崖与高地"
+  },
+  "QuickRefinement_08": {
+    "English": "Beach and shoreline",
+    "Chinese": "海滩与海岸"
+  },
+  "QuickRefinement_09": {
+    "English": "River banks",
+    "Chinese": "河岸"
+  },
+  "QuickRefinement_10": {
+    "English": "Outdoor scenery",
+    "Chinese": "野外装饰"
+  },
+  "QuickRefinement_11": {
+    "English": "Town buildings",
+    "Chinese": "城镇建筑"
+  },
+  "QuickRefinement_12": {
+    "English": "Dungeon floor",
+    "Chinese": "地下城地面"
+  },
+  "QuickRefinement_13": {
+    "English": "Dungeon walls",
+    "Chinese": "地下城墙体"
+  },
+  "QuickRefinement_14": {
+    "English": "Entrances",
+    "Chinese": "出入口"
+  },
+  "QuickRefinement_15": {
+    "English": "River crossing",
+    "Chinese": "过河桥梁"
+  },
+  "QuickRefinement_16": {
+    "English": "Island coastline",
+    "Chinese": "岛屿海岸"
+  },
+  "QuickRefinement_17": {
+    "English": "Save after creation: {0}",
+    "Chinese": "创建后保存至：{0}"
+  },
+  "QuickRefinement_18": {
+    "English": "Create an unsaved map; choose its location with Save As.",
+    "Chinese": "创建为未保存地图，之后通过“另存为”选择位置。"
+  },
+  "QuickRefinement_19": {
+    "English": "Save preset: {0}",
+    "Chinese": "创建后保存预设：{0}"
+  },
+  "QuickRefinement_20": {
+    "English": "Local detail",
+    "Chinese": "局部细节"
+  },
+  "QuickRefinement_21": {
+    "English": "Zoom out",
+    "Chinese": "缩小"
+  },
+  "QuickRefinement_22": {
+    "English": "Zoom in",
+    "Chinese": "放大"
+  },
+  "QuickRefinement_23": {
+    "English": "Fit preview",
+    "Chinese": "适应视图"
+  },
+  "QuickRefinement_24": {
+    "English": "Inspect centre",
+    "Chinese": "检查视图中心"
+  },
+  "QuickRefinement_25": {
+    "English": "Overview",
+    "Chinese": "返回总览"
+  },
+  "QuickRefinement_26": {
+    "English": "Wheel: zoom · Drag: pan · Double-click: redraw local detail. Zoom enlarges the preview, not the original artwork.",
+    "Chinese": "滚轮缩放 · 拖动平移 · 双击指定位置重绘局部细节。放大总览图不等于提高素材精度。"
+  },
+  "QuickRefinement_27": {
+    "English": "Recent candidates · favorites stay in this session",
+    "Chinese": "最近候选 · 收藏仅在本次创建中保留"
+  },
+  "QuickRefinement_28": {
+    "English": "Seed {0}",
+    "Chinese": "种子 {0}"
+  },
+  "QuickRefinement_29": {
+    "English": "Restore these parameters and regenerate with the currently loaded artwork.",
+    "Chinese": "恢复此候选的生成参数，并使用当前加载的素材重新生成。"
+  },
+  "QuickRefinement_30": {
+    "English": "Favorite",
+    "Chinese": "收藏"
+  },
+  "QuickRefinement_31": {
+    "English": "All five candidates are favorites. Unfavorite one to retain another result.",
+    "Chinese": "五个候选均已收藏。请先取消其中一个的收藏，才能保留新结果。"
+  },
+  "QuickRefinement_32": {
+    "English": "Candidates store parameters and thumbnails only; switching regenerates the map. Favorites are not saved after closing.",
+    "Chinese": "候选仅保留参数和缩略图，切换时会重新生成；关闭本次创建后不保留收藏。"
+  },
+  "QuickRefinement_33": {
+    "English": "Checking required and optional artwork…",
+    "Chinese": "正在预检必需与可选素材……"
+  },
+  "QuickRefinement_34": {
+    "English": "Interactive map preview",
+    "Chinese": "可缩放交互地图预览"
+  },
+  "QuickRefinement_35": {
+    "English": "Keyboard: + / - to zoom, arrows to pan, Home to fit, Enter to inspect the view centre.",
+    "Chinese": "键盘：+ / - 缩放，方向键平移，Home 适应视图，Enter 检查视图中心。"
+  },
+  "QuickRefinement_36": {
+    "English": "Checking optional scenery and water artwork…",
+    "Chinese": "正在检查可选装饰与水系素材……"
   },
   "QuickMap_43": {
     "English": "Recovered an unsaved copy. Use Save As to choose its destination.",

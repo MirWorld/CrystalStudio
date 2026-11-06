@@ -12,7 +12,7 @@ internal static class MapCreationPaths
         ? Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments)
         : DataPaths.FindMapFolder(libraryFolder) ?? Path.Combine(DataPaths.GetClientRoot(libraryFolder), "Map");
 
-    public static string Target(string directory, string name)
+    public static void ValidateName(string name)
     {
         if (string.IsNullOrWhiteSpace(name) || name != name.Trim() || name.EndsWith('.') ||
             name.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0 || name is "." or "..")
@@ -21,6 +21,11 @@ internal static class MapCreationPaths
         if (stem is "CON" or "PRN" or "AUX" or "NUL" ||
             stem.Length == 4 && (stem.StartsWith("COM") || stem.StartsWith("LPT")) && stem[3] is >= '0' and <= '9')
             throw new ArgumentException("Enter a valid map filename without a folder path.");
+    }
+
+    public static string Target(string directory, string name)
+    {
+        ValidateName(name);
         if (string.IsNullOrWhiteSpace(directory)) throw new ArgumentException("Choose an output folder.");
         return Path.Combine(Path.GetFullPath(directory), FileName(name));
     }

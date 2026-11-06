@@ -74,7 +74,6 @@ public static class ProvinceGenerator
                 StudioLog.Warning("Province.Scenery", $"Skipping unavailable object; Id={stamp.Id}; File={stamp.File}", ex);
             }
         }
-        if (!result.Any(s => s.Kind == SpecialBrushKind.Tree)) throw new InvalidDataException("No matching outdoor tree stamps are available in the object catalogue.");
         return result;
     }
 

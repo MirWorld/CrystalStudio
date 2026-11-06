@@ -17,7 +17,7 @@ internal static class GeneratorPreferences
     public static Dictionary<string, string> Capture(EditorWindow window)
     {
         var values = new Dictionary<string, string>();
-        foreach (var control in window.GetLogicalDescendants().OfType<Control>().Where(control => control.Name != null))
+        foreach (var control in window.GetLogicalDescendants().OfType<Control>().Where(control => control.Name != null && !control.Name.StartsWith("QuickMap", StringComparison.Ordinal)))
         {
             string? value = control switch
             {
