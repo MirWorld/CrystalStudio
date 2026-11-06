@@ -32,8 +32,8 @@ public sealed record Cell
 }
 public sealed partial class MapDocument
 {
-    public int Width { get; }
-    public int Height { get; }
+    public int Width { get; private set; }
+    public int Height { get; private set; }
     public MapDocument(int width, int height)
     {
         MapDimensions.Validate(width, height);
@@ -192,7 +192,7 @@ public sealed class EditHistory
 {
     public bool CanUndo => undo.Count > 0 || stroke?.Count > 0 || stampSnapshot != null;
     public bool CanRedo => redo.Count > 0;
-    private sealed record Change(Dictionary<int, Cell> Cells, List<PlacedStamp>? Stamps, long State);
+    private sealed record Change(Dictionary<int, Cell> Cells, List<PlacedStamp>? Stamps, long State, MapDocument? Document = null);
     private readonly Stack<Change> undo = [], redo = [];
     private Dictionary<int, Cell>? stroke;
     private List<PlacedStamp>? stampSnapshot;
@@ -212,22 +212,31 @@ public sealed class EditHistory
     {
         if (stroke?.Count > 0 || stampSnapshot != null)
         {
-            undo.Push(new(stroke ?? [], stampSnapshot, currentState));
+            PushUndo(new(stroke ?? [], stampSnapshot, currentState));
             currentState = ++nextState;
             redo.Clear();
-            if (undo.Count > 100)
-            {
-                var keep = undo.Take(100).Reverse().ToArray();
-                undo.Clear();
-                foreach (var change in keep) undo.Push(change);
-            }
         }
         stroke = null; stampSnapshot = null;
+    }
+    private void PushUndo(Change change)
+    {
+        undo.Push(change);
+        if (undo.Count <= 100) return;
+        var keep = undo.Take(100).Reverse().ToArray();
+        undo.Clear();
+        foreach (var entry in keep) undo.Push(entry);
     }
     private void Swap(MapDocument d, Stack<Change> from, Stack<Change> to, Action<int, int>? changed)
     {
         Commit();
         if (!from.TryPop(out var change)) return;
+        if (change.Document != null)
+        {
+            to.Push(new([], null, currentState, MapRecoveryStore.Capture(d)));
+            d.ReplaceContents(change.Document);
+            currentState = change.State;
+            return;
+        }
         var inverse = new Dictionary<int, Cell>(change.Cells.Count);
         List<PlacedStamp>? inverseStamps = change.Stamps == null ? null : [.. d.PlacedStamps];
         foreach (var (key, cell) in change.Cells)
@@ -244,5 +253,14 @@ public sealed class EditHistory
     public void Redo(MapDocument d, Action<int, int>? changed = null) => Swap(d, redo, undo, changed);
     public void Saved() { Commit(); savedState = currentState; }
     public void MarkUnsaved() => savedState = -1;
+
+    internal void Resize(MapDocument document, MapDocument replacement)
+    {
+        Commit();
+        PushUndo(new([], null, currentState, MapRecoveryStore.Capture(document)));
+        document.ReplaceContents(replacement);
+        currentState = ++nextState;
+        redo.Clear();
+    }
 }
 
