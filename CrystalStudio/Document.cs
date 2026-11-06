@@ -72,9 +72,7 @@ public sealed partial class MapDocument
             if (s.HasFront) c.Foreground = new(s.FrontIndex, s.FrontImage, s.FrontAnimationFrame, s.FrontAnimationTick);
             if (sanxiuIds)
             {
-                if (c.MiddleLibrary >= 0 && c.MiddleImage != 0) c.MiddleLibrary = checked((short)(c.MiddleLibrary + 1000));
-                if (c.Foreground is { Library: >= 0 } front && (front.Image & 0x7FFF) != 0)
-                    c.Foreground = front with { Library = checked((short)(front.Library + 2000)) };
+                CellCodec.NormalizeLibraryIds(c, format);
             }
             d.Set(x, y, c);
         }
@@ -110,6 +108,15 @@ public sealed partial class MapDocument
 public record StampCell(int X, int Y, Cell Cell);
 public static class CellCodec
 {
+    internal static void NormalizeLibraryIds(Cell cell, AssetSourceFormat format)
+    {
+        if (format != AssetSourceFormat.Sanxiu) return;
+        if (cell.MiddleLibrary is >= 0 and < 1000 && cell.MiddleImage != 0)
+            cell.MiddleLibrary = checked((short)(cell.MiddleLibrary + 1000));
+        if (cell.Foreground is { Library: >= 0 and < 2000 } front && (front.Image & 0x7FFF) != 0)
+            cell.Foreground = front with { Library = checked((short)(front.Library + 2000)) };
+    }
+
     public static void Write(BinaryWriter w, Cell c, bool map)
     {
         w.Write(c.BackLibrary); w.Write(c.BackImage); w.Write(c.MiddleLibrary); w.Write(c.MiddleImage);
@@ -125,12 +132,16 @@ public static class CellCodec
         w.Write(c.Door); w.Write(c.DoorOffset); w.Write(c.MiddleFrames); w.Write(c.MiddleTick); w.Write(c.TileAnimation); w.Write(c.TileOffset); w.Write(c.TileFrames); w.Write(c.Light);
 
     }
-    public static List<StampCell> LoadStamp(string path, CancellationToken cancellation = default)
+    public static List<StampCell> LoadStamp(string path, CancellationToken cancellation = default) =>
+        LoadStamp(path, AssetSourceFormat.Default, cancellation);
+    public static List<StampCell> LoadStamp(string path, AssetSourceFormat format, CancellationToken cancellation = default)
     {
         using var stream = File.OpenRead(path);
-        return LoadStamp(stream, cancellation);
+        return LoadStamp(stream, format, cancellation);
     }
     internal static List<StampCell> LoadStamp(Stream stream, CancellationToken cancellation = default)
+        => LoadStamp(stream, AssetSourceFormat.Default, cancellation);
+    private static List<StampCell> LoadStamp(Stream stream, AssetSourceFormat format, CancellationToken cancellation)
     {
         using var r = new BinaryReader(stream, System.Text.Encoding.UTF8, leaveOpen: true);
         int version = 0; if (r.BaseStream.Length >= 3 && r.ReadByte() == 'C' && r.ReadByte() == '#') version = r.ReadByte(); else r.BaseStream.Position = 0;
@@ -148,7 +159,9 @@ public static class CellCodec
             if (fronts > 1) throw new InvalidDataException("An object cell supports one foreground image.");
             if (fronts == 1) c.Foreground = new(r.ReadInt16(), r.ReadInt16(), version >= 2 ? r.ReadByte() : (byte)0, version >= 2 ? r.ReadByte() : (byte)0);
             c.Door = r.ReadByte(); c.DoorOffset = r.ReadByte(); if (version < 2) { byte frames = r.ReadByte(), tick = r.ReadByte(); if (c.Foreground is { } front) c.Foreground = front with { Frames = frames, Tick = tick }; }
-            c.MiddleFrames = r.ReadByte(); c.MiddleTick = r.ReadByte(); c.TileAnimation = r.ReadInt16(); c.TileOffset = r.ReadInt16(); c.TileFrames = r.ReadByte(); c.Light = r.ReadByte(); result.Add(new(x, y, c));
+            c.MiddleFrames = r.ReadByte(); c.MiddleTick = r.ReadByte(); c.TileAnimation = r.ReadInt16(); c.TileOffset = r.ReadInt16(); c.TileFrames = r.ReadByte(); c.Light = r.ReadByte();
+            NormalizeLibraryIds(c, format);
+            result.Add(new(x, y, c));
         }
         return result;
     }

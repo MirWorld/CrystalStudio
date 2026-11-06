@@ -128,6 +128,7 @@ public partial class MainWindow : EditorWindow
 
         Viewport.Hover += UpdateCellInspector;
         Viewport.Changed += () => UpdateCellInspector(Viewport.HoverCell.X, Viewport.HoverCell.Y);
+        Viewport.AssetPicked += SelectPickedTile;
 
         Viewport.Changed += UpdateLabels; Viewport.Message += message => Status.Text = (message); Viewport.Rendered += (ms, count) => { Performance.Text = LocalText.Format("Prepare {0:F1} ms · Batches {1:N0} · Sprite cache {2:N0}",ms,count,(assets?.Cached ?? 0) + (assets?.OverviewCached ?? 0)); ToolTip.SetTip(LibraryStatus, (Performance.Text)); };
         Viewport.AssetUsed += RememberActiveAsset;
@@ -791,6 +792,47 @@ public partial class MainWindow : EditorWindow
     }
 
     private void LibraryChanged(object s, SelectionChangedEventArgs e) { if (restoringAsset) return; page = 0; Viewport.SpriteIndex = -1; if (LibraryList.SelectedItem is LibraryChoice l) Viewport.Library = l.Id; BuildPage(); }
+
+    private void SelectPickedTile(int library, int index, MapLayer layer)
+    {
+        if (assets?.Libraries.TryGetValue(library, out var atlas) != true || index < 0 || index >= atlas.Count)
+        {
+            Status.Text = LocalText.T("Tile library or image is unavailable");
+            return;
+        }
+
+        restoringAsset = true;
+        try
+        {
+            LayerList.SelectedIndex = (int)layer;
+            Viewport.Layer = layer;
+            Viewport.Library = library;
+            Viewport.SpriteIndex = index;
+            LibraryList.SelectedItem = LibraryList.Items.OfType<LibraryChoice>().FirstOrDefault(l => l.Id == library);
+        }
+        finally { restoringAsset = false; }
+
+        // A search filter can hide the sampled tile; clear it so the reverse lookup
+        // always reveals and selects the matching palette item.
+        searchDelay.Stop();
+        if (AssetSearch.Text.Length != 0) { AssetSearch.Clear(); searchDelay.Stop(); }
+        var layout = AssetLayout(library, layer);
+        var paletteAsset = AssetReference.Tile(atlas.Path, library, index, layer, layout);
+        var visibleIndices = FilteredIndices(atlas);
+        var targetIndex = visibleIndices.IndexOf(paletteAsset.Index);
+        page = targetIndex >= 0 ? targetIndex / PageSize : 0;
+        BuildPage();
+        var selected = choices.FirstOrDefault(c => c.Asset is AssetReference asset && asset.SameAsset(paletteAsset));
+        if (selected != null)
+        {
+            AssetList.SelectedItem = selected;
+            AssetList.ScrollIntoView(selected);
+        }
+        RememberActiveAsset();
+        UpdateLabels();
+        Viewport.InvalidateVisual();
+        Status.Text = LocalText.Format("Selected tile · Lib {0} · Sprite {1}", library, index);
+    }
 
     private void SearchChanged(object s, TextChangedEventArgs e) { page = 0; if (initialized) { searchDelay.Stop(); searchDelay.Start(); } }
 

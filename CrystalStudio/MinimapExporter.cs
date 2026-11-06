@@ -36,7 +36,7 @@ internal static class MinimapExporter
 
             void Add(int library, int image, bool blend)
             {
-                if (library >= 0 && image >= 0) commands.Add((x, y, layer, library, image, blend));
+                if (library >= 0 && image >= 0 && !MapSpriteDrawing.SkipFront(library, document.SourceFormat)) commands.Add((x, y, layer, library, image, blend));
             }
         }
 
@@ -45,7 +45,7 @@ internal static class MinimapExporter
         var drawings = commands.Where(c => sprites.ContainsKey((c.Library, c.Image))).Select(c =>
         {
             var sprite = sprites[(c.Library, c.Image)];
-            var bounds = MapSpriteDrawing.Bounds(sprite, c.X, c.Y, c.Library, c.Image, c.Layer > 0, c.Layer == 2, c.Blend);
+            var bounds = MapSpriteDrawing.Bounds(sprite, c.X, c.Y, c.Library, c.Image, c.Layer > 0, c.Layer == 2, c.Blend, document.SourceFormat);
             return (sprite, bounds, c.Blend);
         });
         return PreviewRaster.Create(drawings, new Rect(0, 0, document.Width * 48.0, document.Height * 32.0),
