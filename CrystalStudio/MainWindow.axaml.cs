@@ -1042,6 +1042,8 @@ public partial class MainWindow : EditorWindow
 
         ExportButton.IsEnabled = !busy && Viewport.Selection.HasValue;
         ExportMinimapButton.IsEnabled = !busy;
+        CropButton.IsEnabled = CropMenuButton.IsEnabled = !busy && activeMap?.IsStamp != true &&
+            Viewport.Selection.HasValue && !Viewport.AnyLayerLocked;
 
         FillButton.IsEnabled = !busy && Viewport.Selection.HasValue && (Viewport.SpriteIndex >= 0 || Viewport.IsCollisionLayer);
 
