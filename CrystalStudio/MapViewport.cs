@@ -141,6 +141,7 @@ public sealed partial class MapViewport : SceneControl
     private static Brush canvas => ThemeService.Brush("CanvasBackground");
     private static Brush paper => ThemeService.Brush("CanvasPaper");
     private static ScenePen cursor => new(ThemeService.Brush("Accent"),1.5);
+    private static readonly ScenePen hoverCellOutline = new(new ImmutableSolidColorBrush(Colors.DarkBlue, .7), 4);
     public MapViewport() { InitializeScene(); Focusable = true; ClipToBounds = true; RenderOptions.SetBitmapInterpolationMode(this, Avalonia.Media.Imaging.BitmapInterpolationMode.None); animationTimer.Tick += (_, _) => AdvanceAnimation(); Loaded += (_, _) => { animationTimer.Start(); sceneDirty = true; InvalidateVisual(); }; Unloaded += (_, _) => { PauseOverview(); animationTimer.Stop(); NavigationCancelled?.Invoke(); if (dragging) End(); }; }
     public void SetDocument(MapDocument d, bool preserveZoom = false) { NavigationCancelled?.Invoke(); if (dragging) End(); ResetOverview(); ResetPresentation(); ResetDetailScene(); ResetPickupHints(); ResetStampDrawing(); CancelPickup(); CancelPaste(); CancelWallDraft(); Document = d; Array.Clear(layerLocks); History = new(); Selection = null; brushPreviewKey = null; chunks.Clear(); frontRows.Clear(); origin = new(60, 70); Zoom = preserveZoom ? LimitZoom(Zoom) : 1; WarmOverview(); InvalidateVisual(); Changed?.Invoke(); }
     internal void StopBackgroundWork() { ResetOverview(); animationTimer.Stop(); }
@@ -294,6 +295,16 @@ public sealed partial class MapViewport : SceneControl
         }
         dc.Pop(); dc.Pop();
     }
+    private void DrawHoverCell(SceneContext dc)
+    {
+        if (!IsPointerOver) return;
+        // Re-evaluate after camera changes, even when the mouse has not moved.
+        var cell = CellAt(mouse);
+        if (!Document.Contains(cell.X, cell.Y)) return;
+        // Screen coordinates keep the stroke four pixels wide at every zoom.
+        dc.DrawRectangle(null, hoverCellOutline, new(origin.X + cell.X * 48 * Zoom,
+            origin.Y + cell.Y * 32 * Zoom, 48 * Zoom, 32 * Zoom));
+    }
     private void DrawInteraction(SceneContext dc)
     {
         dc.PushTransform(new SceneTranslation(origin.X, origin.Y)); dc.PushTransform(new SceneScale(Zoom, Zoom));
@@ -336,6 +347,7 @@ public sealed partial class MapViewport : SceneControl
             dc.DrawRectangle(null, cursor, new(footprint.X * 48, footprint.Y * 32, footprint.Width * 48, footprint.Height * 32));}
         }
         dc.Pop(); dc.Pop();
+        DrawHoverCell(dc);
     }
     private SceneGroup FrontRow(int cx, int y)
     {

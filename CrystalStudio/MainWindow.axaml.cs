@@ -825,8 +825,9 @@ public partial class MainWindow : EditorWindow
         // A search filter can hide the sampled tile; clear it so the reverse lookup
         // always reveals and selects the matching palette item.
         searchDelay.Stop();
-        if (AssetSearch.Text.Length != 0) { AssetSearch.Clear(); searchDelay.Stop(); }
-        var layout = AssetLayout(library, layer);
+        // Avalonia leaves Text null before input and after Clear().
+        if (!string.IsNullOrEmpty(AssetSearch.Text)) { AssetSearch.Clear(); searchDelay.Stop(); }
+        var layout = PatternPalette ? AssetLayout(library, layer) : TilePatternLayout.None;
         var paletteAsset = AssetReference.Tile(atlas.Path, library, index, layer, layout);
         var visibleIndices = FilteredIndices(atlas);
         var targetIndex = visibleIndices.IndexOf(paletteAsset.Index);
@@ -865,7 +866,8 @@ public partial class MainWindow : EditorWindow
 
         else indices = Enumerable.Range(0, Math.Min(lib.Count, LayerList.SelectedIndex == 2 ? 32767 : 65535));
 
-        return indices.Where(i => string.IsNullOrWhiteSpace(AssetSearch.Text) || (PatternPalette ? (i / block).ToString() : i.ToString()).Contains(AssetSearch.Text.Trim(), StringComparison.OrdinalIgnoreCase)).ToList();
+        string query = AssetSearch.Text?.Trim() ?? "";
+        return indices.Where(i => query.Length == 0 || (PatternPalette ? (i / block).ToString() : i.ToString()).Contains(query, StringComparison.OrdinalIgnoreCase)).ToList();
 
     }
 
@@ -944,7 +946,7 @@ public partial class MainWindow : EditorWindow
         }
         else if (StampMode)
         {
-            string query = AssetSearch.Text.Trim();
+            string query = AssetSearch.Text?.Trim() ?? "";
             var filtered = stampEntries.Where(entry => query.Length == 0 || entry.RelativePath.Contains(query, StringComparison.OrdinalIgnoreCase)).ToList();
             string? path = (AssetList.SelectedItem as AssetChoice)?.StampPath ?? selectedStampPath;
             current = filtered.FindIndex(entry => entry.FilePath == path);

@@ -290,3 +290,17 @@ Release 独立输出目录 Build/RegionEditingRelease 编译成功，0 错误、
 - `prompt-system.txt`、`prompt-user.txt`、`live-results.json`、`live-summary.json`、`live-verification.json`：实际发送的提示词、24 项模型判定及六个片段的核验结果，不包含请求密钥。
 - `aot-publish.log`、`published-evidence.json`：原生发布、文件哈希和编译提示统计。
 - `verify-native.ps1`、`native-helpers.ps1`、`native-verification.log`、`native-proof/native-verification.json` 及截图：中英文原生界面验证。
+
+## 地图右键取样与悬浮单元格边框（2026-11-07）
+
+用户日志中的异常为 `MainWindow.SelectPickedTile → MapViewport.PickTile → OnPointerPressed`。通过主窗口的真实鼠标事件复现，异常定位至 `AssetSearch.Text.Length`：搜索框尚未输入或清空后，Avalonia 的 Text 可以为 null。因此取样和资源分类、收藏、物件搜索统一将 null 作为空查询处理。另将取样资源引用的图案类型与当前资源面板模式保持一致，修正铅笔和吸管模式下资源未被选中的情况。
+
+新增悬浮单元格预选框，使用 `DarkBlue (#00008B)`、70% 不透明度、4 个逻辑像素宽的实线空心边框。边框在交互预览之后绘制，因此缩放时线宽保持一致，且不会影响选区、绘制范围或地图历史。依据当前鼠标位置和相机变换计算单元格，鼠标离开地图或位于地图范围之外时隐藏；仅更新交互场景，不重建地图场景。
+
+新增 4 项测试，覆盖地面和中间层在 null、空及非空搜索下的右键取样、吸管、原右键菜单，以及 100%、50%、20% 缩放下的颜色混合、四像素线宽、空心内部、离开后隐藏、地图场景缓存和无编辑副作用。与相关编辑、悬浮信息、菜单及失败项复测共 **36 项通过**。
+
+完整 Release 套件运行两次，每次 512 项中 511 项通过。首次失败为模块连接预览的选中颜色断言，第二次为分类卡片方向键选择断言；两项在上述 36 项集中验证中均通过。但是整套测试仍有渲染／焦点断言不稳定的限制，本次没有修改这些测试或相关模块。
+
+执行 `AotBuild.win-x64.bat -SkipTests` 编译成功，输出 `../Build/CrystalStudioAvalonia/aot/win-x64/CrystalStudio.exe`，SHA-256 为 `6722898C03DE70CD8BDC79C3F30DA70A3A4ADE30A5B52196F2FF8EC2B7EA3318`，AMD64 原生 PE 的 CLR 目录 RVA 为 0。使用 `D:/App/LomcnClient/Map/bonguk1.map` 及对应资源在原生窗口连续验证空查询、非空查询后的右键取样，检查边框显示与离开后隐藏，正常退出且日志无 Fatal。该原生取样位置周围未找到中间层图片，因此非空中间层取样以鼠标事件回归为依据；已有资源像素长度错误仍会记录。
+
+原始地图、用户设置、最近地图及资源历史的哈希均保持一致。证据位于仓库根目录 `_codex_artifacts/crystalstudio-pointer-fix`，包括 `reported-crash.txt`、两次完整测试日志与 TRX、`pointer-regression.trx`、`aot-publish.log`、`publication.json`、`native-verification.json`、`profile-preservation.json` 和原生界面截图。

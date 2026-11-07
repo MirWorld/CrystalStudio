@@ -102,7 +102,7 @@ public partial class MainWindow
 
     private List<AssetReference> FilteredSavedAssets()
     {
-        string query = AssetSearch.Text.Trim();
+        string query = AssetSearch.Text?.Trim() ?? "";
         return (FavouritesPalette ? assetHistory.Favourites : assetHistory.Recent).Where(asset =>
             query.Length == 0 || (asset.StampPath != null ? asset.StampPath :
                 $"{asset.Layer} {asset.Library} {asset.Index} {asset.Source} Set {(asset.Pattern == TilePatternLayout.None ? asset.Index : asset.Index / AutoTileBrush.BlockSize(asset.Pattern))}")

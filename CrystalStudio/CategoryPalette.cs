@@ -159,7 +159,7 @@ public partial class MainWindow
     private void BuildCategoryBrowser()
     {
         if (!categoriesAttempted) { _ = LoadCategoriesAsync(); UpdateWorkspace(); return; }
-        string query = AssetSearch.Text.Trim(), grouping = (string?)categoryGrouping!.SelectedItem ?? "Type";
+        string query = AssetSearch.Text?.Trim() ?? "", grouping = (string?)categoryGrouping!.SelectedItem ?? "Type";
         bool assetsChanged = !ReferenceEquals(categoryPreviewAssets, assets);
         bool indexChanged = !ReferenceEquals(displayedCategoryIndex, categoryIndex);
         if (assetsChanged || indexChanged)

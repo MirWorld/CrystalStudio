@@ -18,7 +18,7 @@ public partial class MainWindow
     private void BuildStampPage()
     {
         int version=++pageVersion;choices.Clear();
-        string query=AssetSearch.Text.Trim();var filtered=stampEntries.Where(s=>query.Length==0||s.RelativePath.Contains(query,StringComparison.OrdinalIgnoreCase)).ToList();
+        string query=AssetSearch.Text?.Trim()??"";var filtered=stampEntries.Where(s=>query.Length==0||s.RelativePath.Contains(query,StringComparison.OrdinalIgnoreCase)).ToList();
         filteredCount=filtered.Count;page=Math.Clamp(page,0,Math.Max(0,(filtered.Count-1)/PageSize));
         foreach(var entry in filtered.Skip(page*PageSize).Take(PageSize))
         {
