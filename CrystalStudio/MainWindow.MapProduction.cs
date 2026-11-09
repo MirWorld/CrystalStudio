@@ -52,7 +52,7 @@ public partial class MainWindow
             : new TempleGeneratorWindow(source, loadedAssets, definitions.Walls!, definitions.Terrain, parameters);
     }
 
-    private async Task RegenerateSelectionAsync(EditorWindow owner, MapCreationKind kind, PartialGenerationLayer layer, CancellationToken cancellation)
+    private async Task<string?> RegenerateSelectionAsync(EditorWindow owner, MapCreationKind kind, PartialGenerationLayer layer, CancellationToken cancellation)
     {
         if (layer == PartialGenerationLayer.Decoration && kind == MapCreationKind.Terrain)
             throw new InvalidOperationException(LocalText.T("Choose a province or dungeon layout for complete decoration stamps. Terrain banks and coasts are protected, not clipped."));
@@ -69,37 +69,42 @@ public partial class MainWindow
         if (generator.GetLogicalDescendants().OfType<TextBlock>().FirstOrDefault(text => text.Name == "PreviewMapInfo") is { } info)
             info.Text = LocalText.T("Source layout only. The next step reviews the protected selected-area composite; this preview does not modify the working map.");
         cancellation.ThrowIfCancellationRequested();
-        if (generator.ShowDialog() != true || QuickMapProduction.CurrentPlan(generator) is not { } generated) return;
+        if (generator.ShowDialog() != true || QuickMapProduction.CurrentPlan(generator) is not { } generated) return null;
         cancellation.ThrowIfCancellationRequested();
+        if (activeMap != map || Viewport.Document != source || source.PickupRevision != revision || !design.SameAs(map.Design))
+            throw new InvalidOperationException(LocalText.T("The map or design markers changed after the preview. Generate a fresh preview."));
         var plan = await Task.Run(() => PartialMapGeneration.Plan(source, QuickMapProduction.Materialize(generated, cancellation), area, design, layer, cancellation), cancellation);
+        if (plan.Changed.Count == 0) return LocalText.T("No safe local changes were found. Nothing was applied; try another layout or selection.");
         var loadedAssets = assets!;
         var images = await Task.Run(() => PartialMapGeneration.CreatePreviewAsync(plan, loadedAssets, cancellation), cancellation);
         using var beforeImage = images.Before; using var afterImage = images.After;
         cancellation.ThrowIfCancellationRequested();
         var review = new PartialGenerationReviewWindow(plan, beforeImage, afterImage) { Owner = owner };
-        if (review.ShowDialog() != true) return;
+        if (review.ShowDialog() != true) return null;
         cancellation.ThrowIfCancellationRequested();
-        if (activeMap != map || Viewport.Document != source || source.PickupRevision != revision)
-            throw new InvalidOperationException(LocalText.T("The map changed after the preview. Generate a fresh preview."));
+        if (activeMap != map || Viewport.Document != source || source.PickupRevision != revision || !design.SameAs(map.Design) || !ReferenceEquals(assets, loadedAssets))
+            throw new InvalidOperationException(LocalText.T("The map or design markers changed after the preview. Generate a fresh preview."));
         Viewport.ApplyPartialGeneration(plan);
         Status.Text = LocalText.Format("Applied {0:N0} local changes · Ctrl+Z to undo", plan.Changed.Count);
+        return Status.Text;
     }
 
-    private async Task ExportDeliveryAsync(EditorWindow owner, CancellationToken cancellation)
+    private async Task<string?> ExportDeliveryAsync(EditorWindow owner, CancellationToken cancellation)
     {
         if (activeMap?.IsStamp == true) throw new InvalidOperationException(LocalText.T("Open a map, not an object stamp, to export a delivery package."));
         var picker = new SaveFileDialog { Title = "Export map delivery package", Filter = "Map delivery archive (*.zip)|*.zip",
             FileName = Path.GetFileNameWithoutExtension(mapPath ?? activeMap?.Name ?? "Untitled") + "-delivery.zip",
             DefaultExt = ".zip", AddExtension = true, OverwritePrompt = true, InitialDirectory = mapPath == null ? "" : Path.GetDirectoryName(mapPath) };
-        if (picker.ShowDialog(owner) != true) return;
+        if (picker.ShowDialog(owner) != true) return null;
         if (!string.Equals(Path.GetExtension(picker.FileName), ".zip", StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException(LocalText.T("Choose a .zip filename for the delivery package."));
         var snapshot = MapRecoveryStore.Capture(Viewport.Document); var loadedAssets = assets;
         var design = activeMap?.Design.Copy() ?? new(); var recipe = activeMap?.Recipe;
         bool unsaved = Viewport.History.Dirty || mapPath == null;
-        if (unsaved && MessageBox.Show(owner, "The package will include current unsaved edits, not the last saved file. Continue?", "Export map delivery package", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
+        if (unsaved && MessageBox.Show(owner, "The package will include current unsaved edits, not the last saved file. Continue?", "Export map delivery package", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return null;
         Status.Text = LocalText.T("Exporting delivery package…");
         await Task.Run(() => MapDeliveryPackage.ExportAsync(picker.FileName, snapshot, loadedAssets, recipe, design, unsaved, cancellation), cancellation);
         if (!closed) Status.Text = LocalText.Format("Exported {0}", Path.GetFileName(picker.FileName));
+        return LocalText.Format("Exported {0}", Path.GetFileName(picker.FileName));
     }
 }

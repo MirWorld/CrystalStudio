@@ -209,7 +209,7 @@ public sealed class MapProductionTests
         var store = new SettingsStore(); var saved = store.Load(); store.Save(saved with { Language = language }); LocalText.Initialize(store);
         var map = new MapDocument(32, 32); var design = new MapDesignSettings { Points = [new("Entry", 1, 1), new("Exit", 30, 30)] };
         var window = new MapProductionWindow(map, null, design, Recipe(), _ => [], () => { }, (_, _) => { }, () => new Rect(0, 0, 16, 16),
-            (_, _, _, _) => Task.CompletedTask, (_, _) => Task.CompletedTask);
+            (_, _, _, _) => Task.FromResult<string?>(null), (_, _) => Task.FromResult<string?>(null));
         window.Show();
         try
         {

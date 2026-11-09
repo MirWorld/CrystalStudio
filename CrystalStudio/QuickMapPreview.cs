@@ -156,7 +156,7 @@ internal sealed class QuickMapPreview
         };
         var candidates = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
         var candidateHint = new TextBlock { TextWrapping = TextWrapping.Wrap, FontSize = 11 };
-        var candidatePanel = new StackPanel { Spacing = 5, Margin = new Thickness(0, 10, 0, 0) };
+        var candidatePanel = new StackPanel { Name = "QuickMapCandidatesPanel", Spacing = 5, Margin = new Thickness(0, 10, 0, 0) };
         candidatePanel.Children.Add(new TextBlock { Text = LocalText.T("Recent candidates · favorites stay in this session"), FontWeight = FontWeight.SemiBold });
         candidatePanel.Children.Add(new ScrollViewer { Content = candidates, HorizontalScrollBarVisibility = ScrollBarVisibility.Auto, VerticalScrollBarVisibility = ScrollBarVisibility.Disabled });
         candidatePanel.Children.Add(candidateHint);
@@ -167,6 +167,8 @@ internal sealed class QuickMapPreview
         compare.Click += (_, _) => new QuickMapComparisonWindow(session.Candidates.Items.Where(candidate => candidate.CanRestore(session.Settings) && candidate.Comparison != null).ToArray(), selected).ShowDialog(window);
         void RefreshCandidates()
         {
+            var parameters = GeneratorPreferences.Capture(window);
+            selected = state.Phase == GeneratorPreviewPhase.Ready && !session.BatchRunning ? session.Candidates.Items.FirstOrDefault(candidate => candidate.Matches(session.Settings, parameters)) : null;
             candidates.Children.Clear();
             compare.IsEnabled = !session.BatchRunning && state.Phase == GeneratorPreviewPhase.Ready && session.Candidates.Items.Count(candidate => candidate.CanRestore(session.Settings) && candidate.Comparison != null) >= 2;
             foreach (var candidate in session.Candidates.Items)

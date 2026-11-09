@@ -240,7 +240,7 @@ public partial class ProvinceGeneratorWindow : EditorWindow
         inspectionCentre = centre;
         detailPreview = null; DetailToggle.IsChecked = true; Schedule();
     }
-    private async void ApplyClick(object sender, RoutedEventArgs e) { if (Plan != null && ApplyButton.IsEnabled && await QuickMapPreview.ConfirmAsync(this)) DialogResult = true; }
+    private async void ApplyClick(object sender, RoutedEventArgs e) { var plan = Plan; if (plan != null && ApplyButton.IsEnabled && await QuickMapPreview.ConfirmAsync(this) && ReferenceEquals(Plan, plan) && PreviewState.Phase == GeneratorPreviewPhase.Ready) DialogResult = true; }
 }
 
 public static class ProvincePreview

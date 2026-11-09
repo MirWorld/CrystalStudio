@@ -19,6 +19,7 @@ internal sealed class MapDesignSettings
     public bool RequireRoute { get; set; }
     public bool Empty => Points.Count == 0 && Regions.Count == 0 && !RequireRoute;
     public MapDesignSettings Copy() => new() { Points = [.. Points], Regions = [.. Regions], RequireRoute = RequireRoute };
+    public bool SameAs(MapDesignSettings other) => RequireRoute == other.RequireRoute && Points.SequenceEqual(other.Points) && Regions.SequenceEqual(other.Regions);
 
     public void Validate(int width, int height)
     {
@@ -58,7 +59,10 @@ internal static class MapDesignStore
     }
 }
 
-internal sealed record MapConstraintFinding(string Name, bool Required, string Message, int X, int Y);
+internal sealed record MapConstraintFinding(string Name, bool Required, string Message, int X, int Y)
+{
+    public override string ToString() => LocalText.Format("{0} · {1} · ({2}, {3}): {4}", LocalText.T(Required ? "Required" : "Preferred"), Name, X, Y, Message);
+}
 internal sealed record MapConstraintResult(IReadOnlyList<MapConstraintFinding> Findings)
 {
     public bool Accepted => Findings.All(finding => !finding.Required);
@@ -68,6 +72,7 @@ internal static class MapDesignConstraints
 {
     internal static MapConstraintResult Check(MapDocument document, MapDesignSettings design, CancellationToken cancellation = default)
     {
+        cancellation.ThrowIfCancellationRequested();
         design.Validate(document.Width, document.Height);
         var findings = new List<MapConstraintFinding>();
         foreach (var point in design.Points)
@@ -75,7 +80,7 @@ internal static class MapDesignConstraints
                 findings.Add(new(point.Name, design.RequireRoute, LocalText.T("Route point is blocked."), point.X, point.Y));
         foreach (var region in design.Regions.Where(region => region.Purpose != MapRegionPurpose.Protect))
         {
-            bool invalid = false;
+            bool invalid = false; int issueX = region.X, issueY = region.Y;
             for (int row = region.Y; row < region.Y + region.Height && !invalid; row++)
             {
                 cancellation.ThrowIfCancellationRequested();
@@ -84,14 +89,20 @@ internal static class MapDesignConstraints
                     var cell = document.Get(column, row);
                     if (region.Purpose == MapRegionPurpose.Walkable ? !MapRouteAnalysis.Walkable(document, column, row) :
                         cell.HasForeground || cell.MiddleImage != 0 || (cell.Door & 0x7F) != 0)
-                    { invalid = true; break; }
+                    { invalid = true; issueX = column; issueY = row; break; }
                 }
             }
             if (!invalid && region.Purpose == MapRegionPurpose.ClearObjects)
-                invalid = document.PlacedStamps.Any(stamp => stamp.Cells.Any(cell => region.Contains(stamp.X + cell.X, stamp.Y + cell.Y)) ||
-                    stamp.Changes.Any(change => region.Contains(stamp.X + change.X, stamp.Y + change.Y)));
+                foreach (var stamp in document.PlacedStamps)
+                {
+                    cancellation.ThrowIfCancellationRequested();
+                    foreach (var position in stamp.Cells.Select(cell => (X: stamp.X + cell.X, Y: stamp.Y + cell.Y))
+                        .Concat(stamp.Changes.Select(change => (X: stamp.X + change.X, Y: stamp.Y + change.Y))))
+                        if (region.Contains(position.X, position.Y)) { invalid = true; issueX = position.X; issueY = position.Y; break; }
+                    if (invalid) break;
+                }
             if (invalid) findings.Add(new(region.Name, region.Required,
-                LocalText.T(region.Purpose == MapRegionPurpose.Walkable ? "Reserved corridor contains blocked cells." : "Reserved area contains object anchors or stamp footprints."), region.X, region.Y));
+                LocalText.T(region.Purpose == MapRegionPurpose.Walkable ? "Reserved corridor contains blocked cells." : "Reserved area contains object anchors or stamp footprints."), issueX, issueY));
         }
         if (design.RequireRoute && findings.All(finding => !finding.Required))
         {

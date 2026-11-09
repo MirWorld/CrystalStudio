@@ -13,15 +13,18 @@ internal sealed record MapDeliveryReport(int Version, DateTime CreatedUtc, int W
 {
     public bool RecipeIncluded { get; init; }
     public bool? RecipeDimensionsMatch { get; init; }
+    public MapConstraintResult? LayoutCheck { get; init; }
+    public string? LayoutCheckError { get; init; }
 }
 
 internal static class MapDeliveryPackage
 {
-    internal static IReadOnlyList<MapAssetReference> References(MapDocument document)
+    internal static IReadOnlyList<MapAssetReference> References(MapDocument document, CancellationToken cancellation = default)
     {
         var references = new Dictionary<(int Library, int Image), int>();
         foreach (var pair in document.Cells)
         {
+            cancellation.ThrowIfCancellationRequested();
             var cell = pair.Value;
             Add(cell.BackLibrary, cell.BackImage & 0x1FFFFFFF); Add(cell.MiddleLibrary, cell.MiddleImage);
             if (cell.Foreground is { } front)
@@ -55,7 +58,11 @@ internal static class MapDeliveryPackage
         design.Validate(snapshot.Width, snapshot.Height);
         cancellation.ThrowIfCancellationRequested();
         var check = MapCheck.Run(snapshot, assets?.Libraries, cancellation);
-        var references = References(snapshot);
+        MapConstraintResult? layoutCheck = null; string? layoutError = null;
+        try { layoutCheck = MapDesignConstraints.Check(snapshot, design, cancellation); }
+        catch (InvalidOperationException exception) when ((long)snapshot.Width * snapshot.Height > MapRouteAnalysis.MaximumCells)
+        { layoutError = exception.Message; }
+        var references = References(snapshot, cancellation);
         var dependencies = references.Select(reference => reference.Library).Distinct().Select(library =>
         {
             if (assets == null || !assets.Libraries.TryGetValue(library, out var loaded))
@@ -89,7 +96,8 @@ internal static class MapDeliveryPackage
             });
             var report = new MapDeliveryReport(1, DateTime.UtcNow, snapshot.Width, snapshot.Height, snapshot.SourceFormat, unsaved,
                 assets != null, check.Total, check.Total > check.Issues.Count, check.Issues, references, dependencies, hashes)
-            { RecipeIncluded = recipe != null, RecipeDimensionsMatch = recipe == null ? null : recipe.Width == snapshot.Width && recipe.Height == snapshot.Height };
+            { RecipeIncluded = recipe != null, RecipeDimensionsMatch = recipe == null ? null : recipe.Width == snapshot.Width && recipe.Height == snapshot.Height,
+                LayoutCheck = layoutCheck, LayoutCheckError = layoutError };
             AtomicFile.WriteJson(Path.Combine(temporary, "report.json"), report);
             cancellation.ThrowIfCancellationRequested();
             AtomicFile.Write(path, stream =>
@@ -102,6 +110,7 @@ internal static class MapDeliveryPackage
                     var buffer = new byte[81920]; int read;
                     while ((read = input.Read(buffer)) > 0) { cancellation.ThrowIfCancellationRequested(); output.Write(buffer, 0, read); }
                 }
+                cancellation.ThrowIfCancellationRequested();
             });
         }
         finally

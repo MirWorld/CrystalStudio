@@ -10,6 +10,9 @@ internal sealed class QuickMapCandidate(MapCreationSettings settings, IReadOnlyD
     public bool IsFavorite { get; internal set; }
     public MapCandidateMetrics? Metrics { get; internal set; }
     public bool CanRestore(MapCreationSettings settings) => Generation.Kind == settings.Kind && Generation.Width == settings.Width && Generation.Height == settings.Height;
+    public bool Matches(MapCreationSettings settings, IReadOnlyDictionary<string, string> parameters) => CanRestore(settings) &&
+        parameters.Count(pair => QuickMapCandidates.IsGenerationParameter(pair.Key)) == Parameters.Count &&
+        Parameters.All(pair => parameters.TryGetValue(pair.Key, out string? value) && value == pair.Value);
 }
 
 internal sealed class QuickMapCandidates : IDisposable
@@ -17,13 +20,13 @@ internal sealed class QuickMapCandidates : IDisposable
     public const int Capacity = 5;
     private readonly List<QuickMapCandidate> items = [];
     public IReadOnlyList<QuickMapCandidate> Items => items;
+    internal static bool IsGenerationParameter(string name) => name != "DetailToggle" && !name.StartsWith("QuickMap", StringComparison.Ordinal) && !name.StartsWith("Generator", StringComparison.Ordinal);
 
     public QuickMapCandidate? Remember(MapCreationSettings settings, IReadOnlyDictionary<string, string> parameters, RasterImage? preview = null, bool isOverview = true)
     {
-        var values = parameters.Where(pair => pair.Key != "DetailToggle" && !pair.Key.StartsWith("QuickMap", StringComparison.Ordinal) && !pair.Key.StartsWith("Generator", StringComparison.Ordinal))
+        var values = parameters.Where(pair => IsGenerationParameter(pair.Key))
             .ToDictionary(pair => pair.Key, pair => pair.Value);
-        var existing = items.FirstOrDefault(item => item.CanRestore(settings) && item.Parameters.Count == values.Count &&
-            values.All(pair => item.Parameters.TryGetValue(pair.Key, out string? value) && value == pair.Value));
+        var existing = items.FirstOrDefault(item => item.Matches(settings, values));
         if (existing != null)
         {
             if (preview != null && isOverview && existing.Comparison == null)

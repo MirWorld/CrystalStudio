@@ -3,14 +3,16 @@ namespace CrystalStudio;
 internal sealed class MapDesignEditor : StackPanel
 {
     private readonly MapDesignSettings design;
+    private readonly int width, height;
     private readonly ListBox points = new() { Name = "QuickMapDesignPoints", MinHeight = 65, MaxHeight = 140 };
     private readonly ListBox regions = new() { Name = "QuickMapDesignRegions", MinHeight = 65, MaxHeight = 140 };
-    private readonly TextBlock feedback = new() { TextWrapping = TextWrapping.Wrap };
+    private readonly TextBlock feedback = new() { Name = "QuickMapDesignFeedback", TextWrapping = TextWrapping.Wrap };
     internal event Action? Changed;
 
     internal MapDesignEditor(MapDesignSettings design, int width, int height, Func<Rect?>? selection = null)
     {
-        this.design = design; Spacing = 6;
+        this.design = design; this.width = width; this.height = height; Spacing = 6;
+        Avalonia.Automation.AutomationProperties.SetLiveSetting(feedback, Avalonia.Automation.AutomationLiveSetting.Polite);
         Children.Add(Hint("Points are visited in list order. Analysis uses four-way collision flags, not game runtime navigation."));
         points.ItemTemplate = new FuncDataTemplate<MapRoutePoint>((point, _) => new TextBlock { Text = point == null ? "" : $"{point.Name} · ({point.X}, {point.Y})", TextWrapping = TextWrapping.Wrap });
         Children.Add(points);
@@ -21,18 +23,21 @@ internal sealed class MapDesignEditor : StackPanel
         Add(pointActions, "Add route point", () =>
         {
             if (design.Points.Count >= 32) throw new InvalidOperationException(LocalText.T("Use at most 32 route points and 64 design regions."));
-            design.Points.Add(new(Label(pointName, "Point", design.Points.Count), Value(pointX), Value(pointY))); Notify();
+            design.Points.Add(new(Label(pointName, "Point", design.Points.Count), Value(pointX), Value(pointY))); Notify(); points.SelectedIndex = design.Points.Count - 1;
         });
-        Add(pointActions, "Update selected", () =>
+        var updatePoint = Add(pointActions, "Update selected", () =>
         {
             int index = points.SelectedIndex;
             if (index < 0) return;
             design.Points[index] = new(Label(pointName, "Point", index), Value(pointX), Value(pointY)); Notify(); points.SelectedIndex = index;
         });
-        Add(pointActions, "Remove point", () => { if (points.SelectedItem is MapRoutePoint point) { design.Points.Remove(point); Notify(); } });
-        Add(pointActions, "Move up", () => Move(-1)); Add(pointActions, "Move down", () => Move(1));
+        var removePoint = Add(pointActions, "Remove point", () => { if (points.SelectedItem is MapRoutePoint point) { design.Points.Remove(point); Notify(); } });
+        var moveUp = Add(pointActions, "Move up", () => Move(-1)); var moveDown = Add(pointActions, "Move down", () => Move(1));
+        updatePoint.Name = "QuickMapUpdatePoint"; removePoint.Name = "QuickMapRemovePoint"; moveUp.Name = "QuickMapMovePointUp"; moveDown.Name = "QuickMapMovePointDown";
         points.SelectionChanged += (_, _) =>
         {
+            updatePoint.IsEnabled = removePoint.IsEnabled = points.SelectedIndex >= 0;
+            moveUp.IsEnabled = points.SelectedIndex > 0; moveDown.IsEnabled = points.SelectedIndex >= 0 && points.SelectedIndex < design.Points.Count - 1;
             if (points.SelectedItem is not MapRoutePoint point) return;
             pointName.Text = point.Name; pointX.Value = point.X; pointY.Value = point.Y;
         };
@@ -44,7 +49,8 @@ internal sealed class MapDesignEditor : StackPanel
         var regionX = Number("QuickMapRegionX", 0, width - 1, 0); var regionY = Number("QuickMapRegionY", 0, height - 1, 0);
         var regionWidth = Number("QuickMapRegionWidth", 1, width, Math.Min(16, width)); var regionHeight = Number("QuickMapRegionHeight", 1, height, Math.Min(16, height));
         Children.Add(Fields(("X", regionX), ("Y", regionY))); Children.Add(Fields(("Width", regionWidth), ("Height", regionHeight)));
-        var purpose = new ComboBox { Name = "QuickMapRegionPurpose", ItemsSource = Enum.GetValues<MapRegionPurpose>(), SelectedIndex = 0, HorizontalAlignment = HorizontalAlignment.Stretch };
+        var purpose = new ComboBox { Name = "QuickMapRegionPurpose", ItemsSource = Enum.GetValues<MapRegionPurpose>(), ItemTemplate = LocalText.ChoiceTemplate, SelectedIndex = 0, HorizontalAlignment = HorizontalAlignment.Stretch };
+        Avalonia.Automation.AutomationProperties.SetName(purpose, LocalText.T("Region purpose"));
         Children.Add(purpose);
         var hard = new CheckBox { Name = "QuickMapRegionRequired", Content = LocalText.T("Required rather than preferred"), IsChecked = true }; Children.Add(hard);
         hard.IsVisible = false; purpose.SelectionChanged += (_, _) => hard.IsVisible = purpose.SelectedIndex != (int)MapRegionPurpose.Protect;
@@ -53,14 +59,15 @@ internal sealed class MapDesignEditor : StackPanel
         Add(regionActions, "Add region", () =>
         {
             if (design.Regions.Count >= 64) throw new InvalidOperationException(LocalText.T("Use at most 32 route points and 64 design regions."));
-            var region = DraftRegion(design.Regions.Count); ValidateRegion(region); design.Regions.Add(region); Notify();
+            var region = DraftRegion(design.Regions.Count); ValidateRegion(region); design.Regions.Add(region); Notify(); regions.SelectedIndex = design.Regions.Count - 1;
         });
-        Add(regionActions, "Update region", () =>
+        var updateRegion = Add(regionActions, "Update region", () =>
         {
             int index = regions.SelectedIndex; if (index < 0) return;
             var region = DraftRegion(index); ValidateRegion(region); design.Regions[index] = region; Notify(); regions.SelectedIndex = index;
         });
-        Add(regionActions, "Remove region", () => { if (regions.SelectedItem is MapDesignRegion region) { design.Regions.Remove(region); Notify(); } });
+        var removeRegion = Add(regionActions, "Remove region", () => { if (regions.SelectedItem is MapDesignRegion region) { design.Regions.Remove(region); Notify(); } });
+        updateRegion.Name = "QuickMapUpdateRegion"; removeRegion.Name = "QuickMapRemoveRegion";
         if (selection != null) Add(regionActions, "Use current selection", () =>
         {
             if (selection() is not Rect area) throw new InvalidOperationException(LocalText.T("Select an area on the map first."));
@@ -69,11 +76,13 @@ internal sealed class MapDesignEditor : StackPanel
         });
         regions.SelectionChanged += (_, _) =>
         {
+            updateRegion.IsEnabled = removeRegion.IsEnabled = regions.SelectedIndex >= 0;
             if (regions.SelectedItem is not MapDesignRegion region) return;
             regionName.Text = region.Name; regionX.Value = region.X; regionY.Value = region.Y;
             regionWidth.Value = region.Width; regionHeight.Value = region.Height; purpose.SelectedIndex = (int)region.Purpose; hard.IsChecked = region.Required;
         };
-        Children.Add(feedback); Refresh();
+        updatePoint.IsEnabled = removePoint.IsEnabled = moveUp.IsEnabled = moveDown.IsEnabled = updateRegion.IsEnabled = removeRegion.IsEnabled = false;
+        Children.Add(feedback); Refresh(); ValidateDesign();
 
         void ValidateRegion(MapDesignRegion region) => new MapDesignSettings { Regions = [region] }.Validate(width, height);
         void Move(int direction)
@@ -84,8 +93,19 @@ internal sealed class MapDesignEditor : StackPanel
         }
     }
 
-    private void Refresh() { points.ItemsSource = design.Points.ToArray(); regions.ItemsSource = design.Regions.ToArray(); }
-    private void Notify() { feedback.Text = ""; Refresh(); Changed?.Invoke(); }
+    private void Refresh()
+    {
+        int pointIndex = points.SelectedIndex, regionIndex = regions.SelectedIndex;
+        points.ItemsSource = design.Points.ToArray(); regions.ItemsSource = design.Regions.ToArray();
+        points.SelectedIndex = pointIndex < 0 ? -1 : Math.Min(pointIndex, design.Points.Count - 1);
+        regions.SelectedIndex = regionIndex < 0 ? -1 : Math.Min(regionIndex, design.Regions.Count - 1);
+    }
+    private void ValidateDesign()
+    {
+        try { design.Validate(width, height); feedback.Text = ""; }
+        catch (System.IO.InvalidDataException exception) { feedback.Text = exception.Message; }
+    }
+    private void Notify() { Refresh(); ValidateDesign(); Changed?.Invoke(); }
     private static string Label(TextBox input, string fallback, int index) => string.IsNullOrWhiteSpace(input.Text) ? LocalText.T(fallback) + " " + (index + 1) : input.Text.Trim();
     internal static NumericUpDown Number(string name, int minimum, int maximum, int value) => new()
     { Name = name, Minimum = minimum, Maximum = maximum, Value = value, Increment = 1, FormatString = "0", Width = 108 };
@@ -106,9 +126,10 @@ internal sealed class MapDesignEditor : StackPanel
         }
         return panel;
     }
-    private void Add(Panel panel, string label, Action action)
+    private Button Add(Panel panel, string label, Action action)
     {
         var button = new Button { Content = LocalText.T(label), Margin = new Thickness(0, 0, 5, 5) };
         button.Click += (_, _) => { try { action(); } catch (Exception exception) { feedback.Text = exception.Message; } }; panel.Children.Add(button);
+        return button;
     }
 }

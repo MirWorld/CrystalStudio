@@ -9,20 +9,30 @@ internal sealed class MapProductionWindow : EditorWindow
     private CancellationTokenSource? pending;
     private bool closed;
     private long analyzedRevision = -1;
+    private MapDesignSettings? analyzedDesign;
+    private readonly MapDocument source;
+    private readonly Func<MapCreationRecipe, IReadOnlyList<string>> compatibility;
+    private readonly TextBlock recipeText = new() { Name = "ProductionRecipeDetails", TextWrapping = TextWrapping.Wrap };
+    private readonly Button restoreRecipe = new() { Name = "ProductionRestoreRecipe", Content = LocalText.T("Restore recipe into a new map"), IsEnabled = false };
+    private MapCreationRecipe? recipe;
     internal MapCreationRecipe? SelectedRecipe { get; private set; }
 
     internal MapProductionWindow(MapDocument source, AssetStore? assets, MapDesignSettings design, MapCreationRecipe? recipe,
         Func<MapCreationRecipe, IReadOnlyList<string>> compatibility, Action designChanged, Action<int, int> locate,
-        Func<Rect?> selection, Func<EditorWindow, MapCreationKind, PartialGenerationLayer, CancellationToken, Task> regenerate,
-        Func<EditorWindow, CancellationToken, Task> export)
+        Func<Rect?> selection, Func<EditorWindow, MapCreationKind, PartialGenerationLayer, CancellationToken, Task<string?>> regenerate,
+        Func<EditorWindow, CancellationToken, Task<string?>> export)
     {
+        this.source = source; this.compatibility = compatibility;
         Title = LocalText.T("Map production tools"); Width = 1100; Height = 780; MinWidth = 780; MinHeight = 520;
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
         var root = new Grid { Margin = new Thickness(16), RowDefinitions = new RowDefinitions("*,Auto,Auto") };
-        root.Children.Add(tabs); Grid.SetRow(feedback, 1); root.Children.Add(feedback);
+        root.Children.Add(tabs);
+        var feedbackView = new ScrollViewer { Name = "ProductionFeedbackScroll", Content = feedback, MaxHeight = 96, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
+        Grid.SetRow(feedbackView, 1); root.Children.Add(feedbackView);
         var footer = new WrapPanel { Margin = new Thickness(0, 10, 0, 0) };
-        var cancel = new Button { Content = LocalText.T("Stop operation"), IsEnabled = false };
-        cancel.Click += (_, _) => pending?.Cancel(); footer.Children.Add(cancel);
+        var cancel = new Button { Name = "ProductionStop", Content = LocalText.T("Stop operation"), IsEnabled = false };
+        cancel.Click += (_, _) => { pending?.Cancel(); cancel.IsEnabled = false; feedback.Text = LocalText.T("Stopping… Please wait for cancellation to finish."); }; footer.Children.Add(cancel);
+        Avalonia.Automation.AutomationProperties.SetLiveSetting(feedback, Avalonia.Automation.AutomationLiveSetting.Polite);
         footer.Children.Add(new Button { Content = LocalText.T("Close"), IsCancel = true, Margin = new Thickness(8, 0, 0, 0) });
         Grid.SetRow(footer, 2); root.Children.Add(footer); Content = root;
 
@@ -37,66 +47,89 @@ internal sealed class MapProductionWindow : EditorWindow
         var legs = new ListBox { Name = "ProductionRouteLegs", MaxHeight = 160 };
         legs.ItemTemplate = new FuncDataTemplate<MapRouteLeg>((leg, _) => new TextBlock { Text = leg?.ToString(), TextWrapping = TextWrapping.Wrap, Margin = new Thickness(4) });
         Grid.SetRow(legs, 2); right.Children.Add(legs);
-        var locatePoint = new Button { Content = LocalText.T("Locate route target"), IsEnabled = false };
+        var locatePoint = new Button { Name = "ProductionLocateRoute", Content = LocalText.T("Locate route target"), IsEnabled = false };
         legs.SelectionChanged += (_, _) => locatePoint.IsEnabled = legs.SelectedItem is MapRouteLeg;
         locatePoint.Click += (_, _) => { if (legs.SelectedItem is MapRouteLeg leg) locate(leg.To.X, leg.To.Y); };
         Grid.SetRow(locatePoint, 3); right.Children.Add(locatePoint); Grid.SetColumn(right, 1); route.Children.Add(right);
         tabs.Items.Add(new TabItem { Header = LocalText.T("Layout and routes"), Content = route });
         editor.Changed += () =>
         {
-            designChanged(); legs.ItemsSource = null; routeImage.Source = null; routeBitmap?.Dispose(); routeBitmap = null;
-            feedback.Text = LocalText.T("Design markers changed. Analyze again; save the map to persist editor metadata.");
+            designChanged(); InvalidateAnalysis("Design markers changed. Analyze again; save the map to persist editor metadata.");
         };
         analyze.Click += async (_, _) => await Operation(async cancellation =>
         {
+            InvalidateAnalysis("Checking layout constraints…");
             var markers = design.Copy(); markers.Validate(source.Width, source.Height); long revision = source.PickupRevision;
             var snapshot = MapRecoveryStore.Capture(source);
             var result = await Task.Run(() => (Route: MapRouteAnalysis.Analyze(snapshot, markers.Points, cancellation), Check: MapDesignConstraints.Check(snapshot, markers, cancellation)), cancellation);
-            cancellation.ThrowIfCancellationRequested(); if (closed || source.PickupRevision != revision) return;
+            cancellation.ThrowIfCancellationRequested();
+            if (closed) return null;
+            if (source.PickupRevision != revision || !markers.SameAs(design))
+                return LocalText.T("The map or design markers changed during analysis. Analyze again.");
             legs.ItemsSource = result.Route.Legs;
             routeImage.Source = null; routeBitmap?.Dispose(); routeImage.Source = routeBitmap = MapRouteAnalysis.Draw(snapshot, result.Route, markers);
             analyzedRevision = revision;
-            feedback.Text = result.Check.Findings.Count == 0 ? LocalText.T("All layout constraints are satisfied.") :
-                string.Join("\n", result.Check.Findings.Select(finding => LocalText.T(finding.Required ? "Required" : "Preferred") + " · " + finding.Name + ": " + finding.Message));
+            analyzedDesign = markers;
+            return (result.Route.Legs.Count == 0 ? LocalText.T("Add at least two ordered points to analyze a route.") :
+                LocalText.Format("Route analysis complete: {0}/{1} legs reachable.", result.Route.Legs.Count(leg => leg.Reachable), result.Route.Legs.Count)) + "\n" +
+                (result.Check.Findings.Count == 0 ? LocalText.T("All layout constraints are satisfied.") :
+                string.Join("\n", result.Check.Findings));
         });
 
+        void InvalidateAnalysis(string message)
+        {
+            analyzedRevision = -1; analyzedDesign = null; legs.ItemsSource = null; locatePoint.IsEnabled = false;
+            routeImage.Source = null; routeBitmap?.Dispose(); routeBitmap = null; feedback.Text = LocalText.T(message);
+        }
+        void CheckAnalysisRevision()
+        {
+            if (analyzedRevision >= 0 && analyzedRevision != source.PickupRevision)
+                InvalidateAnalysis("The map changed. Previous route analysis is stale; analyze again.");
+            else if (analyzedDesign != null && !analyzedDesign.SameAs(design))
+                InvalidateAnalysis("Design markers changed. Analyze again; save the map to persist editor metadata.");
+        }
+        var revisionTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(250) };
+        revisionTimer.Tick += (_, _) => { if (pending == null) CheckAnalysisRevision(); };
+        Opened += (_, _) => revisionTimer.Start();
+
         var recipes = new StackPanel { Spacing = 10 };
-        var recipeText = new TextBlock { Name = "ProductionRecipeDetails", TextWrapping = TextWrapping.Wrap };
-        var restoreRecipe = new Button { Name = "ProductionRestoreRecipe", Content = LocalText.T("Restore recipe into a new map"), IsEnabled = recipe != null };
         var loadRecipe = new Button { Name = "ProductionLoadRecipe", Content = LocalText.T("Open recipe file…") };
         recipes.Children.Add(MapDesignEditor.Hint("A recipe restores generation parameters, not manual edits. The result opens as a new unsaved map after confirming the creation settings."));
         recipes.Children.Add(loadRecipe); recipes.Children.Add(recipeText); recipes.Children.Add(restoreRecipe);
-        void ShowRecipe()
-        {
-            if (recipe == null) { recipeText.Text = LocalText.T("This map has no generation recipe. Open a .creation.json file to restore another source."); return; }
-            var differences = compatibility(recipe);
-            recipeText.Text = MapCreationTemplates.KindLabel(recipe.Kind) + $" · {recipe.Width} × {recipe.Height}\n" + recipe.CreatedAtUtc.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss") +
-                "\n" + recipe.GeneratorVersion + "\n" + LocalText.Format("Seed {0}", recipe.Parameters.GetValueOrDefault("SeedBox", "—")) + "\n\n" +
-                (differences.Count == 0 ? LocalText.T("Recorded versions match current identities; exact reconstruction is still not guaranteed.") : string.Join("\n", differences)) +
-                "\n\n" + LocalText.T("Missing choices or unsupported parameters may fall back to available controls. Review the restored preview before creating.");
-            restoreRecipe.IsEnabled = true;
-        }
         loadRecipe.Click += (_, _) =>
         {
             try
             {
                 var picker = new OpenFileDialog { Filter = "Creation recipe (*.creation.json)|*.creation.json|JSON (*.json)|*.json" };
                 if (picker.ShowDialog(this) != true) return;
-                recipe = MapRecipeRestore.Read(picker.FileName); ShowRecipe();
+                LoadRecipe(picker.FileName);
             }
-            catch (Exception exception) { feedback.Text = exception.Message; }
+            catch (Exception exception) { feedback.Text = LocalText.T("Could not load the recipe. The previous recipe is unchanged.") + "\n" + exception.Message; }
         };
-        restoreRecipe.Click += (_, _) => { if (recipe != null) { SelectedRecipe = recipe; DialogResult = true; } };
-        try { ShowRecipe(); } catch (Exception exception) { recipeText.Text = exception.Message; restoreRecipe.IsEnabled = false; }
+        restoreRecipe.Click += (_, _) => { if (this.recipe != null) { SelectedRecipe = this.recipe; DialogResult = true; } };
+        try { SetRecipe(recipe, LocalText.T("Current map")); } catch (Exception exception) { recipeText.Text = exception.Message; restoreRecipe.IsEnabled = false; }
         tabs.Items.Add(new TabItem { Header = LocalText.T("Generation recipe"), Content = new ScrollViewer { Content = recipes } });
 
         var delivery = new StackPanel { Spacing = 10 };
         delivery.Children.Add(MapDesignEditor.Hint("Local regeneration uses a new source layout, then reviews a selected-area composite. Existing stamps, protected regions, collisions and a two-cell boundary collar are preserved. Ground uses complete 2×2 anchors; decoration adds only complete tracked decoration stamps to empty anchors, never arbitrary clipped sprites."));
-        var kind = new ComboBox { Name = "ProductionGeneratorKind", ItemsSource = new[] { MapCreationKind.Terrain, MapCreationKind.Province, MapCreationKind.Dungeon }, SelectedItem = recipe?.Kind is { } existing && existing != MapCreationKind.Blank ? existing : MapCreationKind.Terrain };
+        var kind = new ComboBox { Name = "ProductionGeneratorKind", ItemsSource = new[] { MapCreationKind.Terrain, MapCreationKind.Province, MapCreationKind.Dungeon },
+            ItemTemplate = new FuncDataTemplate<MapCreationKind>((value, _) => new TextBlock { Text = MapCreationTemplates.KindLabel(value) }),
+            SelectedItem = recipe?.Kind is { } existing && existing != MapCreationKind.Blank ? existing : MapCreationKind.Terrain };
+        Avalonia.Automation.AutomationProperties.SetName(kind, LocalText.T("Generation type"));
         delivery.Children.Add(kind);
-        delivery.Children.Add(MapDesignEditor.Hint(selection() is { } area ? LocalText.Format("Selection: {0}, {1} · {2} × {3} cells", area.X, area.Y, area.Width, area.Height) : "Select an area on the map before opening these tools to regenerate locally."));
+        var localAvailability = new TextBlock { Name = "ProductionLocalAvailability", TextWrapping = TextWrapping.Wrap, FontSize = 12 }; delivery.Children.Add(localAvailability);
         var ground = new Button { Name = "ProductionRegenerateGround", Content = LocalText.T("Regenerate selected ground…"), IsEnabled = selection() != null && assets != null };
         var decoration = new Button { Name = "ProductionRegenerateDecoration", Content = LocalText.T("Add generated decoration to selection…"), IsEnabled = selection() != null && assets != null };
+        void RefreshLocalAvailability()
+        {
+            var area = selection(); bool terrain = kind.SelectedItem is MapCreationKind.Terrain;
+            ground.IsEnabled = area != null && assets != null; decoration.IsEnabled = ground.IsEnabled && !terrain;
+            localAvailability.Text = area is { } selected ? LocalText.Format("Selection: {0}, {1} · {2} × {3} cells", selected.X, selected.Y, selected.Width, selected.Height) :
+                LocalText.T("Select an area on the map before opening these tools to regenerate locally.");
+            if (assets == null) localAvailability.Text += "\n" + LocalText.T("Load artwork libraries before local regeneration. Export remains available without artwork.");
+            else if (terrain) localAvailability.Text += "\n" + LocalText.T("Choose a province or dungeon layout for complete decoration stamps. Terrain banks and coasts are protected, not clipped.");
+        }
+        kind.SelectionChanged += (_, _) => RefreshLocalAvailability(); RefreshLocalAvailability();
         ground.Click += async (_, _) => await Operation(cancellation => regenerate(this, (MapCreationKind)kind.SelectedItem!, PartialGenerationLayer.Ground, cancellation));
         decoration.Click += async (_, _) => await Operation(cancellation => regenerate(this, (MapCreationKind)kind.SelectedItem!, PartialGenerationLayer.Decoration, cancellation));
         delivery.Children.Add(ground); delivery.Children.Add(decoration);
@@ -104,13 +137,17 @@ internal sealed class MapProductionWindow : EditorWindow
         var exportButton = new Button { Name = "ProductionExportPackage", Content = LocalText.T("Export map delivery package…") };
         exportButton.Click += async (_, _) => await Operation(cancellation => export(this, cancellation)); delivery.Children.Add(exportButton);
         tabs.Items.Add(new TabItem { Header = LocalText.T("Regeneration and delivery"), Content = new ScrollViewer { Content = delivery } });
-        Closed += (_, _) => { closed = true; pending?.Cancel(); routeImage.Source = null; routeBitmap?.Dispose(); };
+        Closed += (_, _) => { closed = true; pending?.Cancel(); revisionTimer.Stop(); routeImage.Source = null; routeBitmap?.Dispose(); routeBitmap = null; };
 
-        async Task Operation(Func<CancellationToken, Task> operation)
+        async Task Operation(Func<CancellationToken, Task<string?>> operation)
         {
             if (pending != null) return;
             using var job = new CancellationTokenSource(); pending = job; tabs.IsEnabled = false; cancel.IsEnabled = true; feedback.Text = LocalText.T("Working…");
-            try { await operation(job.Token); }
+            try
+            {
+                string? outcome = await operation(job.Token);
+                if (!closed) feedback.Text = outcome ?? LocalText.T("Operation cancelled. No pending changes were applied.");
+            }
             catch (OperationCanceledException) { if (!closed) feedback.Text = LocalText.T("Operation cancelled. No pending changes were applied."); }
             catch (Exception exception) { if (!closed) feedback.Text = exception.Message; }
             finally
@@ -119,14 +156,29 @@ internal sealed class MapProductionWindow : EditorWindow
                 if (!closed)
                 {
                     tabs.IsEnabled = true; cancel.IsEnabled = false;
-                    if (analyzedRevision >= 0 && analyzedRevision != source.PickupRevision)
-                    {
-                        legs.ItemsSource = null; routeImage.Source = null; routeBitmap?.Dispose(); routeBitmap = null; analyzedRevision = -1;
-                        feedback.Text = LocalText.T("The map changed. Previous route analysis is stale; analyze again.");
-                    }
+                    CheckAnalysisRevision();
                 }
             }
         }
+    }
+
+    internal void LoadRecipe(string path) => SetRecipe(MapRecipeRestore.Read(path), Path.GetFileName(path));
+
+    private void SetRecipe(MapCreationRecipe? value, string origin)
+    {
+        string description;
+        if (value == null) description = LocalText.T("This map has no generation recipe. Open a .creation.json file to restore another source.");
+        else
+        {
+            MapRecipeRestore.Validate(value);
+            var differences = compatibility(value);
+            description = LocalText.Format("Recipe source: {0}", origin) + "\n" + MapCreationTemplates.KindLabel(value.Kind) + $" · {value.Width} × {value.Height}\n" +
+                value.CreatedAtUtc.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss") + "\n" + value.GeneratorVersion + "\n" + LocalText.Format("Seed {0}", value.Parameters.GetValueOrDefault("SeedBox", "—")) + "\n\n" +
+                (differences.Count == 0 ? LocalText.T("Recorded versions match current identities; exact reconstruction is still not guaranteed.") : string.Join("\n", differences)) +
+                (value.Width == source.Width && value.Height == source.Height ? "" : "\n\n" + LocalText.T("The recipe size differs from this map. Restoration uses the recipe dimensions in a new map.")) +
+                "\n\n" + LocalText.T("Missing choices or unsupported parameters may fall back to available controls. Review the restored preview before creating.");
+        }
+        recipe = value; recipeText.Text = description; restoreRecipe.IsEnabled = value != null;
     }
 }
 

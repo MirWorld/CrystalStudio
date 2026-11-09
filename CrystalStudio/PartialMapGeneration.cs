@@ -9,15 +9,23 @@ internal static class PartialMapGeneration
     internal static async Task<(RasterImage Before, RasterImage After)> CreatePreviewAsync(PartialMapPlan plan, AssetStore assets, CancellationToken cancellation = default)
     {
         cancellation.ThrowIfCancellationRequested();
+        EnsureCurrent();
         var before = await MinimapExporter.CreateAsync(plan.Source, assets, 1024, 768).ConfigureAwait(false);
         RasterImage? after = null;
         try
         {
             cancellation.ThrowIfCancellationRequested();
+            EnsureCurrent();
             after = await MinimapExporter.CreateAsync(plan.Generated, assets, 1024, 768).ConfigureAwait(false);
-            cancellation.ThrowIfCancellationRequested(); return (before, after);
+            cancellation.ThrowIfCancellationRequested(); EnsureCurrent(); return (before, after);
         }
         catch { before.Dispose(); after?.Dispose(); throw; }
+
+        void EnsureCurrent()
+        {
+            if (plan.Source.PickupRevision != plan.Revision)
+                throw new InvalidOperationException(LocalText.T("The map changed after the preview. Generate a fresh preview."));
+        }
     }
 
     internal static PartialMapPlan Plan(MapDocument source, MapDocument generated, Rect selection,

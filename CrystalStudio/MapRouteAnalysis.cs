@@ -31,6 +31,7 @@ internal static class MapRouteAnalysis
 
     internal static MapRouteResult Analyze(MapDocument document, IReadOnlyList<MapRoutePoint> points, CancellationToken cancellation = default)
     {
+        cancellation.ThrowIfCancellationRequested();
         new MapDesignSettings { Points = points.ToList() }.Validate(document.Width, document.Height);
         int count = CellCount(document);
         var legs = new List<MapRouteLeg>();
@@ -76,6 +77,7 @@ internal static class MapRouteAnalysis
 
     internal static MapCandidateMetrics Measure(MapDocument document, int? rooms = null, CancellationToken cancellation = default)
     {
+        cancellation.ThrowIfCancellationRequested();
         int count = CellCount(document); var visited = new bool[count]; var queue = new int[count];
         int walkable = 0, largest = 0, dead = 0;
         for (int index = 0; index < count; index++)
