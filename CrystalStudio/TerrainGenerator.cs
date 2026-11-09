@@ -40,8 +40,8 @@ public static class TerrainGenerator
     {
         GenerationAlgorithms.Validate(options.AlgorithmVersion);
         var source = document; long sourceRevision = source.PickupRevision;
-        var design = options.AlgorithmVersion == GenerationAlgorithms.Current ? options.Design : null;
-        design?.Validate(document.Width, document.Height);
+        var design = GenerationAlgorithms.UsesConstraints(options.AlgorithmVersion) ? options.Design : null;
+        if (design != null) GenerationDiagnostics.ValidateInputs(document, design);
         var area = AlignArea(document, requested);
         int width = (area.Width + 1) / 2, height = (area.Height + 1) / 2, stride = width + 1;
         if (width < 3 || height < 3) throw new ArgumentException("Select at least 6×6 cells for terrain generation.");
@@ -52,7 +52,7 @@ public static class TerrainGenerator
             throw new ArgumentException("A bridge crossing needs a river.");
         bool savedShore = options.WaterMode == TerrainWaterMode.Beach && shoreComponents != null;
         bool savedRiver = options.WaterMode is TerrainWaterMode.River or TerrainWaterMode.Waterways or TerrainWaterMode.RiverToSea;
-        if (savedRiver && coastLayouts == null && coastPieces == null) throw new ArgumentException("Verified reusable .X bank pieces are unavailable. Load the coast catalogue before generating a river.");
+        if (savedRiver && coastLayouts == null && coastPieces == null) throw GenerationDiagnostics.MissingArgument("Verified reusable .X bank pieces are unavailable. Load the coast catalogue before generating a river.");
         document.CheckTerrainBankBoundary(area);
         if (TerrainCoastObjects.Replaced(document, area).Any() || savedRiver || savedShore || options.Island)
             document = TerrainCoastObjects.WorkingCopy(document, area);
@@ -66,7 +66,7 @@ public static class TerrainGenerator
         if(options.Island)
         {
             if(area!=new TerrainArea(0,0,document.Width,document.Height))throw new ArgumentException("Island generation uses the whole map.");
-            if(islandCoast==null)throw new ArgumentException("The native 5.map island coast artwork is not available.");
+            if(islandCoast==null)throw GenerationDiagnostics.MissingArgument("The native 5.map island coast artwork is not available.");
             var sand=catalogue.Sets.Single(s=>s.Id=="0:0:2300");
             var steps=TerrainSurfaceRoute.Find(catalogue,options.Base,sand)??throw new ArgumentException("Choose an island base with a compatible sand transition.");
             waterRoute=steps.Select(s=>s.Overlay).ToArray();
@@ -131,7 +131,7 @@ public static class TerrainGenerator
         int[] Corners(int x, int y) => [y * stride + x, y * stride + x + 1, (y + 1) * stride + x, (y + 1) * stride + x + 1];
         void Normalize(bool[] field, bool fill, int margin)
         {
-            if (options.AlgorithmVersion == GenerationAlgorithms.Current)
+            if (GenerationAlgorithms.UsesConstraints(options.AlgorithmVersion))
             {
                 TerrainFieldNormalizer.Normalize(field, width, height, fill, (x, y) => Interior(x, y, margin), options.Seed, cancellationToken);
                 return;
@@ -243,7 +243,7 @@ public static class TerrainGenerator
             for (int route = 0; route < options.PathCount; route++)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                var routeRandom = options.AlgorithmVersion == GenerationAlgorithms.Current ? GenerationRandom.Stream(options.Seed, 0x3000 + route) : random;
+                var routeRandom = GenerationAlgorithms.UsesConstraints(options.AlgorithmVersion) ? GenerationRandom.Stream(options.Seed, 0x3000 + route) : random;
                 var points = RoutePoints(width, height, routeRandom, firstRoute).ToArray();
                 firstRoute ??= points;
                 foreach (var (px, py) in points)
@@ -323,7 +323,7 @@ public static class TerrainGenerator
                 string background = labels.Length == 1 ? set.Id : surfaces[surfaces[label].Parent].Set.Id;
                 if (labels.Length == 2 && !catalogue.CanBlend(surfaces[surfaces[label].Parent].Set, set)
                     && !islandAliases.Contains((surfaces[surfaces[label].Parent].Set.Id,set.Id))) throw new InvalidDataException("Missing reviewed blend for a terrain transition.");
-                if (options.AlgorithmVersion == GenerationAlgorithms.Current)
+                if (GenerationAlgorithms.UsesConstraints(options.AlgorithmVersion))
                 {
                     if (!orderedVariants.TryGetValue((set, mask), out var ordered))
                         orderedVariants[(set, mask)] = ordered = variants.OrderBy(variant => variant.Index).ToList();

@@ -96,11 +96,12 @@ public static class ProvinceGenerator
             options.MineCount is < 1 or > 4 || options.RuinCount is < 1 or > 4 || options.TownCount is < 0 or > 8 || options.DoorCount is < 0 or > WallEntrances.MaximumCount ||
             !Enum.IsDefined(options.Scene) || options.Style != null && !ProvinceStyle.All.Contains(options.Style)) throw new ArgumentException("Invalid province settings.");
         long revision = source.PickupRevision;
-        bool refined = options.AlgorithmVersion == GenerationAlgorithms.Current;
+        bool refined = GenerationAlgorithms.UsesConstraints(options.AlgorithmVersion);
         if (refined) scenery = scenery.OrderBy(item => item.CatalogueId, StringComparer.Ordinal).ThenBy(item => item.Tree.Name, StringComparer.Ordinal).ThenBy(item => item.Tree.Path, StringComparer.Ordinal).ToArray();
         var constraints = refined ? GenerationConstraints.Compile(source, options.Design, cancellation) : null;
         var boundary = ProvinceBoundary.CreateMask(source.Width, source.Height, options.Seed);
-        constraints?.CheckForbidden(boundary, cancellation);
+        constraints?.CheckForbidden(boundary, cancellation, (column, row) => column < ProvinceBoundary.MinimumDepth || row < ProvinceBoundary.MinimumDepth ||
+            source.Width - 1 - column < ProvinceBoundary.MinimumDepth || source.Height - 1 - row < ProvinceBoundary.MinimumDepth);
         var random = refined ? GenerationRandom.Stream(options.Seed, 0x1001) : new Random(options.Seed);
         var style = options.Style ?? ProvinceStyle.All[options.Scene is ProvinceScene.ForestRuins or ProvinceScene.MiningQuarry ? 0 : random.Next(ProvinceStyle.All.Count)];
         if (options.Scene is ProvinceScene.ForestRuins or ProvinceScene.MiningQuarry && style != ProvinceStyle.All[0])
@@ -111,9 +112,9 @@ public static class ProvinceGenerator
         var basis = terrain.Sets.Single(s => s.Id == style.BaseId);
         var patch = terrain.Sets.Single(s => s.Id == style.PatchId);
         if (assets != null && new[] { basis, patch }.Any(s => !terrain.MatchesAssets(s, assets)))
-            throw new InvalidDataException("The current libraries do not contain the matching province terrain artwork.");
+            throw GenerationDiagnostics.Reject(GenerationFailureKind.MissingAssets, "Artwork preflight", "The current libraries do not contain the matching province terrain artwork.");
         if (river && banks == null) { river = false; notes.Add("River artwork is unavailable; the river was omitted."); }
-        if (beach && shore == null) throw new InvalidDataException("Beach artwork is unavailable. Load the matching shoreline libraries to generate this province.");
+        if (beach && shore == null) throw GenerationDiagnostics.Reject(GenerationFailureKind.MissingAssets, "Artwork preflight", "Beach artwork is unavailable. Load the matching shoreline libraries to generate this province.");
         if ((river || beach) && terrain.Water?.LandRoute(terrain, basis) == null)
         {
             if (beach) throw new InvalidDataException("This ground has no reviewed beach transition.");

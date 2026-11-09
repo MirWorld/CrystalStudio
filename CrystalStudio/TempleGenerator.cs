@@ -29,6 +29,7 @@ public sealed record TempleOptions(TempleDefinition Temple, int Seed = 1, int Ro
 {
     public int AlgorithmVersion { get; init; } = GenerationAlgorithms.Legacy;
     internal MapDesignSettings? Design { get; init; }
+    internal IReadOnlyList<(int A, int B)>? LoopEdges { get; init; }
 }
 
 public sealed record TemplePlan(MapDocument Source, long SourceRevision, MapDocument Generated,
@@ -37,6 +38,9 @@ public sealed record TemplePlan(MapDocument Source, long SourceRevision, MapDocu
     public IReadOnlyList<PlacedStamp> Decorations { get; init; } = [];
     public IReadOnlyList<GeneratedEntrance> Entrances { get; init; } = [];
     public IReadOnlyList<GeneratedSideRoom> SideRooms { get; init; } = [];
+    internal IReadOnlyList<(int A, int B)> LoopCandidates { get; init; } = [];
+    internal int LoopBudget { get; init; }
+    internal NativeLoopReport? LoopVerification { get; init; }
 }
 
 public static class TempleGenerator
@@ -46,6 +50,14 @@ public static class TempleGenerator
 
     public static TemplePlan Plan(MapDocument source, WallFamily walls, TerrainSet floor, TempleOptions options,
         CancellationToken cancellation = default, AssetStore? assets = null, DungeonThemeResources? themes = null)
+    {
+        if (options.AlgorithmVersion == GenerationAlgorithms.Current && options.Theme == DungeonTheme.Classic && options.Type != DungeonType.Cave && options.LoopEdges == null)
+            return NativeDungeonLoops.Refine(options, candidate => PlanCore(source, walls, floor, candidate, cancellation, assets, themes), cancellation);
+        return PlanCore(source, walls, floor, options, cancellation, assets, themes);
+    }
+
+    private static TemplePlan PlanCore(MapDocument source, WallFamily walls, TerrainSet floor, TempleOptions options,
+        CancellationToken cancellation, AssetStore? assets, DungeonThemeResources? themes)
     {
         cancellation.ThrowIfCancellationRequested();
         if (walls.Id != options.Temple.WallId || floor.Id != options.Temple.FloorId || !walls.DrawInterior)
@@ -62,8 +74,8 @@ public static class TempleGenerator
         walls=walls.WithMode(true);
         walls.RequestedDoorCount=options.DoorCount;
         walls.DoorCountPerMap=true;
-        if (options.DoorCount>0 && assets!=null && walls.Availability(assets) is { } entranceError) throw new InvalidDataException(entranceError);
-        bool refined = options.AlgorithmVersion == GenerationAlgorithms.Current;
+        if (options.DoorCount>0 && assets!=null && walls.Availability(assets) is { } entranceError) throw GenerationDiagnostics.Reject(GenerationFailureKind.MissingAssets, "Artwork preflight", entranceError);
+        bool refined = GenerationAlgorithms.UsesConstraints(options.AlgorithmVersion);
         var constraints = refined ? GenerationConstraints.Compile(source, options.Design, cancellation) : null;
         var random = refined ? GenerationRandom.Stream(options.Seed, 0x2001) : new Random(options.Seed);
         // Chambers lie on the wall brush's native diagonal lattice. A spare
@@ -95,6 +107,7 @@ public static class TempleGenerator
         int count = options.Type == DungeonType.Cave ? options.Rooms : Math.Min(options.Rooms, slots * slots);
         HashSet<(int U, int V)> nodes;
         (int U, int V)[] roomNodes;
+        IReadOnlyList<(int A, int B)> loopCandidates = []; int loopBudget = 0;
         if (options.Theme != DungeonTheme.Classic)
         {
             (nodes, roomNodes) = DungeonThemeLayout.Create(options.Theme, side / unit, Math.Max(1, maxRoom),
@@ -130,7 +143,10 @@ public static class TempleGenerator
                 var links = chosen.SelectMany(room => Directions.Take(2).Select(direction => (A: room, B: (U: room.U + direction.U, V: room.V + direction.V))))
                     .Where(edge => occupied.Contains(edge.B)).Select(edge => (A: indices[edge.A], B: indices[edge.B])).ToArray();
                 var backbone = edges.Select(edge => (A: indices[edge.A], B: indices[edge.B])).ToArray();
-                var loops = DungeonTopology.SelectLoops(chosen.Count, backbone, links, Math.Max(1, (links.Length - edges.Count + 3) / 4), options.Seed, cancellation);
+                loopBudget = Math.Max(1, (links.Length - edges.Count + 3) / 4);
+                loopCandidates = links.Where(edge => !backbone.Any(existing => existing == edge || existing.A == edge.B && existing.B == edge.A)).ToArray();
+                var loops = options.AlgorithmVersion == GenerationAlgorithms.Current ? options.LoopEdges ?? [] :
+                    DungeonTopology.SelectLoops(chosen.Count, backbone, links, loopBudget, options.Seed, cancellation);
                 edges.AddRange(loops.Select(edge => (chosen[edge.A], chosen[edge.B])));
             }
             else foreach (var a in chosen)
@@ -326,7 +342,7 @@ public static class TempleGenerator
         cancellation.ThrowIfCancellationRequested();
         if (source.PickupRevision != revision) throw new InvalidOperationException("The map changed while generating the dungeon preview.");
         return new(source, revision, generated, options, (corridorsOnly && options.Theme == DungeonTheme.Classic ? 0 : count) + sideRooms.Count, centres)
-            { Entrances=entrances, SideRooms=sideRooms, Decorations=decorations };
+            { Entrances=entrances, SideRooms=sideRooms, Decorations=decorations, LoopCandidates = loopCandidates, LoopBudget = loopBudget };
     }
 
     private static (HashSet<(int U, int V)> Nodes, (int U, int V)[] Centres) FitMap(

@@ -17,22 +17,25 @@ internal sealed class MapDesignSettings
     public List<MapRoutePoint> Points { get; set; } = [];
     public List<MapDesignRegion> Regions { get; set; } = [];
     public bool RequireRoute { get; set; }
-    public bool Empty => Points.Count == 0 && Regions.Count == 0 && !RequireRoute;
-    public MapDesignSettings Copy() => new() { Points = [.. Points], Regions = [.. Regions], RequireRoute = RequireRoute };
-    public bool SameAs(MapDesignSettings other) => RequireRoute == other.RequireRoute && Points.SequenceEqual(other.Points) && Regions.SequenceEqual(other.Regions);
+    public int FootprintSize { get; set; } = 1;
+    public bool Empty => Points.Count == 0 && Regions.Count == 0 && !RequireRoute && FootprintSize == 1;
+    public MapDesignSettings Copy() => new() { Points = [.. Points], Regions = [.. Regions], RequireRoute = RequireRoute, FootprintSize = FootprintSize };
+    public bool SameAs(MapDesignSettings other) => RequireRoute == other.RequireRoute && FootprintSize == other.FootprintSize && Points.SequenceEqual(other.Points) && Regions.SequenceEqual(other.Regions);
 
     public void Validate(int width, int height)
     {
+        if (FootprintSize is < 1 or > 64)
+            throw GenerationDiagnostics.Reject(GenerationFailureKind.InputConflict, "Input validation", LocalText.T("Use a square footprint between 1 and 64 cells."));
         if (Points == null || Regions == null || Points.Count > 32 || Regions.Count > 64)
-            throw new InvalidDataException(LocalText.T("Use at most 32 route points and 64 design regions."));
+            throw GenerationDiagnostics.Reject(GenerationFailureKind.InputConflict, "Input validation", LocalText.T("Use at most 32 route points and 64 design regions."));
         if (Points.Any(point => point == null || string.IsNullOrWhiteSpace(point.Name) || point.Name.Length > 80 ||
             point.X < 0 || point.Y < 0 || point.X >= width || point.Y >= height) ||
             Regions.Any(region => region == null || string.IsNullOrWhiteSpace(region.Name) || region.Name.Length > 80 ||
                 !Enum.IsDefined(region.Purpose) || region.X < 0 || region.Y < 0 || region.Width <= 0 || region.Height <= 0 ||
                 (long)region.X + region.Width > width || (long)region.Y + region.Height > height))
-            throw new InvalidDataException(LocalText.T("A design marker is invalid or outside this map. Adjust markers after resizing."));
+            throw GenerationDiagnostics.Reject(GenerationFailureKind.InputConflict, "Input validation", LocalText.T("A design marker is invalid or outside this map. Adjust markers after resizing."));
         if (RequireRoute && Points.Count < 2)
-            throw new InvalidDataException(LocalText.T("A required route needs at least two ordered points."));
+            throw GenerationDiagnostics.Reject(GenerationFailureKind.InputConflict, "Input validation", LocalText.T("A required route needs at least two ordered points."));
     }
 }
 
@@ -75,9 +78,11 @@ internal static class MapDesignConstraints
         cancellation.ThrowIfCancellationRequested();
         design.Validate(document.Width, document.Height);
         var findings = new List<MapConstraintFinding>();
+        var clearance = design.FootprintSize > 1 ? MapClearance.Build(document, cancellation) : null;
+        bool Fits(int column, int row) => clearance == null ? MapRouteAnalysis.Walkable(document, column, row) : clearance.At(column, row) >= design.FootprintSize;
         foreach (var point in design.Points)
-            if (!MapRouteAnalysis.Walkable(document, point.X, point.Y))
-                findings.Add(new(point.Name, design.RequireRoute, LocalText.T("Route point is blocked."), point.X, point.Y));
+            if (!Fits(point.X, point.Y))
+                findings.Add(new(point.Name, design.RequireRoute, LocalText.T("Route point cannot fit the selected footprint."), point.X, point.Y));
         foreach (var region in design.Regions.Where(region => region.Purpose != MapRegionPurpose.Protect))
         {
             bool invalid = false; int issueX = region.X, issueY = region.Y;
@@ -87,7 +92,7 @@ internal static class MapDesignConstraints
                 for (int column = region.X; column < region.X + region.Width; column++)
                 {
                     var cell = document.Get(column, row);
-                    if (region.Purpose == MapRegionPurpose.Walkable ? !MapRouteAnalysis.Walkable(document, column, row) :
+                    if (region.Purpose == MapRegionPurpose.Walkable ? !Fits(column, row) :
                         cell.HasForeground || cell.MiddleImage != 0 || (cell.Door & 0x7F) != 0)
                     { invalid = true; issueX = column; issueY = row; break; }
                 }
@@ -102,11 +107,11 @@ internal static class MapDesignConstraints
                     if (invalid) break;
                 }
             if (invalid) findings.Add(new(region.Name, region.Required,
-                LocalText.T(region.Purpose == MapRegionPurpose.Walkable ? "Reserved corridor contains blocked cells." : "Reserved area contains object anchors or stamp footprints."), issueX, issueY));
+                LocalText.T(region.Purpose == MapRegionPurpose.Walkable ? "Reserved corridor cannot fit the selected footprint." : "Reserved area contains object anchors or stamp footprints."), issueX, issueY));
         }
         if (design.RequireRoute && findings.All(finding => !finding.Required))
         {
-            var route = MapRouteAnalysis.Analyze(document, design.Points, cancellation);
+            var route = MapRouteAnalysis.Analyze(document, design.Points, cancellation, design.FootprintSize);
             foreach (var leg in route.Legs.Where(leg => !leg.Reachable))
                 findings.Add(new(leg.From.Name + " → " + leg.To.Name, true, LocalText.T("Required route is unreachable."), leg.To.X, leg.To.Y));
         }

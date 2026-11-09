@@ -8,12 +8,23 @@ internal sealed class MapDesignEditor : StackPanel
     private readonly ListBox regions = new() { Name = "QuickMapDesignRegions", MinHeight = 65, MaxHeight = 140 };
     private readonly TextBlock feedback = new() { Name = "QuickMapDesignFeedback", TextWrapping = TextWrapping.Wrap };
     private readonly CheckBox required = new() { Name = "QuickMapRequireRoute", Content = LocalText.T("Require the ordered route to be reachable") };
+    internal NumericUpDown Footprint { get; }
+    private bool restoring;
     internal event Action? Changed;
 
     internal MapDesignEditor(MapDesignSettings design, int width, int height, Func<Rect?>? selection = null)
     {
         this.design = design; this.width = width; this.height = height; Spacing = 6;
         Avalonia.Automation.AutomationProperties.SetLiveSetting(feedback, Avalonia.Automation.AutomationLiveSetting.Polite);
+        Footprint = Number("QuickMapDesignFootprint", 1, 64, design.FootprintSize);
+        Footprint.ValueChanged += (_, _) =>
+        {
+            if (restoring) return;
+            try { design.FootprintSize = Value(Footprint); Notify(); }
+            catch (InvalidOperationException exception) { feedback.Text = exception.Message; Changed?.Invoke(); }
+        };
+        Children.Add(Fields(("Square footprint (cells)", Footprint)));
+        Children.Add(Hint("Route points and walkable regions are top-left footprint anchors. Generation, analysis and seed filtering use the same square size. The first route point is the reachability origin."));
         Children.Add(Hint("Points are visited in list order. Analysis uses four-way collision flags, not game runtime navigation."));
         points.ItemTemplate = new FuncDataTemplate<MapRoutePoint>((point, _) => new TextBlock { Text = point == null ? "" : $"{point.Name} · ({point.X}, {point.Y})", TextWrapping = TextWrapping.Wrap });
         Children.Add(points);
@@ -43,7 +54,7 @@ internal sealed class MapDesignEditor : StackPanel
             pointName.Text = point.Name; pointX.Value = point.X; pointY.Value = point.Y;
         };
         required.IsChecked = design.RequireRoute;
-        required.IsCheckedChanged += (_, _) => { design.RequireRoute = required.IsChecked == true; Notify(); }; Children.Add(required);
+        required.IsCheckedChanged += (_, _) => { if (!restoring) { design.RequireRoute = required.IsChecked == true; Notify(); } }; Children.Add(required);
         Children.Add(Hint("Protection affects local regeneration only. Clear-object reservations check anchors and stamp footprints, not every overhanging artwork pixel."));
         Children.Add(regions);
         var regionName = new TextBox { Name = "QuickMapRegionName", Watermark = LocalText.T("Region name"), MaxLength = 80 }; Children.Add(regionName);
@@ -97,12 +108,19 @@ internal sealed class MapDesignEditor : StackPanel
     internal void Restore(MapDesignSettings snapshot)
     {
         snapshot.Validate(width, height);
-        if (design.SameAs(snapshot)) return;
-        design.Points = [.. snapshot.Points]; design.Regions = [.. snapshot.Regions]; design.RequireRoute = snapshot.RequireRoute;
-        bool toggleChanged = required.IsChecked != snapshot.RequireRoute;
-        required.IsChecked = snapshot.RequireRoute;
-        if (!toggleChanged) Notify();
+        if (design.SameAs(snapshot) && Footprint.Value == snapshot.FootprintSize) return;
+        restoring = true;
+        try
+        {
+            design.Points = [.. snapshot.Points]; design.Regions = [.. snapshot.Regions]; design.RequireRoute = snapshot.RequireRoute; design.FootprintSize = snapshot.FootprintSize;
+            required.IsChecked = snapshot.RequireRoute; Footprint.Value = snapshot.FootprintSize;
+        }
+        finally { restoring = false; }
+        Notify();
     }
+
+    internal void EnsureValid() { Value(Footprint); design.Validate(width, height); }
+    internal bool InputValid { get { try { EnsureValid(); return true; } catch (Exception exception) when (exception is InvalidOperationException or System.IO.InvalidDataException) { return false; } } }
 
     private void Refresh()
     {

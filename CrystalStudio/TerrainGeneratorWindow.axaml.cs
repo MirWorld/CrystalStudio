@@ -258,7 +258,7 @@ public partial class TerrainGeneratorWindow : EditorWindow
             PreviewState.SetImpact(cachedImpact); PreviewState.Complete();
         }
         catch (OperationCanceledException) { if (!closed && requestedRevision == revision) PreviewState.SetPhase(GeneratorPreviewPhase.Cancelled); }
-        catch (Exception ex) { if (!closed && requestedRevision == revision) { Plan = null; PreviewImage.Source = null; PreviewHint.Text = LocalText.T("Preview unavailable"); FeedbackText.Text = (ex.Message); PreviewState.SetPhase(GeneratorPreviewPhase.Failed, ex.Message); } }
+        catch (Exception ex) { if (!closed && requestedRevision == revision) { Plan = null; PreviewImage.Source = null; PreviewHint.Text = LocalText.T("Preview unavailable"); PreviewState.SetFailure(ex, "Terrain generation"); FeedbackText.Text = PreviewState.Failure; } }
         finally { if (ReferenceEquals(previewCancellation, job)) { previewCancellation = null; if (PreviewState.Phase == GeneratorPreviewPhase.Cancelling) PreviewState.SetPhase(GeneratorPreviewPhase.Cancelled); else PreviewState.Notify(); } job.Dispose(); }
     }
     private void DetailChanged(object sender, RoutedEventArgs e)

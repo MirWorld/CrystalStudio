@@ -170,6 +170,8 @@ internal sealed class QuickMapPreview
         {
             var parameters = GeneratorPreferences.Capture(window);
             selected = state.Phase == GeneratorPreviewPhase.Ready && !session.BatchRunning ? session.Candidates.Items.FirstOrDefault(candidate => candidate.Matches(session.Settings, parameters, session.Design)) : null;
+            if (selected == null && state.Phase == GeneratorPreviewPhase.Ready && !session.BatchRunning)
+                candidateHint.Text = LocalText.T("The current preview is not a retained candidate. Restore a retained candidate or a completed search result; no map was applied.");
             candidates.Children.Clear();
             compare.IsEnabled = !session.BatchRunning && state.Phase == GeneratorPreviewPhase.Ready && session.Candidates.Items.Count(candidate => candidate.CanRestore(session.Settings) && candidate.Comparison != null) >= 2;
             foreach (var candidate in session.Candidates.Items)

@@ -11,7 +11,7 @@ internal static class ProvinceEcology
         if (vegetation == 0) return 0;
         var pool = ProvinceSceneryPalette.Select(scenery, style, SpecialBrushKind.Bush);
         if (pool.Length == 0) return 0;
-        bool refined = algorithmVersion == GenerationAlgorithms.Current;
+        bool refined = GenerationAlgorithms.UsesConstraints(algorithmVersion);
         if (refined) pool = pool.OrderBy(tree => tree.Name, StringComparer.Ordinal).ThenBy(tree => tree.Path, StringComparer.Ordinal).ToArray();
         var separation = new ScenerySpacing();
         var footprints = pool.Distinct().ToDictionary(tree => tree, tree => ScenerySpacing.Footprint(tree, 1.1));

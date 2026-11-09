@@ -232,7 +232,7 @@ public partial class ProvinceGeneratorWindow : EditorWindow
         catch (OperationCanceledException) { if (!closed && request == revision) PreviewState.SetPhase(GeneratorPreviewPhase.Cancelled); }
         catch (Exception ex)
         {
-            if (!closed && request == revision) { Plan = null; ApplyButton.IsEnabled = false; PreviewImage.Source = null; PreviewHint.Text = LocalText.T("Preview unavailable"); FeedbackText.Text = (ex.Message); PreviewState.SetPhase(GeneratorPreviewPhase.Failed, ex.Message); }
+            if (!closed && request == revision) { Plan = null; ApplyButton.IsEnabled = false; PreviewImage.Source = null; PreviewHint.Text = LocalText.T("Preview unavailable"); PreviewState.SetFailure(ex, "Province generation"); FeedbackText.Text = PreviewState.Failure; }
         }
         finally { if (ReferenceEquals(pending, job)) { pending = null; if (PreviewState.Phase == GeneratorPreviewPhase.Cancelling) PreviewState.SetPhase(GeneratorPreviewPhase.Cancelled); else PreviewState.Notify(); } job.Dispose(); }
     }

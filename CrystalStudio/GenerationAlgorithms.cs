@@ -8,7 +8,8 @@ namespace CrystalStudio;
 internal static class GenerationAlgorithms
 {
     internal const int Legacy = 1;
-    internal const int Current = 2;
+    internal const int Refined = 2;
+    internal const int Current = 3;
     internal const string Parameter = "AlgorithmVersion";
     private sealed class State(int version, Action changed)
     {
@@ -21,8 +22,10 @@ internal static class GenerationAlgorithms
 
     internal static void Validate(int version)
     {
-        if (version is not (Legacy or Current)) throw new InvalidDataException("Unsupported map generation algorithm version.");
+        if (version is not (Legacy or Refined or Current)) throw GenerationDiagnostics.Reject(GenerationFailureKind.InputConflict, "Input validation", "Unsupported map generation algorithm version.");
     }
+
+    internal static bool UsesConstraints(int version) => version >= Refined;
 
     internal static int Read(IReadOnlyDictionary<string, string>? values, int fallback = Legacy)
     {
@@ -39,12 +42,12 @@ internal static class GenerationAlgorithms
         var settings = window.GetLogicalDescendants().OfType<ScrollViewer>().Select(view => view.Content).OfType<StackPanel>()
             .FirstOrDefault(panel => panel.Children.OfType<ComboBox>().Any());
         if (settings == null) return;
-        var choice = new ComboBox { Name = "GeneratorAlgorithm", ItemsSource = new[] { Label(Legacy), Label(Current) }, SelectedIndex = state.Version - 1, HorizontalAlignment = HorizontalAlignment.Stretch };
+        var choice = new ComboBox { Name = "GeneratorAlgorithm", ItemsSource = new[] { Label(Legacy), Label(Refined), Label(Current) }, SelectedIndex = state.Version - 1, HorizontalAlignment = HorizontalAlignment.Stretch };
         Avalonia.Automation.AutomationProperties.SetName(choice, LocalText.T("Generation algorithm"));
         choice.SelectionChanged += (_, _) =>
         {
             int version = choice.SelectedIndex + 1;
-            if (version is not (Legacy or Current) || state.Version == version) return;
+            if (version is not (Legacy or Refined or Current) || state.Version == version) return;
             state.Version = version; state.Changed();
         };
         state.Choice = choice;
@@ -54,10 +57,10 @@ internal static class GenerationAlgorithms
         settings.Children.Add(group);
     }
 
-    internal static string Label(int version) => LocalText.T(version == Current ? "Refined v2" : "Legacy v1");
+    internal static string Label(int version) => LocalText.T(version switch { Current => "Verified v3", Refined => "Refined v2", _ => "Legacy v1" });
 
     internal static int Version(EditorWindow window) => states.TryGetValue(window, out var state) ? state.Version : Legacy;
-    internal static MapDesignSettings? Design(EditorWindow window) => states.TryGetValue(window, out var state) && state.Version == Current ? state.Design : null;
+    internal static MapDesignSettings? Design(EditorWindow window) => states.TryGetValue(window, out var state) && UsesConstraints(state.Version) ? state.Design : null;
 
     internal static void Capture(EditorWindow window, Dictionary<string, string> values)
     {
@@ -78,7 +81,7 @@ internal static class GenerationAlgorithms
     {
         if (!states.TryGetValue(window, out var state) || state.Design == null && design.Empty || state.Design?.SameAs(design) == true) return;
         state.Design = design.Empty ? null : design.Copy();
-        if (state.Version == Current) state.Changed();
+        if (UsesConstraints(state.Version)) state.Changed();
     }
 }
 

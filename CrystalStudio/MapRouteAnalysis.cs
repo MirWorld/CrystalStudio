@@ -14,10 +14,25 @@ internal sealed record MapRouteLeg(MapRoutePoint From, MapRoutePoint To, bool Re
 internal sealed record MapRouteResult(IReadOnlyList<MapRouteLeg> Legs);
 internal sealed record MapCandidateMetrics(int WalkableCells, int LargestArea, int TotalCells, int DeadEnds, int StampCount, int? Rooms = null)
 {
-    public double WalkableRatio => (double)WalkableCells / TotalCells;
+    public int FootprintSize { get; init; } = 1;
+    public int PossibleAnchors { get; init; } = TotalCells;
+    public int? StartArea { get; init; }
+    public double ReachableRatio => WalkableCells == 0 ? 0 : (double)(StartArea ?? LargestArea) / WalkableCells;
+    public int? RouteSteps { get; init; }
+    public double ReachableLegRatio { get; init; } = 1;
+    public int MinimumRouteClearance { get; init; }
+    public double MeanClearance { get; init; }
+    public double MeanBranchDepth { get; init; }
+    public int PreferredConflicts { get; init; }
+    public string? TopologyFingerprint { get; init; }
+    public double WalkableRatio => PossibleAnchors == 0 ? 0 : (double)WalkableCells / PossibleAnchors;
     public double ConnectedRatio => WalkableCells == 0 ? 0 : (double)LargestArea / WalkableCells;
     public override string ToString() => LocalText.Format("Walkable {0:P1} · largest / walkable {1:P1} · dead ends {2:N0} · stamps {3:N0}", WalkableRatio, ConnectedRatio, DeadEnds, StampCount)
-        + (Rooms is { } rooms ? LocalText.Format(" · rooms {0}", rooms) : "");
+        + (Rooms is { } rooms ? LocalText.Format(" · rooms {0}", rooms) : "")
+        + LocalText.Format(" · footprint {0}×{0}", FootprintSize)
+        + (StartArea != null ? LocalText.Format(" · from first point {0:P1}", ReachableRatio) : "")
+        + (RouteSteps is { } steps ? LocalText.Format(" · route {0:N0} steps", steps) : "")
+        + LocalText.Format(" · branch depth {0:0.0} · square fit {1:0.0}", MeanBranchDepth, MeanClearance);
 }
 
 internal static class MapRouteAnalysis
@@ -70,7 +85,7 @@ internal static class MapRouteAnalysis
                 if ((distance[cursor] & 4095) == 0) cancellation.ThrowIfCancellationRequested();
                 minimumClearance = Math.Min(minimumClearance, clearance.At(cursor % document.Width, cursor / document.Width));
                 int degree = 0;
-                foreach (int neighbour in Neighbours(cursor, document.Width, document.Height)) if (Walkable(document, neighbour % document.Width, neighbour / document.Width)) degree++;
+                foreach (int neighbour in Neighbours(cursor, document.Width, document.Height)) if (Fits(neighbour % document.Width, neighbour / document.Width)) degree++;
                 if (degree <= 2) narrow++;
                 if (degree <= 1) dead++;
                 if (cursor == start || cursor == goal || distance[cursor] % stride == 0) path.Add(cursor);
@@ -84,35 +99,84 @@ internal static class MapRouteAnalysis
         return new(legs);
     }
 
-    internal static MapCandidateMetrics Measure(MapDocument document, int? rooms = null, CancellationToken cancellation = default)
+    internal static MapCandidateMetrics Measure(MapDocument document, int? rooms = null, CancellationToken cancellation = default, MapDesignSettings? design = null)
     {
         cancellation.ThrowIfCancellationRequested();
+        design ??= new(); design.Validate(document.Width, document.Height);
         int count = CellCount(document); var visited = new bool[count]; var queue = new int[count];
+        var clearance = MapClearance.Build(document, cancellation); var degrees = new byte[count];
+        bool Fits(int index) => clearance.At(index % document.Width, index / document.Width) >= design.FootprintSize;
+        int start = design.Points.Count == 0 ? -1 : design.Points[0].Y * document.Width + design.Points[0].X;
+        int? startArea = start < 0 ? null : 0; long clearanceSum = 0;
+        using var hash = System.Security.Cryptography.IncrementalHash.CreateHash(System.Security.Cryptography.HashAlgorithmName.SHA256);
+        Span<byte> header = stackalloc byte[12];
+        System.Buffers.Binary.BinaryPrimitives.WriteInt32LittleEndian(header, document.Width);
+        System.Buffers.Binary.BinaryPrimitives.WriteInt32LittleEndian(header[4..], document.Height);
+        System.Buffers.Binary.BinaryPrimitives.WriteInt32LittleEndian(header[8..], design.FootprintSize); hash.AppendData(header);
+        var fingerprintBuffer = new byte[4096];
+        for (int index = 0; index < count; index++)
+        {
+            if ((index & 4095) == 0) cancellation.ThrowIfCancellationRequested();
+            fingerprintBuffer[index & 4095] = Fits(index) ? (byte)1 : (byte)0;
+            if ((index & 4095) == 4095 || index == count - 1) hash.AppendData(fingerprintBuffer.AsSpan(0, (index & 4095) + 1));
+        }
         int walkable = 0, largest = 0, dead = 0;
         for (int index = 0; index < count; index++)
         {
             if ((index & 4095) == 0) cancellation.ThrowIfCancellationRequested();
             if (visited[index]) continue;
             visited[index] = true;
-            if (!Walkable(document, index % document.Width, index / document.Width)) continue;
-            int head = 0, tail = 0; queue[tail++] = index;
+            if (!Fits(index)) continue;
+            int head = 0, tail = 0; queue[tail++] = index; bool hasStart = false;
             while (head < tail)
             {
                 if ((head & 4095) == 0) cancellation.ThrowIfCancellationRequested();
                 int current = queue[head++], degree = 0;
+                hasStart |= current == start; clearanceSum += clearance.At(current % document.Width, current / document.Width);
                 foreach (int neighbour in Neighbours(current, document.Width, document.Height))
                 {
-                    bool open = Walkable(document, neighbour % document.Width, neighbour / document.Width);
+                    bool open = Fits(neighbour);
                     if (open) degree++;
                     if (visited[neighbour]) continue;
                     visited[neighbour] = true;
                     if (open) queue[tail++] = neighbour;
                 }
                 if (degree <= 1) dead++;
+                degrees[current] = (byte)degree;
             }
             walkable += tail; largest = Math.Max(largest, tail);
+            if (hasStart) startArea = tail;
         }
-        return new(walkable, largest, count, dead, document.PlacedStamps.Count, rooms);
+        long branchDepth = 0; int branchCount = 0;
+        for (int index = 0; index < count; index++)
+        {
+            if ((index & 4095) == 0) cancellation.ThrowIfCancellationRequested();
+            if (degrees[index] != 1) continue;
+            int previous = -1, cursor = index, depth = 0;
+            while (true)
+            {
+                int next = -1;
+                foreach (int neighbour in Neighbours(cursor, document.Width, document.Height))
+                    if (neighbour != previous && Fits(neighbour)) { next = neighbour; break; }
+                if (next < 0) break;
+                previous = cursor; cursor = next; depth++;
+                if ((depth & 4095) == 0) cancellation.ThrowIfCancellationRequested();
+                if (degrees[cursor] != 2) break;
+            }
+            branchDepth += depth; branchCount++;
+        }
+        var route = Analyze(document, design.Points, cancellation, design.FootprintSize);
+        bool allReachable = route.Legs.All(leg => leg.Reachable);
+        return new(walkable, largest, count, dead, document.PlacedStamps.Count, rooms)
+        {
+            FootprintSize = design.FootprintSize, PossibleAnchors = Math.Max(0, document.Width - design.FootprintSize + 1) * Math.Max(0, document.Height - design.FootprintSize + 1), StartArea = startArea,
+            RouteSteps = route.Legs.Count > 0 && allReachable ? route.Legs.Sum(leg => leg.Steps) : null,
+            ReachableLegRatio = route.Legs.Count == 0 ? 1 : (double)route.Legs.Count(leg => leg.Reachable) / route.Legs.Count,
+            MinimumRouteClearance = route.Legs.Count > 0 && allReachable ? route.Legs.Min(leg => leg.MinimumSquareClearance) : 0,
+            MeanClearance = walkable == 0 ? 0 : (double)clearanceSum / walkable,
+            MeanBranchDepth = branchCount == 0 ? 0 : (double)branchDepth / branchCount,
+            TopologyFingerprint = Convert.ToHexString(hash.GetHashAndReset())
+        };
     }
 
     internal static NeighbourCells Neighbours(int index, int width, int height) => new(index, width, height);

@@ -15,7 +15,7 @@ internal sealed record MapResourceReport(IReadOnlyList<MapResourceCheck> Checks)
         .Concat(Errors).Concat(Warnings));
     public void EnsureReady()
     {
-        if (!CanGenerate) throw new InvalidDataException(string.Join("\n", Errors));
+        if (!CanGenerate) throw GenerationDiagnostics.Reject(GenerationFailureKind.MissingAssets, "Artwork preflight", string.Join("\n", Errors));
     }
 }
 
@@ -177,6 +177,7 @@ internal sealed class GeneratorPreviewState
     public GeneratorPreviewPhase Phase { get; private set; } = GeneratorPreviewPhase.Checking;
     public string SourceDescription { get; private set; } = "";
     public string? Failure { get; private set; }
+    internal GenerationFailure? FailureDetails { get; private set; }
     public string Stage { get; private set; } = "Checking required and optional artwork…";
     public GenerationImpact? Impact { get; private set; }
     public event EventHandler? Changed;
@@ -188,9 +189,9 @@ internal sealed class GeneratorPreviewState
             + "\n" + LocalText.Format("Loaded library paths (first {0} of {1}):", Math.Min(12, assets.Libraries.Count), assets.Libraries.Count)
             + "\n" + string.Join("\n", assets.Libraries.OrderBy(pair => pair.Key).Take(12).Select(pair => $"{pair.Key}: {pair.Value.Path}"));
     }
-    public void SetPhase(GeneratorPreviewPhase phase, string? failure = null)
+    public void SetPhase(GeneratorPreviewPhase phase, string? failure = null, GenerationFailure? diagnostic = null)
     {
-        Phase = phase; Failure = failure;
+        Phase = phase; Failure = failure; FailureDetails = diagnostic;
         Stage = phase switch
         {
             GeneratorPreviewPhase.Checking => "Checking required and optional artwork…",
@@ -203,6 +204,11 @@ internal sealed class GeneratorPreviewState
         };
         if (phase == GeneratorPreviewPhase.Waiting) Resources = null;
         Notify();
+    }
+    internal void SetFailure(Exception exception, string stage)
+    {
+        var diagnostic = GenerationDiagnostics.Describe(exception, stage);
+        SetPhase(GeneratorPreviewPhase.Failed, diagnostic.ToString(), diagnostic);
     }
     public void SetStage(string stage) { Stage = stage; Notify(); }
     public void SetImpact(GenerationImpact impact) { Impact = impact; Notify(); }

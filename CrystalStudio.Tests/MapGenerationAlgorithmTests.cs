@@ -244,11 +244,11 @@ public sealed class MapGenerationAlgorithmTests
         var window = new TerrainGeneratorWindow(new(128, 128), assets, TerrainCatalogue.Load());
         try
         {
-            Assert.Equal("2", GeneratorPreferences.Capture(window)[GenerationAlgorithms.Parameter]);
+            Assert.Equal("3", GeneratorPreferences.Capture(window)[GenerationAlgorithms.Parameter]);
             var choice = window.GetLogicalDescendants().OfType<ComboBox>().Single(control => control.Name == "GeneratorAlgorithm");
-            Assert.Equal(1, choice.SelectedIndex);
+            Assert.Equal(2, choice.SelectedIndex);
             GeneratorPreferences.Restore(window, new Dictionary<string, string> { ["CoverageSlider"] = ".5" });
-            Assert.Equal(2, GenerationAlgorithms.Version(window));
+            Assert.Equal(3, GenerationAlgorithms.Version(window));
             GeneratorPreferences.Restore(window, new Dictionary<string, string> { ["SeedBox"] = "27" });
             Assert.Equal("1", GeneratorPreferences.Capture(window)[GenerationAlgorithms.Parameter]);
             Assert.Equal(0, choice.SelectedIndex); choice.SelectedIndex = 1;
@@ -397,9 +397,10 @@ public sealed class MapGenerationAlgorithmTests
     }
 
     [AvaloniaTheory]
-    [InlineData(0, 2)]
+    [InlineData(0, 3)]
     [InlineData(1, 1)]
     [InlineData(2, 2)]
+    [InlineData(3, 3)]
     public void ReturningBeforeArtworkLoadsPreservesAlgorithmIdentity(int supplied, int expected)
     {
         using var assets = AssetStore.Load(Path.Combine(TestApplication.Root, "Data"));

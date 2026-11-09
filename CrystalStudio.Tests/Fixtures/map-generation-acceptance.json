@@ -1,0 +1,9 @@
+{
+  "Version": 1,
+  "Width": 256,
+  "Height": 256,
+  "CalibrationSeeds": [101, 211, 307, 401, 503, 601, 701, 809, 907, 1009, 1103, 1201],
+  "HoldoutSeeds": [1301, 1409, 1511],
+  "ObjectIds": ["mir/mir_00110", "mir/mir_00111", "mir/mir_00112"],
+  "Notes": "Pinned repository-native stamp and catalogue acceptance set. No client sprite libraries, editor-rejected maps, player testing or visual-quality verdict is implied. Keep holdout seeds separate from calibration; replace the holdout set if it becomes a tuning target."
+}

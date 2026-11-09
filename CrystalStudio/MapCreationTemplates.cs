@@ -18,20 +18,20 @@ internal static class MapCreationTemplates
             {
                 ["StyleList"] = "province:bichon-province", ["ForestSlider"] = "85", ["CliffSlider"] = "40",
                 ["BeachSlider"] = "0", ["RiverSlider"] = "35", ["VegetationSlider"] = "35",
-                ["TownCountSlider"] = "0", ["DoorCountSlider"] = "0", ["SeedBox"] = "1", [GenerationAlgorithms.Parameter] = "2"
+                ["TownCountSlider"] = "0", ["DoorCountSlider"] = "0", ["SeedBox"] = "1", [GenerationAlgorithms.Parameter] = "3"
             }),
         new("town-surroundings", "Town surroundings", "Light vegetation and one requested town. Placement depends on available artwork and space; no fixed area is reserved.",
             MapCreationKind.Province, 512, 512, new()
             {
                 ["StyleList"] = "province:bichon-province", ["ForestSlider"] = "50", ["CliffSlider"] = "0",
                 ["BeachSlider"] = "0", ["RiverSlider"] = "0", ["VegetationSlider"] = "20",
-                ["TownCountSlider"] = "1", ["DoorCountSlider"] = "0", ["SeedBox"] = "1", [GenerationAlgorithms.Parameter] = "2"
+                ["TownCountSlider"] = "1", ["DoorCountSlider"] = "0", ["SeedBox"] = "1", [GenerationAlgorithms.Parameter] = "3"
             }),
         new("small-dungeon", "Small dungeon", "A compact stone dungeon with six requested rooms and wide corridors. Check the preview for actual room placement.",
             MapCreationKind.Dungeon, 128, 128, new()
             {
                 ["TempleList"] = "temple:stone-temple", ["DungeonTypeList"] = "Temple", ["RoomsSlider"] = "6",
-                ["SizeSlider"] = "3", ["WidthList"] = "index:1", ["DoorCountSlider"] = "0", ["SeedBox"] = "1", [GenerationAlgorithms.Parameter] = "2"
+                ["SizeSlider"] = "3", ["WidthList"] = "index:1", ["DoorCountSlider"] = "0", ["SeedBox"] = "1", [GenerationAlgorithms.Parameter] = "3"
             })
     ];
 

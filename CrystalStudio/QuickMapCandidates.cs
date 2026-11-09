@@ -2,8 +2,8 @@ namespace CrystalStudio;
 
 internal sealed class QuickMapCandidate(MapCreationSettings settings, IReadOnlyDictionary<string, string> parameters, RasterImage? thumbnail, MapDesignSettings? design = null)
 {
-    private readonly MapDesignSettings? generationDesign = GenerationAlgorithms.Read(parameters) == GenerationAlgorithms.Current ? design?.Copy() ?? new() : null;
-    internal MapDesignSettings? CopyDesign() => generationDesign?.Copy();
+    private readonly MapDesignSettings? generationDesign = GenerationAlgorithms.UsesConstraints(GenerationAlgorithms.Read(parameters)) ? design?.Copy() ?? new() : null;
+    internal MapDesignSettings? CopyDesign() => (evaluationDesign ?? generationDesign)?.Copy();
     public MapGenerationSettings Generation { get; } = new(settings.Kind, settings.Width, settings.Height);
     public IReadOnlyDictionary<string, string> Parameters { get; } = new System.Collections.ObjectModel.ReadOnlyDictionary<string, string>(new Dictionary<string, string>(parameters));
     public RasterImage? Thumbnail { get; internal set; } = thumbnail;
@@ -11,11 +11,17 @@ internal sealed class QuickMapCandidate(MapCreationSettings settings, IReadOnlyD
     public IReadOnlyDictionary<string, string>? DisplayValues { get; internal set; }
     public bool IsFavorite { get; internal set; }
     public MapCandidateMetrics? Metrics { get; internal set; }
+    private MapDesignSettings? evaluationDesign;
+    internal bool SameEvaluation(MapDesignSettings design) => evaluationDesign?.SameAs(design) == true;
+    internal void Evaluate(MapCandidateMetrics metrics, MapDesignSettings design) { Metrics = metrics; evaluationDesign = design.Copy(); }
     public bool CanRestore(MapCreationSettings settings) => Generation.Kind == settings.Kind && Generation.Width == settings.Width && Generation.Height == settings.Height;
-    public bool Matches(MapCreationSettings settings, IReadOnlyDictionary<string, string> parameters, MapDesignSettings? design = null) => CanRestore(settings) &&
-        (generationDesign == null || generationDesign.SameAs(design ?? new())) &&
-        parameters.Count(pair => QuickMapCandidates.IsGenerationParameter(pair.Key)) == Parameters.Count &&
-        Parameters.All(pair => parameters.TryGetValue(pair.Key, out string? value) && value == pair.Value);
+    public bool Matches(MapCreationSettings settings, IReadOnlyDictionary<string, string> parameters, MapDesignSettings? design = null)
+    {
+        var recordedDesign = evaluationDesign ?? generationDesign;
+        return CanRestore(settings) && (recordedDesign == null || recordedDesign.SameAs(design ?? new())) &&
+            parameters.Count(pair => QuickMapCandidates.IsGenerationParameter(pair.Key)) == Parameters.Count &&
+            Parameters.All(pair => parameters.TryGetValue(pair.Key, out string? value) && value == pair.Value);
+    }
 }
 
 internal sealed class QuickMapCandidates : IDisposable
@@ -50,6 +56,39 @@ internal sealed class QuickMapCandidates : IDisposable
         items.Add(candidate); return candidate;
     }
 
+    internal CandidateRetention RememberMeasured(MapCreationSettings settings, IReadOnlyDictionary<string, string> parameters,
+        MapCandidateMetrics metrics, RasterImage? preview, MapDesignSettings design)
+    {
+        var same = items.FirstOrDefault(item => item.Matches(settings, parameters, design));
+        if (same != null)
+        {
+            Remember(settings, parameters, preview, design: design); same.Evaluate(metrics, design);
+            return new(same, LocalText.T("Updated this candidate's measured results."));
+        }
+        var comparable = items.Where(item => item.CanRestore(settings) && item.Metrics != null && item.SameEvaluation(design)).ToArray();
+        var duplicate = comparable.FirstOrDefault(item => metrics.TopologyFingerprint != null && item.Metrics!.TopologyFingerprint == metrics.TopologyFingerprint);
+        if (duplicate != null && (duplicate.IsFavorite || !MapCandidateSelection.Dominates(metrics, duplicate.Metrics!)))
+            return new(duplicate, LocalText.T("An equivalent passability layout is already retained. This seed remains in the search results."));
+        QuickMapCandidate? victim = duplicate;
+        if (victim == null && items.Count >= Capacity)
+        {
+            var eligible = items.Where(item => !item.IsFavorite).ToArray();
+            if (eligible.Length == 0) return new(null, LocalText.T("All five candidates are favorites. Unfavorite one to retain another result."));
+            victim = eligible.FirstOrDefault(item => !item.CanRestore(settings) || item.Metrics == null || !item.SameEvaluation(design));
+            if (victim == null)
+            {
+                int[] indices = Enumerable.Range(0, items.Count).Where(index => comparable.Contains(items[index])).ToArray();
+                int replace = MapCandidateSelection.Replacement(indices.Select(index => items[index].Metrics!).ToArray(), indices.Select(index => items[index].IsFavorite).ToArray(), metrics);
+                if (replace < 0) return new(null, LocalText.T("Existing candidates offer equal or better quality and diversity. This seed remains in the search results."));
+                victim = items[indices[replace]];
+            }
+        }
+        if (victim != null) { items.Remove(victim); victim.Thumbnail?.Dispose(); victim.Comparison?.Dispose(); }
+        var retained = Remember(settings, parameters, preview, design: design)!;
+        retained.Evaluate(metrics, design);
+        return new(retained, LocalText.T("Retained for measured quality and layout diversity; favorites were preserved."));
+    }
+
     public void SetFavorite(QuickMapCandidate candidate, bool favorite)
     {
         if (items.Contains(candidate)) candidate.IsFavorite = favorite;
@@ -78,3 +117,5 @@ internal sealed class QuickMapCandidates : IDisposable
 
     public void Dispose() { foreach (var item in items) { item.Thumbnail?.Dispose(); item.Comparison?.Dispose(); } items.Clear(); }
 }
+
+internal sealed record CandidateRetention(QuickMapCandidate? Candidate, string Explanation);

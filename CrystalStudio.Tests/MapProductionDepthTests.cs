@@ -240,8 +240,10 @@ public sealed class MapProductionDepthTests
             Assert.Contains(unchecked(firstSeed + 1), completed); Assert.Contains(unchecked(firstSeed + 2), completed);
             Assert.Equal(unchecked(firstSeed + 2), window.Plan!.Seed);
             var highlighted = window.GetLogicalDescendants().OfType<Button>().Distinct().Where(button => button.Name?.StartsWith("QuickMapCandidate", StringComparison.Ordinal) == true && button.BorderThickness.Left == 2).ToArray();
-            Assert.Single(highlighted);
-            Assert.Contains(unchecked(firstSeed + 2).ToString(), string.Join(" ", highlighted[0].GetLogicalDescendants().OfType<TextBlock>().Select(text => text.Text)));
+            Assert.Empty(highlighted);
+            Assert.Equal(rows[0].Metrics!.TopologyFingerprint, rows[2].Metrics!.TopologyFingerprint);
+            Assert.DoesNotContain(candidates.Items, candidate => candidate.Parameters["SeedBox"] == unchecked(firstSeed + 2).ToString());
+            Assert.Contains(window.GetLogicalDescendants().OfType<TextBlock>(), text => text.Text == LocalText.T("The current preview is not a retained candidate. Restore a retained candidate or a completed search result; no map was applied."));
             Assert.True(Find<ComboBox>(window, "QuickMapDensity").IsEffectivelyEnabled); Assert.Equal(revision, source.PickupRevision);
         }
         finally { window.Close(); }

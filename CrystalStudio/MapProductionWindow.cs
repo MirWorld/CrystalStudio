@@ -39,13 +39,12 @@ internal sealed class MapProductionWindow : EditorWindow
         var route = new Grid { ColumnDefinitions = new ColumnDefinitions("340,*"), ColumnSpacing = 16 };
         var editor = new MapDesignEditor(design, source.Width, source.Height, selection);
         var editorPanel = new StackPanel { Spacing = 8 };
-        var footprint = MapDesignEditor.Number("ProductionRouteFootprint", 1, 64, 1);
-        editorPanel.Children.Add(MapDesignEditor.Fields(("Square footprint (cells)", footprint)));
+        var footprint = editor.Footprint; footprint.Name = "ProductionRouteFootprint";
         var analyze = new Button { Name = "ProductionAnalyzeRoute", Content = LocalText.T("Analyze routes and reservations") }; editorPanel.Children.Add(analyze);
         editorPanel.Children.Add(editor);
         route.Children.Add(new ScrollViewer { Content = editorPanel, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled });
         var right = new Grid { RowDefinitions = new RowDefinitions("Auto,*,Auto,Auto") };
-        right.Children.Add(MapDesignEditor.Hint("Route points are top-left anchors of an axis-aligned square footprint. Clearance uses both native collision bits and map bounds. Layout constraints keep their original one-cell semantics. Narrow cells still count neighbour degree, not width. This is not a server movement or gameplay-time guarantee."));
+        right.Children.Add(MapDesignEditor.Hint("Route points are top-left anchors of an axis-aligned square footprint. Clearance uses both native collision bits and map bounds. Generation, constraints and analysis use the same footprint. Narrow cells still count neighbour degree, not width. This is not a server movement or gameplay-time guarantee."));
         Grid.SetRow(routeImage, 1); right.Children.Add(routeImage);
         var legs = new ListBox { Name = "ProductionRouteLegs", MaxHeight = 160 };
         legs.ItemTemplate = new FuncDataTemplate<MapRouteLeg>((leg, _) => new TextBlock { Text = leg?.ToString(), TextWrapping = TextWrapping.Wrap, Margin = new Thickness(4) });
@@ -78,7 +77,7 @@ internal sealed class MapProductionWindow : EditorWindow
             analyzedDesign = markers;
             return (result.Route.Legs.Count == 0 ? LocalText.T("Add at least two ordered points to analyze a route.") :
                 LocalText.Format("Route analysis complete: {0}/{1} legs reachable.", result.Route.Legs.Count(leg => leg.Reachable), result.Route.Legs.Count)) + "\n" +
-                (footprintSize > 1 ? LocalText.T("Layout constraints (one-cell rule): ") : "") +
+                (!markers.RequireRoute && result.Route.Legs.Any(leg => !leg.Reachable) ? LocalText.T("The ordered route is advisory. Enable the required-route option to make reachability a creation constraint.") + "\n" : "") +
                 (result.Check.Findings.Count == 0 ? LocalText.T("All layout constraints are satisfied.") :
                 string.Join("\n", result.Check.Findings));
         });

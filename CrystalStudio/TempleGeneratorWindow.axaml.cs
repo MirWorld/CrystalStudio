@@ -175,12 +175,19 @@ public partial class TempleGeneratorWindow : EditorWindow
             if (options.Theme != DungeonTheme.Classic)
                 FeedbackText.Text = DungeonThemes.Description(options.Theme) + "\n" + FeedbackText.Text +
                     LocalText.Format(" · {0} scene details", plan.Decorations.Count);
+            if (plan.LoopVerification is { } verification)
+            {
+                FeedbackText.Text += "\n" + (verification.Verified
+                    ? LocalText.Format("Native collision verification: {0} loops / {1} trials · reference path {2} → {3} cells · footprint {4}×{4}.", verification.AcceptedLoops, verification.Trials, verification.InitialMainSteps, verification.FinalMainSteps, verification.FootprintSize)
+                    : LocalText.T("Room anchors could not be verified for this footprint. The original backbone was retained."));
+                if (verification.BudgetExhausted) FeedbackText.Text += "\n" + LocalText.T("The loop verification budget was exhausted; additional valid connections may exist.");
+            }
             PreviewState.SetImpact(cachedImpact!); PreviewState.Complete();
         }
         catch (OperationCanceledException) { if (!closed && request == revision) PreviewState.SetPhase(GeneratorPreviewPhase.Cancelled); }
         catch (Exception ex)
         {
-            if (!closed && request == revision) { Plan = null; ApplyButton.IsEnabled = false; PreviewImage.Source = null; PreviewHint.Text = LocalText.T("Preview unavailable"); FeedbackText.Text = (ex.Message); PreviewState.SetPhase(GeneratorPreviewPhase.Failed, ex.Message); }
+            if (!closed && request == revision) { Plan = null; ApplyButton.IsEnabled = false; PreviewImage.Source = null; PreviewHint.Text = LocalText.T("Preview unavailable"); PreviewState.SetFailure(ex, "Dungeon generation"); FeedbackText.Text = PreviewState.Failure; }
         }
         finally { if (ReferenceEquals(pending, job)) { pending = null; if (PreviewState.Phase == GeneratorPreviewPhase.Cancelling) PreviewState.SetPhase(GeneratorPreviewPhase.Cancelled); else PreviewState.Notify(); } job.Dispose(); }
     }

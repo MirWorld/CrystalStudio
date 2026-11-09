@@ -16,4 +16,7 @@
     <ProjectReference Include="../CrystalStudio/CrystalStudio.csproj" />
     <Using Include="Xunit" />
   </ItemGroup>
+  <ItemGroup>
+    <Content Include="Fixtures/map-generation-acceptance.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
 </Project>

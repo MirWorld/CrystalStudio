@@ -7,6 +7,7 @@ internal sealed record QuickMapBatchResult(int Seed, Dictionary<string, string> 
     bool Accepted, string Details)
 {
     internal MapDesignSettings? Design { get; init; }
+    internal GenerationFailure? Failure { get; init; }
     public override string ToString() => LocalText.Format("Seed {0} · {1}", Seed, LocalText.T(Accepted ? "Accepted" : "Filtered")) + "\n" + (Metrics?.ToString() ?? Details) +
         (Metrics != null && Details.Length > 0 ? "\n" + Details : "");
 }
@@ -38,11 +39,12 @@ internal sealed class QuickMapProduction : StackPanel
         editor = new(session.Design, session.Settings.Width, session.Settings.Height);
         GenerationAlgorithms.SetDesign(window, session.Design);
         Children.Add(new Expander { Header = LocalText.T("Route points, reservations and protection"), Content = editor, HorizontalAlignment = HorizontalAlignment.Stretch });
-        string ReservationHint() => GenerationAlgorithms.Version(window) == GenerationAlgorithms.Current
+        string ReservationHint() => GenerationAlgorithms.UsesConstraints(GenerationAlgorithms.Version(window))
             ? "Required reservations guide placement before decoration. Required routes reserve an existing collision-free path; no road is carved automatically. Incompatible native structures still fail explicitly. Preferences only warn; protection regions retain their local-regeneration meaning."
             : "Reservations filter generated layouts; they do not carve roads or place server entities. Required conflicts block creation; preferences only warn. Search may find no matching seed.";
         var reservationHint = MapDesignEditor.Hint(ReservationHint()); Children.Add(reservationHint);
-        Children.Add(MapDesignEditor.Fields(("Attempts (2–10)", attempts), ("Min walkable %", minimumWalkable), ("Min connected %", minimumConnected), ("Min rooms (dungeon)", minimumRooms)));
+        Children.Add(MapDesignEditor.Fields(("Attempts (2–10)", attempts), ("Min walkable %", minimumWalkable), ("Min reachable %", minimumConnected), ("Min rooms (dungeon)", minimumRooms)));
+        Children.Add(MapDesignEditor.Hint("Reachability starts at the first route point, or uses the largest area when no point is defined. Percentages count valid footprint anchors. Measured candidate selection favors quality and different layouts, not arrival order."));
         minimumRooms.IsEnabled = session.Settings.Kind == MapCreationKind.Dungeon;
         var actions = new WrapPanel(); actions.Children.Add(start); actions.Children.Add(stop); actions.Children.Add(restore);
         foreach (Control child in actions.Children) child.Margin = new Thickness(0, 0, 6, 4);
@@ -71,13 +73,18 @@ internal sealed class QuickMapProduction : StackPanel
             if (!session.BatchRunning && !confirming && batchResults.Count > 0)
                 feedback.Text = LocalText.T("Search settings changed. Listed results belong to the previous search; search again to evaluate the new settings.");
         }
-        editor.Changed += () => { SettingsChanged(); GenerationAlgorithms.SetDesign(window, session.Design); };
+        editor.Changed += () =>
+        {
+            SettingsChanged(); GenerationAlgorithms.SetDesign(window, session.Design);
+            if (!session.BatchRunning && !confirming) apply.IsEnabled = editor.InputValid && CurrentPlan(window) != null && state.Phase == GeneratorPreviewPhase.Ready;
+            start.IsEnabled = editor.InputValid && !session.BatchRunning && !confirming && CanSearch;
+        };
         foreach (var number in new[] { attempts, minimumWalkable, minimumConnected, minimumRooms }) number.ValueChanged += (_, _) => SettingsChanged();
         state.Changed += (_, _) =>
         {
             reservationHint.Text = LocalText.T(ReservationHint());
-            start.IsEnabled = !session.BatchRunning && !confirming && CanSearch;
-            if (session.BatchRunning || confirming) apply.IsEnabled = false;
+            start.IsEnabled = editor.InputValid && !session.BatchRunning && !confirming && CanSearch;
+            if (session.BatchRunning || confirming || !editor.InputValid) apply.IsEnabled = false;
         };
         window.Closed += (_, _) => { closed = true; pending?.Cancel(); };
         start.IsEnabled = CanSearch;
@@ -86,7 +93,7 @@ internal sealed class QuickMapProduction : StackPanel
     internal void RestoreDesign(MapDesignSettings design) => editor.Restore(design);
 
     private bool CanSearch => state.Phase == GeneratorPreviewPhase.Ready ||
-        GenerationAlgorithms.Version(window) == GenerationAlgorithms.Current && state.Phase == GeneratorPreviewPhase.Failed;
+        GenerationAlgorithms.UsesConstraints(GenerationAlgorithms.Version(window)) && state.Phase == GeneratorPreviewPhase.Failed;
 
     internal static object? CurrentPlan(EditorWindow window) => window switch
     {
@@ -120,6 +127,8 @@ internal sealed class QuickMapProduction : StackPanel
     internal async Task<bool> ConfirmAsync()
     {
         if (session.BatchRunning || confirming || closed || state.Phase != GeneratorPreviewPhase.Ready || CurrentPlan(window) is not { } plan) return false;
+        try { editor.EnsureValid(); }
+        catch (Exception exception) { feedback.Text = exception.Message; return false; }
         if (session.Design.Empty) return true;
         confirming = true; apply.IsEnabled = false;
         using var job = new CancellationTokenSource(); pending = job;
@@ -163,8 +172,11 @@ internal sealed class QuickMapProduction : StackPanel
         using var job = new CancellationTokenSource(); pending = job;
         try
         {
+            editor.EnsureValid();
             var design = session.Design.Copy(); design.Validate(session.Settings.Width, session.Settings.Height);
             int count = MapDesignEditor.Value(attempts), walkable = MapDesignEditor.Value(minimumWalkable), connected = MapDesignEditor.Value(minimumConnected), rooms = MapDesignEditor.Value(minimumRooms);
+            var thresholds = new MapCandidateThresholds(walkable, connected, rooms, session.Settings.Kind == MapCreationKind.Dungeon);
+            GenerationFailure? stoppedBy = null;
             session.BatchRunning = true; batchResults.Clear(); results.ItemsSource = null;
             foreach (var item in locked) item.Control.IsEnabled = false;
             editor.IsEnabled = start.IsEnabled = restore.IsEnabled = false; stop.IsEnabled = true;
@@ -185,32 +197,40 @@ internal sealed class QuickMapProduction : StackPanel
                     var measured = await Task.Run(() =>
                     {
                         var map = Materialize(plan, job.Token);
-                        return (Metrics: MapRouteAnalysis.Measure(map, plan is TemplePlan dungeon ? dungeon.RoomCount : null, job.Token), Check: MapDesignConstraints.Check(map, design, job.Token));
+                        return (Metrics: MapRouteAnalysis.Measure(map, plan is TemplePlan dungeon ? dungeon.RoomCount : null, job.Token, design), Check: MapDesignConstraints.Check(map, design, job.Token));
                     }, job.Token);
                     job.Token.ThrowIfCancellationRequested();
                     if (!ReferenceEquals(CurrentPlan(window), plan) || state.Phase != GeneratorPreviewPhase.Ready)
                         throw new InvalidOperationException(LocalText.T("The preview or constraints changed. Check the current preview again."));
-                    bool accepted = measured.Check.Accepted && measured.Metrics.WalkableRatio * 100 >= walkable &&
-                        measured.Metrics.ConnectedRatio * 100 >= connected && (session.Settings.Kind != MapCreationKind.Dungeon || measured.Metrics.Rooms >= rooms);
-                    string details = string.Join("; ", measured.Check.Findings);
-                    if (!accepted && details.Length == 0) details = LocalText.T("Below the selected metric thresholds.");
+                    var metrics = measured.Metrics with { PreferredConflicts = measured.Check.Findings.Count(finding => !finding.Required) };
+                    var metricFailures = thresholds.Failures(metrics);
+                    bool accepted = measured.Check.Accepted && metricFailures.Count == 0;
+                    string details = string.Join("\n", measured.Check.Findings.Select(finding => finding.ToString()).Concat(metricFailures));
                     if (accepted)
                     {
-                        var candidate = session.Candidates.Remember(session.Settings, parameters, Overview, design: design);
-                        if (candidate != null) { candidate.Metrics = measured.Metrics; candidate.DisplayValues = GeneratorPreferences.Describe(window, candidate.Parameters); }
-                        else details += (details.Length == 0 ? "" : "\n") + LocalText.T("All five candidates are favorites. Unfavorite one to retain another result.");
+                        var retained = session.Candidates.RememberMeasured(session.Settings, parameters, metrics, Overview, design);
+                        if (retained.Candidate != null) retained.Candidate.DisplayValues = GeneratorPreferences.Describe(window, retained.Candidate.Parameters);
+                        details += (details.Length == 0 ? "" : "\n") + retained.Explanation;
                     }
-                    batchResults.Add(new(seed, parameters, measured.Metrics, accepted, details)
-                        { Design = GenerationAlgorithms.Version(window) == GenerationAlgorithms.Current ? design.Copy() : null });
+                    batchResults.Add(new(seed, parameters, metrics, accepted, details)
+                        { Design = design.Copy(), Failure = accepted ? null : new(GenerationFailureKind.SeedRejected, "Candidate filtering", details, measured.Check.Findings.ToArray()) });
                 }
                 catch (OperationCanceledException) { throw; }
-                catch (Exception exception) { batchResults.Add(new(seed, GeneratorPreferences.Capture(window), null, false, exception.Message)); }
+                catch (Exception exception)
+                {
+                    var failure = GenerationDiagnostics.Describe(exception, "Seed search");
+                    batchResults.Add(new(seed, GeneratorPreferences.Capture(window), null, false, failure.ToString()) { Failure = failure, Design = design.Copy() });
+                    if (failure.Kind is GenerationFailureKind.InputConflict or GenerationFailureKind.MissingAssets or GenerationFailureKind.Unexpected) stoppedBy = failure;
+                }
                 results.ItemsSource = batchResults.ToArray(); CandidatesChanged?.Invoke();
+                if (stoppedBy != null) break;
             }
-            feedback.Text = LocalText.Format("Search complete: {0}/{1} matched. Select a result to restore; nothing was applied.", batchResults.Count(result => result.Accepted), count);
+            feedback.Text = LocalText.Format("Search complete: {0}/{1} matched. Select a result to restore; nothing was applied.", batchResults.Count(result => result.Accepted), batchResults.Count);
+            if (stoppedBy != null) feedback.Text += "\n" + stoppedBy;
+            else if (batchResults.All(result => !result.Accepted)) feedback.Text += "\n" + new GenerationFailure(GenerationFailureKind.SearchExhausted, "Seed search", LocalText.T("No matching seed was found within the requested attempt count."), []);
         }
         catch (OperationCanceledException) { if (!closed) feedback.Text = LocalText.T("Search stopped. Completed results are retained; no map was applied."); }
-        catch (Exception exception) { if (!closed) feedback.Text = exception.Message; }
+        catch (Exception exception) { if (!closed) feedback.Text = GenerationDiagnostics.Describe(exception, "Seed search").ToString(); }
         finally
         {
             session.BatchRunning = false; if (ReferenceEquals(pending, job)) pending = null;
@@ -221,7 +241,8 @@ internal sealed class QuickMapProduction : StackPanel
                 minimumRooms.IsEnabled = session.Settings.Kind == MapCreationKind.Dungeon; stop.IsEnabled = false;
                 if (window.GetLogicalDescendants().OfType<Button>().FirstOrDefault(button => button.Name == "QuickMapBack") is { } back) back.IsEnabled = true;
                 apply.IsEnabled = CurrentPlan(window) != null && state.Phase == GeneratorPreviewPhase.Ready;
-                restore.IsEnabled = results.SelectedItem is QuickMapBatchResult { Metrics: not null }; state.Notify(); CandidatesChanged?.Invoke();
+                restore.IsEnabled = results.SelectedItem is QuickMapBatchResult { Metrics: not null };
+                state.Notify(); CandidatesChanged?.Invoke();
             }
         }
     }
@@ -243,7 +264,11 @@ internal sealed class QuickMapProduction : StackPanel
         {
             if (!int.TryParse(seedBox.Text, out int current) || current != seed) return;
             if (state.Phase == GeneratorPreviewPhase.Ready && PlanSeed(CurrentPlan(window)) == seed) completion.TrySetResult();
-            else if (state.Phase == GeneratorPreviewPhase.Failed) completion.TrySetException(new InvalidOperationException(state.Failure ?? LocalText.T("Preview unavailable")));
+            else if (state.Phase == GeneratorPreviewPhase.Failed)
+            {
+                var failure = state.FailureDetails ?? new GenerationFailure(GenerationFailureKind.SeedRejected, "Preview generation", state.Failure ?? LocalText.T("Preview unavailable"), []);
+                completion.TrySetException(GenerationDiagnostics.Reject(failure.Kind, failure.Stage, failure.Message, failure.Findings));
+            }
             else if (state.Phase == GeneratorPreviewPhase.Cancelled) completion.TrySetCanceled();
         }
         state.Changed += Changed;

@@ -195,7 +195,9 @@ public sealed class MapProductionTests
             await production.SearchAsync();
             var rows = Find<ListBox>(window, "QuickMapBatchResults").Items.Cast<QuickMapBatchResult>().ToArray();
             Assert.Equal(2, rows.Length); Assert.All(rows, row => { Assert.True(row.Accepted, row.Details); Assert.NotNull(row.Metrics); Assert.Equal(1, row.Metrics.WalkableRatio); });
-            Assert.NotEqual(rows[0].Seed, rows[1].Seed); Assert.InRange(candidates.Items.Count, 2, 5);
+            Assert.NotEqual(rows[0].Seed, rows[1].Seed); Assert.Single(candidates.Items);
+            Assert.Equal(rows[0].Metrics!.TopologyFingerprint, rows[1].Metrics!.TopologyFingerprint);
+            Assert.Contains(LocalText.T("An equivalent passability layout is already retained. This seed remains in the search results."), rows[1].Details);
             Assert.False(session.BatchRunning); Assert.Equal(revision, map.PickupRevision); Assert.All(candidates.Items, candidate => Assert.NotNull(candidate.Comparison));
         }
         finally { window.Close(); }
