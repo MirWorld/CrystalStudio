@@ -14,7 +14,7 @@ public partial class MainWindow
             grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
             var button = new CheckBox { Name = "LayerLock" + index, Content = new TextBlock
                 { Text = "\uE72E", FontFamily = new FontFamily("Segoe MDL2 Assets"), FontSize = 11 },
-                MinWidth = 0, MinHeight = 0, Padding = new(0), Margin = new(4, 0, 2, 0), VerticalAlignment = VerticalAlignment.Center };
+                MinWidth = 22, MinHeight = 22, Padding = new(2), Margin = new(4, 0, 2, 0), VerticalAlignment = VerticalAlignment.Center };
             Avalonia.Automation.AutomationProperties.SetName(button, LocalText.Format("Lock {0}", LocalText.T(names[index])));
             ToolTip.SetTip(button, LocalText.Format("Lock {0}", LocalText.T(names[index])));
             Grid.SetColumn(button, 2); grid.Children.Add(button); layerLockButtons.Add(button);

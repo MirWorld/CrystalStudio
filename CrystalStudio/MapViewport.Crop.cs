@@ -7,7 +7,7 @@ public sealed partial class MapViewport
         if (!AllowEdit() || (left | top | right | bottom) == 0) return false;
         CancelInteraction();
         var expanded = Document.Expand(left, top, right, bottom);
-        History.Resize(Document, expanded);
+        History.Resize(Document, expanded, "Expand map");
         RefreshAfterResize();
         return true;
     }
@@ -18,7 +18,7 @@ public sealed partial class MapViewport
         CancelInteraction();
         var cropped = Document.Crop(area);
         if (cropped.Width == Document.Width && cropped.Height == Document.Height) return false;
-        History.Resize(Document, cropped);
+        History.Resize(Document, cropped, "Crop map");
         RefreshAfterResize();
         return true;
     }

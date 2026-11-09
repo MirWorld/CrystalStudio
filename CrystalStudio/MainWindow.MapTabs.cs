@@ -10,6 +10,9 @@ public partial class MainWindow
         public bool FitOnFirstDisplay = true;
         public bool KeepSourceFormat;
         public MapCreationRecipe? Recipe;
+        public DateTime? LastSavedAt;
+        public DateTime? LastRecoveryAt;
+        public bool RecoveryFailed;
         public readonly Guid RecoveryId = Guid.NewGuid();
         public long RecoveryRevision = -1;
         public int RecoveryVersion;

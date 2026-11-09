@@ -186,13 +186,20 @@ public sealed class EditHistory
 {
     public bool CanUndo => undo.Count > 0 || stroke?.Count > 0 || stampSnapshot != null;
     public bool CanRedo => redo.Count > 0;
-    private sealed record Change(Dictionary<int, Cell> Cells, List<PlacedStamp>? Stamps, long State, MapDocument? Document = null);
+    private sealed record Change(Dictionary<int, Cell> Cells, List<PlacedStamp>? Stamps, long State, MapDocument? Document = null, string Name = "Edit cells");
     private readonly Stack<Change> undo = [], redo = [];
     private Dictionary<int, Cell>? stroke;
     private List<PlacedStamp>? stampSnapshot;
     private long currentState, savedState, nextState;
+    private string strokeName = "Edit cells";
+    public string? UndoName => stroke?.Count > 0 || stampSnapshot != null ? strokeName : undo.TryPeek(out var entry) ? entry.Name : null;
+    public string? RedoName => redo.TryPeek(out var entry) ? entry.Name : null;
     public bool Dirty => stroke?.Count > 0 || stampSnapshot != null || currentState != savedState;
-    public void Begin() => stroke ??= [];
+    public void Begin(string? name = null)
+    {
+        if (stroke != null) return;
+        stroke = []; strokeName = name ?? "Edit cells";
+    }
     public void RecordStamps(MapDocument d) { Begin(); stampSnapshot ??= [.. d.PlacedStamps]; }
     public void Record(MapDocument d, int x, int y)
     {
@@ -206,7 +213,7 @@ public sealed class EditHistory
     {
         if (stroke?.Count > 0 || stampSnapshot != null)
         {
-            PushUndo(new(stroke ?? [], stampSnapshot, currentState));
+            PushUndo(new(stroke ?? [], stampSnapshot, currentState, Name: strokeName));
             currentState = ++nextState;
             redo.Clear();
         }
@@ -226,7 +233,7 @@ public sealed class EditHistory
         if (!from.TryPop(out var change)) return;
         if (change.Document != null)
         {
-            to.Push(new([], null, currentState, MapRecoveryStore.Capture(d)));
+            to.Push(new([], null, currentState, MapRecoveryStore.Capture(d), change.Name));
             d.ReplaceContents(change.Document);
             currentState = change.State;
             return;
@@ -240,7 +247,7 @@ public sealed class EditHistory
             d.Set(x, y, cell); changed?.Invoke(x, y);
         }
         if (change.Stamps != null) d.RestoreStamps(change.Stamps);
-        to.Push(new(inverse, inverseStamps, currentState));
+        to.Push(new(inverse, inverseStamps, currentState, Name: change.Name));
         currentState = change.State;
     }
     public void Undo(MapDocument d, Action<int, int>? changed = null) => Swap(d, undo, redo, changed);
@@ -248,10 +255,10 @@ public sealed class EditHistory
     public void Saved() { Commit(); savedState = currentState; }
     public void MarkUnsaved() => savedState = -1;
 
-    internal void Resize(MapDocument document, MapDocument replacement)
+    internal void Resize(MapDocument document, MapDocument replacement, string name = "Resize map")
     {
         Commit();
-        PushUndo(new([], null, currentState, MapRecoveryStore.Capture(document)));
+        PushUndo(new([], null, currentState, MapRecoveryStore.Capture(document), name));
         document.ReplaceContents(replacement);
         currentState = ++nextState;
         redo.Clear();

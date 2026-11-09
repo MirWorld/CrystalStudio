@@ -206,6 +206,7 @@ public sealed class AssetStore : IDisposable
 {
     public Dictionary<int, CrystalLibrary> Libraries { get; } = [];
     public AssetSourceFormat Format { get; }
+    public string? LoadedFolder { get; private set; }
     private readonly ConcurrentDictionary<(int, int), Sprite> cache = [];
     private readonly ConcurrentDictionary<(int, int), byte> pending = [];
     private readonly ConcurrentDictionary<(int, int, int), Sprite> overviewCache = [];
@@ -355,6 +356,7 @@ public sealed class AssetStore : IDisposable
     private void Register(string root)
     {
         root = DataPaths.ResolveLibraryFolder(root);
+        LoadedFolder = System.IO.Path.GetFullPath(root);
         if (Format == AssetSourceFormat.Sanxiu) { RegisterSanxiu(root); return; }
         // IDs follow the reference editor's Crystal library table.
         string map = Directory.Exists(System.IO.Path.Combine(root, "Map")) ? System.IO.Path.Combine(root, "Map") : root;

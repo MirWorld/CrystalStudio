@@ -26,7 +26,7 @@ public sealed class CellHoverTests
             Assert.False(toggle.IsChecked); Assert.False(hover.IsVisible);
             toggle.IsChecked = true; toggle.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
             var point = viewport.TranslatePoint(new Point(132, 118), window)!.Value;
-            window.MouseMove(point); window.UpdateLayout();
+            window.MouseMove(point); Assert.False(hover.IsVisible); await Pause(); window.UpdateLayout();
             Assert.True(hover.IsVisible); Assert.False(hover.IsHitTestVisible);
             Assert.Equal(LocalText.Format("Cell {0:N0}, {1:N0}", 1, 1), window.FindControl<TextBlock>("CellHoverCoordinates")!.Text);
             var before = hover.TranslatePoint(default, window)!.Value;
@@ -36,9 +36,9 @@ public sealed class CellHoverTests
             Assert.Equal(before.X + 6, after.X); Assert.Equal(before.Y + 4, after.Y);
             window.MouseMove(viewport.TranslatePoint(new Point(10, 10), window)!.Value);
             Assert.False(hover.IsVisible);
-            window.MouseMove(point); Assert.True(hover.IsVisible);
+            window.MouseMove(point); await Pause(); Assert.True(hover.IsVisible);
             window.MouseMove(new Point(5, 5)); Assert.False(hover.IsVisible);
-            window.MouseMove(point); Assert.True(hover.IsVisible);
+            window.MouseMove(point); await Pause(); Assert.True(hover.IsVisible);
             toggle.IsChecked = false; toggle.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
             Assert.False(hover.IsVisible); Assert.False(viewport.History.Dirty);
         }
@@ -62,6 +62,7 @@ public sealed class CellHoverTests
                 document.Set(1, 1, new Cell { BackImage = mask | 7, BackLibrary = 3 });
                 viewport.SetDocument(document);
                 window.MouseMove(viewport.TranslatePoint(new Point(132, 118), window)!.Value);
+                await Pause();
                 var status = window.FindControl<TextBlock>("CellHoverWalkability")!;
                 Assert.Equal(LocalText.T(mask == 0 ? "Walkable" : "Not walkable"), status.Text);
                 Assert.Equal(mask != 0, ((ISolidColorBrush)status.Foreground!).Color == Colors.Red);
@@ -77,6 +78,8 @@ public sealed class CellHoverTests
         }
         finally { window.Close(); }
     }
+
+    private static async Task Pause() { await Task.Delay(520); Dispatcher.UIThread.RunJobs(); }
 
     private static async Task WaitUntilReady(MainWindow window, MapViewport viewport)
     {

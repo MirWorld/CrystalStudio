@@ -15,9 +15,11 @@ public sealed class AssetChoice : INotifyPropertyChanged
     public int Index { get; init; }
 
     public string Label { get; init; } = "";
+    public string Alias { get; init; } = "";
     public string Detail { get; init; } = "";
-    public string DisplayLabel => StampPath != null || Asset?.StampPath != null || Asset is not { Pattern: not TilePatternLayout.None } tile
+    private string OriginalDisplayLabel => StampPath != null || Asset?.StampPath != null || Asset is not { Pattern: not TilePatternLayout.None } tile
         ? Label : LocalText.Format("Set {0}{1}", tile.Index / AutoTileBrush.BlockSize(tile.Pattern), tile.Pattern == TilePatternLayout.Mir3 && tile.Index % 30 == 5 ? " B" : "");
+    public string DisplayLabel => Alias.Length == 0 ? OriginalDisplayLabel : Alias + " · " + OriginalDisplayLabel;
     public string DisplayDetail => Asset is { StampPath: null } tile && Detail.Length > 0
         ? LocalText.Format("{0} · Lib {1}", LocalText.T(tile.Layer.ToString()), tile.Library) : LocalText.T(Detail);
     public string DisplayDescription => Asset is { StampPath: null } tile
@@ -181,6 +183,8 @@ public partial class MainWindow : EditorWindow
 
         InitializeCellMenu();
         InitializeLayerLocks();
+        InitializeEditingContext();
+        InitializeAssetSemantics();
 
         ThemeService.Changed += ThemeChanged;
 
@@ -526,7 +530,7 @@ public partial class MainWindow : EditorWindow
             if (mapPath == null && activeMap?.KeepSourceFormat != true) Viewport.Document.SourceFormat = settings.AssetFormat;
             if (overwrite) Viewport.Document.Save(target); else Viewport.Document.SaveNew(target);
             mapPath = target; RememberMap(target); Viewport.History.Saved();
-            if (activeMap != null) ForgetRecovery(activeMap);
+            if (activeMap != null) { ForgetRecovery(activeMap); activeMap.LastSavedAt = DateTime.Now; }
             UpdateLabels(); UpdateMapTabLabels(); Status.Text = LocalText.Format("Saved {0}", Path.GetFileName(target));
             if (activeMap?.Recipe is { } recipe)
             {
@@ -648,12 +652,14 @@ public partial class MainWindow : EditorWindow
     private void LayerChanged(object s, SelectionChangedEventArgs e)
     {
         if (!initialized || Viewport == null || restoringAsset) return;
+        var previousTool = Viewport.Tool;
         Viewport.Layer = (MapLayer)LayerList.SelectedIndex; Viewport.SpriteIndex = -1; page = 0;
         if (Viewport.Tool == EditorTool.Eyedropper && Viewport.Layer is not (MapLayer.Ground or MapLayer.Middle))
             SetTool(EditorTool.Pencil);
         if (Viewport.Tool is EditorTool.SpecialBrush or EditorTool.Wall or EditorTool.TownStamp && Viewport.Layer != MapLayer.Objects || Viewport.IsCollisionLayer && Viewport.Tool is EditorTool.Stamp or EditorTool.Pickup or EditorTool.Clone)
             SetTool(EditorTool.Pencil);
         SelectLibraryForLayer(); BuildPage(); UpdateLabels(); Viewport.InvalidateVisual();
+        if (previousTool != Viewport.Tool) Status.Text = LocalText.T("Tool changed to Pencil because this layer does not support the previous tool.");
     }
 
     private void BrushChanged(object s, RangeBaseValueChangedEventArgs e) { if (Viewport != null) { Viewport.BrushSize = (int)e.NewValue; if (BrushSizeLabel != null) BrushSizeLabel.Text = ($"{Viewport.BrushSize}\u00d7{Viewport.BrushSize}"); Viewport.InvalidateVisual(); UpdateWorkspace(); } }
@@ -671,6 +677,7 @@ public partial class MainWindow : EditorWindow
         Viewport.DoorCellsVisible = DoorCellsVisible.IsChecked == true;
         Viewport.DoorsOpen = DoorsOpenToggle.IsChecked == true;
         Viewport.InvalidateVisual();
+        UpdateEditingContext();
     }
 
     private void LightingClick(object s, RoutedEventArgs e)
@@ -831,6 +838,8 @@ public partial class MainWindow : EditorWindow
         var paletteAsset = AssetReference.Tile(atlas.Path, library, index, layer, layout);
         var visibleIndices = FilteredIndices(atlas);
         var targetIndex = visibleIndices.IndexOf(paletteAsset.Index);
+        if (targetIndex < 0 && usedArtworkOnly.IsChecked == true)
+        { usedArtworkOnly.IsChecked = false; visibleIndices = FilteredIndices(atlas); targetIndex = visibleIndices.IndexOf(paletteAsset.Index); }
         page = targetIndex >= 0 ? targetIndex / PageSize : 0;
         BuildPage();
         var selected = choices.FirstOrDefault(c => c.Asset is AssetReference asset && asset.SameAsset(paletteAsset));
@@ -867,7 +876,13 @@ public partial class MainWindow : EditorWindow
         else indices = Enumerable.Range(0, Math.Min(lib.Count, LayerList.SelectedIndex == 2 ? 32767 : 65535));
 
         string query = AssetSearch.Text?.Trim() ?? "";
-        return indices.Where(i => query.Length == 0 || (PatternPalette ? (i / block).ToString() : i.ToString()).Contains(query, StringComparison.OrdinalIgnoreCase)).ToList();
+        var used = UsedArtworkIndices(PatternPalette ? layout : TilePatternLayout.None);
+        var aliases = assetHistory.Aliases.Where(alias => alias.Asset.Library == Viewport.Library && alias.Asset.Layer == Viewport.Layer &&
+            alias.Asset.Pattern == (PatternPalette ? layout : TilePatternLayout.None) && string.Equals(alias.Asset.Source, lib.Path, StringComparison.OrdinalIgnoreCase))
+            .ToDictionary(alias => alias.Asset.Index, alias => alias.Name);
+        return indices.Where(index => (used == null || used.Contains(index)) && (query.Length == 0 ||
+            (PatternPalette ? (index / block).ToString() : index.ToString()).Contains(query, StringComparison.OrdinalIgnoreCase) ||
+            aliases.GetValueOrDefault(index, "").Contains(query, StringComparison.OrdinalIgnoreCase))).ToList();
 
     }
 
@@ -1013,6 +1028,7 @@ public partial class MainWindow : EditorWindow
     {
 
         if (!initialized || ToolPanel == null) return;
+        UpdateEditingContext();
 
         foreach (var button in ToolPanel.Children.OfType<RadioButton>())
 
@@ -1049,8 +1065,10 @@ public partial class MainWindow : EditorWindow
         BusyProgress.IsVisible = busy ? true : false;
 
         UndoButton.IsEnabled = !busy && Viewport.History.CanUndo;
+        UndoButton.Header = LocalText.T("_Undo") + (Viewport.History.UndoName is { } undoName ? ": " + LocalText.T(undoName) : "");
 
         RedoButton.IsEnabled = !busy && Viewport.History.CanRedo;
+        RedoButton.Header = LocalText.T("_Redo") + (Viewport.History.RedoName is { } redoName ? ": " + LocalText.T(redoName) : "");
 
         ExportButton.IsEnabled = !busy && Viewport.Selection.HasValue;
         ExportMinimapButton.IsEnabled = !busy;

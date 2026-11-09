@@ -114,6 +114,7 @@ public sealed partial class MapDocument
     public PlacedStamp? PlaceStamp(IReadOnlyList<StampCell> cells,int x,int y,string name,EditHistory history,Action<int,int> invalidate,Guid? id=null)
     {
         if(!CanPlaceStamp(cells,x,y)||placedStamps.Count>=100000||name.Length>4096)return null;
+        history.Begin("Place stamp");
         var source=cells.Select(s=>new StampCell(s.X,s.Y,s.Cell.Copy())).ToList();
         history.RecordStamps(this);var deltas=new List<StampDelta>();
         foreach(var s in source){int sx=x+s.X,sy=y+s.Y;history.Record(this,sx,sy);var before=Get(sx,sy).Copy();var after=MergeStamp(before,s.Cell);Set(sx,sy,after);deltas.Add(new(s.X,s.Y,before,after.Copy()));invalidate(sx,sy);}
@@ -122,6 +123,7 @@ public sealed partial class MapDocument
     public bool DeleteStamp(Guid id,EditHistory history,Action<int,int> invalidate)
     {
         var stamp=placedStamps.FirstOrDefault(s=>s.Id==id);if(stamp==null)return false;
+        history.Begin("Delete stamp");
         history.RecordStamps(this);
         foreach(var delta in stamp.Changes){int sx=stamp.X+delta.X,sy=stamp.Y+delta.Y;history.Record(this,sx,sy);var restored=RemoveContribution(Get(sx,sy),delta);
             if(stampIndex.TryGetValue(sy*Width+sx,out var owners))foreach(var other in owners.Where(o=>o.Id!=id))foreach(var change in other.Changes.Where(c=>other.X+c.X==sx&&other.Y+c.Y==sy))restored.BackImage|=(change.After.BackImage&~change.Before.BackImage)&0x60000000;
@@ -132,6 +134,7 @@ public sealed partial class MapDocument
     {
         var stamp=placedStamps.FirstOrDefault(s=>s.Id==id);if(stamp==null||!CanPlaceStamp(stamp.Cells,x,y,id))return false;
         if(x==stamp.X&&y==stamp.Y)return true;
+        history.Begin("Move stamp");
         DeleteStamp(id,history,invalidate);return PlaceStamp(stamp.Cells,x,y,stamp.Name,history,invalidate,id)!=null;
     }
 }

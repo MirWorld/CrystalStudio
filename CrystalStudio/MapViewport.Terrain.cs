@@ -26,7 +26,7 @@ public sealed partial class MapViewport
         }
         if (dragging) End();
         int count = 0;
-        History.Begin();
+        History.Begin("Generate terrain");
         foreach (var stamp in replaced) Document.DeleteStamp(stamp.Id,History,InvalidateCell);
         Document.RemoveGeneratedBanks(plan.Area,History,InvalidateCell);
         foreach (var tile in plan.Tiles)

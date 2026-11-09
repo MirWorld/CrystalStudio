@@ -10,7 +10,7 @@ public sealed partial class MapViewport
         CancelInteraction();
         if (Document.PickupRevision != plan.SourceRevision)
             throw new InvalidOperationException(LocalText.T("The map changed after the module preview. Generate a fresh preview."));
-        History.Begin(); History.RecordStamps(Document);
+        History.Begin("Generate module layout"); History.RecordStamps(Document);
         foreach (var cell in plan.Cells)
         {
             History.Record(Document, cell.X, cell.Y);

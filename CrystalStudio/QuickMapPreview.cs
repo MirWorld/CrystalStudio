@@ -28,6 +28,8 @@ internal sealed class QuickMapPreview
             apply.SetTip(session.Settings.SaveImmediately ? Path.Combine(session.Settings.Directory ?? "", MapCreationPaths.FileName(session.Settings.Name)) : session.Settings.Name);
         }
         UpdateSummary();
+        var targetInfo = window.GetLogicalDescendants().OfType<TextBlock>().FirstOrDefault(control => control.Name == "PreviewMapInfo");
+        if (targetInfo != null) targetInfo.Text = LocalText.T("Creates a new map. The original map is not modified.");
         window.Title = LocalText.T("Quick Create Map") + " · " + MapCreationTemplates.KindLabel(session.Settings.Kind);
         var back = new Button { Name = "QuickMapBack", Content = LocalText.T("Previous: Map settings"), Margin = new Thickness(0, 0, 8, 0), Padding = new Thickness(12, 7) };
         back.Click += (_, _) =>
@@ -94,6 +96,10 @@ internal sealed class QuickMapPreview
         if (state == null) return;
         var report = new TextBlock { Name = "QuickMapResourceFeedback", TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 12) };
         settings?.Children.Insert(1, report);
+        var resourceDetails = new TextBlock { Name = "QuickMapResourceDetails", TextWrapping = TextWrapping.Wrap };
+        var diagnostics = new Expander { Name = "QuickMapResourceDiagnostics", Header = LocalText.T("Artwork details and recovery"),
+            Content = resourceDetails, HorizontalAlignment = HorizontalAlignment.Stretch, Margin = new Thickness(0, 0, 0, 10) };
+        settings?.Children.Insert(2, diagnostics);
         var image = window.GetLogicalDescendants().OfType<Image>().Single(control => control.Name == "PreviewImage");
         Control previewContent = image.GetLogicalAncestors().OfType<GeneratorPreview>().FirstOrDefault() is { } navigator ? navigator : image;
         if (previewContent.Parent is not Grid preview) return;
@@ -159,7 +165,21 @@ internal sealed class QuickMapPreview
         }
         state.Changed += (_, _) =>
         {
-            report.Text = state.Resources?.Summary ?? LocalText.T("Checking required and optional artwork…");
+            string phase = state.Phase switch
+            {
+                GeneratorPreviewPhase.Waiting => "Parameters changed. Waiting to rebuild; the old preview cannot be applied.",
+                GeneratorPreviewPhase.Generating => "Generating preview…",
+                GeneratorPreviewPhase.Ready => "Ready to create a new map",
+                GeneratorPreviewPhase.Failed => "Preview failed. Review artwork details or change the style.",
+                _ => "Checking required and optional artwork…"
+            };
+            report.Text = LocalText.T(phase) + (state.Resources is { } resources ? "\n" +
+                LocalText.Format("{0} required missing · {1} optional unavailable", resources.Errors.Count, resources.Warnings.Count) : "");
+            resourceDetails.Text = LocalText.T("Choose another style, or return to map settings and cancel the preview. Then check the library format and folder in Settings and reopen Quick Create. Do not reload libraries while this preview is open.")
+                + "\n\n" + (state.Resources?.Summary ?? "") + (state.Failure == null || state.Resources?.CanGenerate == false ? "" : "\n" + state.Failure)
+                + "\n\n" + state.SourceDescription;
+            if (state.Phase == GeneratorPreviewPhase.Failed && window.GetLogicalDescendants().OfType<TextBlock>().FirstOrDefault(control => control.Name == "FeedbackText") is { } errorFeedback)
+                errorFeedback.Text = LocalText.T("Expand artwork details for the source and recovery steps. You can also go back without changing any maps.");
         };
         state.Completed += (_, _) =>
         {
@@ -170,7 +190,7 @@ internal sealed class QuickMapPreview
                 : LocalText.T("Candidates store parameters and thumbnails only; switching regenerates the map. Favorites are not saved after closing.");
             RefreshCandidates();
         };
-        report.Text = LocalText.T("Checking required and optional artwork…"); RefreshCandidates();
+        state.Notify(); RefreshCandidates();
         var feedback = window.GetLogicalDescendants().OfType<TextBlock>().FirstOrDefault(control => control.Name == "FeedbackText");
         if (feedback?.Parent is StackPanel feedbackPanel)
         {

@@ -227,6 +227,10 @@ public sealed class ModuleInteractionTests
             dialog.SelectSearchResults(false); Assert.Equal(new[] { "room" }, dialog.SelectedModuleIds);
             dialog.SearchBox.Text = "stone"; Assert.Single(dialog.PoolList.Items);
             await dialog.GeneratePreviewAsync(); Assert.Equal(ModuleGenerationViewState.Ready, dialog.ViewState);
+            Assert.Contains(LocalText.Format("Requested {0} · Placed {1} · Types {2} · Reused {3} · Links {4} · Joined ports {5}",
+                12, dialog.Plan!.Placement.Placements.Count, 1, 11, dialog.Plan.Links.Count, dialog.Plan.Placement.Openings.Count), dialog.Feedback.Text);
+            var candidates = dialog.GetVisualDescendants().OfType<ComboBox>().Single(control => control.Name == "ModuleGenerationCandidates");
+            Assert.Single(candidates.Items);
             var displayed = dialog.DisplayedPlan; var preview = dialog.Preview;
             dialog.SeedBox.Text = "21"; Assert.Equal(ModuleGenerationViewState.Stale, dialog.ViewState);
             Assert.Same(displayed, dialog.DisplayedPlan); Assert.Same(preview, dialog.Preview); Assert.False(dialog.TryAccept());
@@ -234,6 +238,7 @@ public sealed class ModuleInteractionTests
             Assert.Same(preview, dialog.Preview); Assert.False(dialog.ApplyButton.IsEnabled);
             Pixels(dialog, "generation-stale");
             dialog.CountBox.Text = "4"; await dialog.GeneratePreviewAsync(); Assert.True(dialog.TryAccept());
+            Assert.Equal(2, candidates.Items.Count);
             Dispatcher.UIThread.RunJobs();
             Assert.Equal(4, dialog.Preview!.Regions.Count);
             var region = dialog.Preview.Regions[0].Bounds;
@@ -246,6 +251,11 @@ public sealed class ModuleInteractionTests
             dialog.GetVisualDescendants().OfType<Button>().Single(b => Equals(b.Content, LocalText.T("Stop generation")))
                 .RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
             await work; Assert.False(dialog.TryAccept()); Assert.Same(prior, dialog.Preview);
+            candidates.SelectedIndex = 1;
+            dialog.GetVisualDescendants().OfType<Button>().Single(control => control.Name == "RestoreModuleCandidate")
+                .RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            await EditorExperienceTests.WaitFor(() => dialog.ViewState == ModuleGenerationViewState.Ready);
+            Assert.Equal("12", dialog.CountBox.Text); Assert.Equal(12, dialog.Plan!.Placement.Placements.Count);
         }
         finally { dialog.Close(); }
     }

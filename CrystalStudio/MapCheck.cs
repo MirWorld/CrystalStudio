@@ -2,7 +2,7 @@ using System.IO;
 
 namespace CrystalStudio;
 
-internal sealed record MapIssue(int X, int Y, string Message)
+internal sealed record MapIssue(int X, int Y, string Message, string Kind = "Image references")
 {
     public override string ToString() => $"({X}, {Y})  {Message}";
 }
@@ -15,10 +15,10 @@ internal static class MapCheck
     {
         var issues = new List<MapIssue>();
         int total = 0;
-        void Add(int x, int y, string message)
+        void Add(int x, int y, string message, string kind = "Image references")
         {
             total++;
-            if (issues.Count < 1000) issues.Add(new(x, y, message));
+            if (issues.Count < 1000) issues.Add(new(x, y, message, kind));
         }
         var checkedImages = new Dictionary<(int, int), string?>();
         void Image(int x, int y, int library, int image, string layer)
@@ -52,18 +52,18 @@ internal static class MapCheck
                 if (image != 0 && (cell.Door & 0x7F) != 0) Image(x, y, front.Library, image + cell.DoorOffset, "Open door");
             }
             if (!MapPreview.HasDoor(cell)) continue;
-            if (!cell.HasForeground) Add(x, y, LocalText.T("Door has no foreground image"));
+            if (!cell.HasForeground) Add(x, y, LocalText.T("Door has no foreground image"), "Doors");
             bool neighbour = false;
             for (int dy = -1; dy <= 1; dy++) for (int dx = -1; dx <= 1; dx++)
                 if ((dx != 0 || dy != 0) && Walkable(document, x + dx, y + dy)) neighbour = true;
-            if (!neighbour) Add(x, y, LocalText.T("Door has no walkable neighbouring cell"));
+            if (!neighbour) Add(x, y, LocalText.T("Door has no walkable neighbouring cell"), "Doors");
         }
         // Report disconnected components as warnings: separate islands may be intentional.
         var visited = new bool[checked(document.Width * document.Height)];
         var queue = new Queue<int>();
         (int First, int Size)? largest = null;
         void Disconnected(int first, int size) => Add(first % document.Width, first / document.Width,
-            LocalText.Format("Disconnected walkable area: {0:N0} cells", size));
+            LocalText.Format("Disconnected walkable area: {0:N0} cells", size), "Walkable areas");
         for (int key = 0; key < visited.Length; key++)
         {
             if ((key & 4095) == 0) cancellation.ThrowIfCancellationRequested();

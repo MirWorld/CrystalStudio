@@ -397,25 +397,16 @@ public sealed class EditorReliabilityTests
             await WaitForStartup(window);
             viewport.SetDocument(new MapDocument(4, 4));
             viewport.Document.Set(2, 3, new Cell { BackLibrary = 777, BackImage = 1 });
-            Exception? failure = null;
-            Dispatcher.UIThread.Post(async () =>
-            {
-                var dialog = window.OwnedWindows.OfType<EditorWindow>().Single();
-                try
-                {
-                    var list = dialog.GetVisualDescendants().OfType<ListBox>().Single();
-                    for (int i = 0; i < 200 && list.Items.Count == 0; i++) await Task.Delay(10);
-                    Assert.Single(list.Items);
-                    dialog.GetVisualDescendants().OfType<Button>().Single(b => Equals(b.Content, LocalText.T("Locate")))
-                        .RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
-                }
-                catch (Exception ex) { failure = ex; }
-                finally { if (dialog.IsVisible) dialog.Close(); }
-            });
             typeof(MainWindow).GetMethod("CheckMapClick", BindingFlags.NonPublic | BindingFlags.Instance)!
                 .Invoke(window, [window, new RoutedEventArgs()]);
-            Assert.Null(failure);
+            var dialog = window.OwnedWindows.OfType<EditorWindow>().Single();
+            var list = dialog.GetVisualDescendants().OfType<ListBox>().Single();
+            await EditorExperienceTests.WaitFor(() => list.Items.Count > 0);
+            Assert.Single(list.Items);
+            dialog.GetVisualDescendants().OfType<Button>().Single(button => button.Name == "MapCheckLocate")
+                .RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
             Assert.Equal(new Rect(2, 3, 1, 1), viewport.Selection);
+            Assert.True(dialog.IsVisible); dialog.Close();
         }
         finally { viewport.History.Saved(); window.Close(); }
     }

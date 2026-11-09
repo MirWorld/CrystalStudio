@@ -22,6 +22,10 @@ internal sealed class ModuleGenerationWindow : EditorWindow
     private CancellationTokenSource? pending;
     private int revision;
     private bool closed;
+    private sealed record Candidate(string[] Modules, int Count, int Seed, int Width, int Height, ModuleLayout Layout, string Summary)
+    { public override string ToString() => Summary; }
+    private readonly List<Candidate> candidates = [];
+    private readonly ComboBox candidateList = new() { Name = "ModuleGenerationCandidates", HorizontalAlignment = HorizontalAlignment.Stretch };
     internal ModuleConnectionCanvas? Preview { get; private set; }
     internal ModuleGenerationPlan? DisplayedPlan { get; private set; }
     internal ModuleGenerationViewState ViewState { get; private set; }
@@ -95,7 +99,7 @@ internal sealed class ModuleGenerationWindow : EditorWindow
         actions.Children.Add(ApplyButton); actions.Children.Add(new Button { Content = LocalText.T("Cancel"), IsCancel = true });
         var left = new Grid { RowDefinitions = new RowDefinitions("*,Auto") };
         left.Children.Add(new ScrollViewer { Content = form }); Grid.SetRow(actions, 1); left.Children.Add(actions); root.Children.Add(left);
-        var right = new Grid { RowDefinitions = new RowDefinitions("Auto,Auto,*,Auto") };
+        var right = new Grid { RowDefinitions = new RowDefinitions("Auto,Auto,*,Auto,Auto") };
         right.Children.Add(previewStatus);
         var toolbar = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 10, Margin = new Thickness(0, 8) };
         var fit = new Button { Content = LocalText.T("Fit preview") }; fit.Click += (_, _) => Preview?.Fit(); toolbar.Children.Add(fit);
@@ -103,7 +107,22 @@ internal sealed class ModuleGenerationWindow : EditorWindow
         void Overlays() { if (Preview == null) return; Preview.ShowRegions = regions.IsChecked == true; Preview.ShowConnections = connections.IsChecked == true; Preview.Refresh(); }
         regions.IsCheckedChanged += (_, _) => Overlays(); connections.IsCheckedChanged += (_, _) => Overlays();
         Grid.SetRow(toolbar, 1); right.Children.Add(toolbar); Grid.SetRow(previewHost, 2); right.Children.Add(previewHost);
-        Grid.SetRow(instanceInfo, 3); right.Children.Add(instanceInfo); Grid.SetColumn(right, 1); root.Children.Add(right); Content = root;
+        Grid.SetRow(instanceInfo, 3); right.Children.Add(instanceInfo);
+        var compare = new StackPanel { Spacing = 5, Margin = new Thickness(0, 10, 0, 0) };
+        compare.Children.Add(new TextBlock { Text = LocalText.T("Compare recent layouts (this session only)"), FontWeight = FontWeight.SemiBold });
+        compare.Children.Add(candidateList);
+        var restore = new Button { Name = "RestoreModuleCandidate", Content = LocalText.T("Restore parameters and regenerate"), IsEnabled = false };
+        candidateList.SelectionChanged += (_, _) => restore.IsEnabled = candidateList.SelectedItem is Candidate;
+        restore.Click += async (_, _) =>
+        {
+            if (candidateList.SelectedItem is not Candidate candidate) return;
+            SelectModules(candidate.Modules); CountBox.Text = candidate.Count.ToString(CultureInfo.InvariantCulture);
+            SeedBox.Text = candidate.Seed.ToString(CultureInfo.InvariantCulture);
+            WidthBox.Text = candidate.Width.ToString(CultureInfo.InvariantCulture); HeightBox.Text = candidate.Height.ToString(CultureInfo.InvariantCulture);
+            LayoutBox.SelectedItem = candidate.Layout; await GeneratePreviewAsync();
+        };
+        compare.Children.Add(restore); Grid.SetRow(compare, 4); right.Children.Add(compare);
+        Grid.SetColumn(right, 1); root.Children.Add(right); Content = root;
         foreach (var box in new[] { CountBox, SeedBox, WidthBox, HeightBox })
             box.PropertyChanged += (_, change) => { if (change.Property == TextBox.TextProperty) InvalidatePreview(); };
         LayoutBox.SelectionChanged += (_, _) => InvalidatePreview();
@@ -170,6 +189,17 @@ internal sealed class ModuleGenerationWindow : EditorWindow
                 LocalText.Format("Generated {0} modules and {1} connections. All {2} walkable cells are connected. Seed: {3}. Ctrl+Z undoes the whole layout.", result.Placement.Placements.Count, result.Links.Count, result.WalkableCells, seed));
             previewStatus.Text = LocalText.Format("Reference: {0} × {1}. Actual new map: {2} × {3}.", width, height, result.Placement.Source.Width, result.Placement.Source.Height) + "\n" +
                 LocalText.T("Preview ready · click a module to inspect its connections.");
+            int unique = result.Placement.Placements.Select(placement => placement.Module).Distinct().Count();
+            string statistics = LocalText.Format("Requested {0} · Placed {1} · Types {2} · Reused {3} · Links {4} · Joined ports {5}",
+                count, result.Placement.Placements.Count, unique, result.Placement.Placements.Count - unique, result.Links.Count, result.Placement.Openings.Count);
+            previewStatus.Text += "\n" + statistics;
+            Feedback.Text += "\n" + statistics + "\n" + LocalText.T("Creates a new map. The original map is not modified.");
+            string candidateSummary = LocalText.Format("Seed {0}", seed) + $" · {result.Placement.Source.Width} × {result.Placement.Source.Height} · " + statistics;
+            var candidate = new Candidate(selected.Select(entry => entry.Id).Order().ToArray(), count, seed, width, height, layout, candidateSummary);
+            candidates.RemoveAll(previous => previous.Seed == seed && previous.Count == count && previous.Width == width && previous.Height == height &&
+                previous.Layout == layout && previous.Modules.SequenceEqual(candidate.Modules));
+            candidates.Insert(0, candidate); if (candidates.Count > 5) candidates.RemoveAt(5);
+            candidateList.ItemsSource = candidates.ToArray(); candidateList.SelectedIndex = 0;
             Dispatcher.UIThread.Post(() => { if (!closed) Preview?.Fit(); });
         }
         catch (OperationCanceledException)

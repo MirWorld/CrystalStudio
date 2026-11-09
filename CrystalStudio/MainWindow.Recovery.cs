@@ -38,6 +38,7 @@ public partial class MainWindow
     {
         if (closed || busy || recoveryRunning) return;
         recoveryRunning = true;
+        OpenMapTab? snapshotTarget = null;
         try
         {
             foreach (var map in mapTabs.Items.Cast<TabItem>().Select(tab => (OpenMapTab)tab.Tag!).ToArray())
@@ -52,6 +53,7 @@ public partial class MainWindow
                 }
                 if (map.RecoveryRevision == document.PickupRevision && !map.CategoryDirty) continue;
                 long revision = document.PickupRevision; int version = map.RecoveryVersion;
+                snapshotTarget = map;
                 var snapshot = MapRecoveryStore.Capture(document);
                 if (map.Path == null && !map.KeepSourceFormat && !map.IsStamp) snapshot.SourceFormat = settings.AssetFormat;
                 string? path = map.Path; string name = MapDisplayName(map); var recipe = map.Recipe;
@@ -62,6 +64,9 @@ public partial class MainWindow
                 if (closed || map.RecoveryVersion != version)
                 { recoveryStore.Delete(map.RecoveryId); if (closed) break; continue; }
                 map.RecoveryRevision = revision;
+                map.LastRecoveryAt = DateTime.Now;
+                map.RecoveryFailed = false;
+                UpdateEditingContext();
                 if (map.RecoveryOrigin is { } origin) { recoveryStore.Delete(origin); map.RecoveryOrigin = null; }
                 if (closed) break;
             }
@@ -69,6 +74,8 @@ public partial class MainWindow
         catch (Exception exception)
         {
             StudioLog.Error("Recovery.Snapshot", exception);
+            if (snapshotTarget != null) snapshotTarget.RecoveryFailed = true;
+            if (!closed) UpdateEditingContext();
             if (!closed) Status.Text = LocalText.T("Recovery snapshot failed. Save your map manually.");
         }
         finally { recoveryRunning = false; }

@@ -36,8 +36,10 @@ public partial class ProvinceGeneratorWindow : EditorWindow
     public ProvinceGeneratorWindow(MapDocument document, AssetStore assets, WallCatalogue? wallCatalogue = null, IReadOnlyDictionary<string, string>? parameters = null)
     {
         this.document = document; this.assets = assets; suppliedWalls = wallCatalogue; savedParameters = parameters;
+        PreviewState.SetSource(assets);
         InitializeComponent();
-        PreviewMapInfo.Text = LocalText.Format("{0} × {1} cells · Changes apply only after confirmation.", document.Width, document.Height);
+        PreviewMapInfo.Text = LocalText.Format("Apply to current map · {0} × {1} cells · One undo step. This does not create a new map.", document.Width, document.Height);
+        ApplyButton.Content = LocalText.T("Apply to current map");
         TownCountSlider.Maximum = Math.Clamp(document.Width * document.Height / (128 * 128), 1, 8);
         StyleList.ItemsSource = ProvinceStyle.All; StyleList.SelectedIndex = 0;
         SceneList.SelectedIndex = parameters is { Count: > 0 } && !parameters.ContainsKey("SceneList") ? 0 : 1;
@@ -71,7 +73,7 @@ public partial class ProvinceGeneratorWindow : EditorWindow
             ready = true; RandomizeButton.IsEnabled = true; PreferencesRestored = true; UpdateDoorOptions(); Schedule();
         }
         catch (OperationCanceledException) { }
-        catch (Exception ex) { if (!closed) { PreviewHint.Text = LocalText.T("Province artwork unavailable"); FeedbackText.Text = (ex.Message); } }
+        catch (Exception ex) { if (!closed) { PreviewHint.Text = LocalText.T("Province artwork unavailable"); FeedbackText.Text = (ex.Message); PreviewState.SetPhase(GeneratorPreviewPhase.Failed, ex.Message); } }
     }
     private void SceneChanged(object sender, SelectionChangedEventArgs e)
     {
@@ -138,6 +140,7 @@ public partial class ProvinceGeneratorWindow : EditorWindow
     {
         if (!ready || closed || changingSettings) return;
         revision++; timer.Stop(); pending?.Cancel(); Plan = null; ApplyButton.IsEnabled = false;
+        PreviewState.SetPhase(GeneratorPreviewPhase.Waiting);
         PreviewImage.Opacity = .4; PreviewHint.IsVisible = true; PreviewHint.Text = LocalText.T("Updating province…"); timer.Start();
     }
     private void ShuffleClick(object sender, RoutedEventArgs e) => SeedBox.Text = Random.Shared.Next(int.MaxValue).ToString();
@@ -160,7 +163,8 @@ public partial class ProvinceGeneratorWindow : EditorWindow
     {
         timer.Stop();
         if (!ready || closed) return;
-        if (!int.TryParse(SeedBox.Text, out int seed)) { PreviewHint.Text = ((FeedbackText.Text = LocalText.T("Enter a whole-number seed."))); return; }
+        if (!int.TryParse(SeedBox.Text, out int seed)) { PreviewHint.Text = ((FeedbackText.Text = LocalText.T("Enter a whole-number seed."))); PreviewState.SetPhase(GeneratorPreviewPhase.Failed, FeedbackText.Text); return; }
+        PreviewState.SetPhase(GeneratorPreviewPhase.Checking);
         var options = new ProvinceOptions(seed, StyleList.SelectedItem as ProvinceStyle, (int)ForestSlider.Value,
             (int)CliffSlider.Value, (int)BeachSlider.Value, (int)RiverSlider.Value, (int)VegetationSlider.Value, (int)TownCountSlider.Value,
             DoorCountSlider.IsEnabled ? (int)DoorCountSlider.Value : 0, (ProvinceScene)SceneList.SelectedIndex, (int)RuinCountSlider.Value, (int)MineCountSlider.Value);
@@ -181,6 +185,7 @@ public partial class ProvinceGeneratorWindow : EditorWindow
                 var preflight = await Task.Run(() => MapResourcePreflight.Province(terrain, walls, assets, scenery, water, options, towns, resourceCache, job.Token), job.Token);
                 if (closed || request != revision) return;
                 PreviewState.Report(preflight.Report); preflight.Report.EnsureReady();
+                PreviewState.SetPhase(GeneratorPreviewPhase.Generating);
                 Point? centre = inspectionCentre;
                 (plan, bitmap) = await Task.Run(() =>
                 {
@@ -209,7 +214,7 @@ public partial class ProvinceGeneratorWindow : EditorWindow
         catch (OperationCanceledException) { }
         catch (Exception ex)
         {
-            if (!closed && request == revision) { Plan = null; ApplyButton.IsEnabled = false; PreviewImage.Source = null; PreviewHint.Text = LocalText.T("Preview unavailable"); FeedbackText.Text = (ex.Message); }
+            if (!closed && request == revision) { Plan = null; ApplyButton.IsEnabled = false; PreviewImage.Source = null; PreviewHint.Text = LocalText.T("Preview unavailable"); FeedbackText.Text = (ex.Message); PreviewState.SetPhase(GeneratorPreviewPhase.Failed, ex.Message); }
         }
         finally { if (ReferenceEquals(pending, job)) pending = null; job.Dispose(); }
     }

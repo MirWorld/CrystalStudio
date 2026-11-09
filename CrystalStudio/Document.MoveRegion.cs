@@ -22,6 +22,7 @@ public sealed partial class MapDocument
         bool metadataChanged = !stamps.SequenceEqual(placedStamps);
         if (keys.Count == 0 && !metadataChanged) return false;
         history.Commit();
+        history.Begin("Move selection");
         foreach (int key in keys) history.Record(this, key % Width, key / Width);
         if (metadataChanged) history.RecordStamps(this);
         foreach (int key in keys) Set(key % Width, key / Width, new());

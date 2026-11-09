@@ -450,7 +450,7 @@ public sealed partial class MapViewport : SceneControl
             if (!BeginSelection(hover.X, hover.Y)) return;
         }
         else Deselect();
-        dragging = true; CapturePointer(e.Pointer); History.Begin(); lastPaint = (-999, -999); BeginWallStroke(hover.X, hover.Y);
+        dragging = true; CapturePointer(e.Pointer); History.Begin(Tool.ToString()); lastPaint = (-999, -999); BeginWallStroke(hover.X, hover.Y);
         if (Tool != EditorTool.Select) Apply(hover.X, hover.Y);
         InvalidateVisual();
     }
@@ -545,7 +545,7 @@ public sealed partial class MapViewport : SceneControl
                 && FillValue(Document.Get(cx, cy)) == source) pending.Enqueue((cx, cy));
         }
         Enqueue(x, y);
-        History.Begin();
+        History.Begin("Flood fill");
         int count = 0;
         while (pending.TryDequeue(out var point))
         {
@@ -575,7 +575,7 @@ public sealed partial class MapViewport : SceneControl
         Message?.Invoke(((collision ? (LocalText.Format("Applied {0} collision to {1:N0} cells", LocalText.T(Layer == MapLayer.LowCollision ? "low" : "high"), count)) : (LocalText.Format("Filled {0:N0} tiles", count)))));
         return count;
     }
-    public void FillSelection() { if (!AllowEdit(Layer)) return; if (Selection is not Rect r || SpriteIndex < 0 && !IsCollisionLayer) return; History.Begin(); var previous = Tool; Tool = EditorTool.Pencil; lastPaint = (-999, -999); for (int y = (int)r.Y; y < r.Bottom; y++) for (int x = (int)r.X; x < r.Right; x++) Apply(x, y); Tool = previous; History.Commit(); Changed?.Invoke(); }
+    public void FillSelection() { if (!AllowEdit(Layer)) return; if (Selection is not Rect r || SpriteIndex < 0 && !IsCollisionLayer) return; History.Begin("Fill selection"); var previous = Tool; Tool = EditorTool.Pencil; lastPaint = (-999, -999); for (int y = (int)r.Y; y < r.Bottom; y++) for (int x = (int)r.X; x < r.Right; x++) Apply(x, y); Tool = previous; History.Commit(); Changed?.Invoke(); }
     internal byte? CommonMetadata(Rect area, Func<Cell, byte> read)
     {
         byte? value = null;
@@ -607,7 +607,7 @@ public sealed partial class MapViewport : SceneControl
         }
         History.Commit(); RefreshAssets(); Changed?.Invoke();
     }
-    public void ClearSelection() { if (!AllowEdit(Layer)) return; brushPreviewKey = null; if (Selection is not Rect r) return; History.Begin(); for (int y = (int)r.Y; y < r.Bottom; y++) for (int x = (int)r.X; x < r.Right; x++) { History.Record(Document, x, y); var c = Document.Get(x, y).Copy(); switch (Layer) { case MapLayer.Ground: c.BackImage &= 0x60000000; break; case MapLayer.Middle: c.MiddleImage = 0; c.MiddleFrames = 0; c.MiddleTick = 0; break; case MapLayer.Objects: c.Foreground = null; break; case MapLayer.LowCollision: case MapLayer.HighCollision: c.BackImage &= ~ActiveCollisionMask; break; } Document.Set(x, y, c); InvalidateCell(x,y); } History.Commit(); chunks.Clear(); frontRows.Clear(); InvalidateVisual(); Changed?.Invoke(); }
+    public void ClearSelection() { if (!AllowEdit(Layer)) return; brushPreviewKey = null; if (Selection is not Rect r) return; History.Begin("Clear selection"); for (int y = (int)r.Y; y < r.Bottom; y++) for (int x = (int)r.X; x < r.Right; x++) { History.Record(Document, x, y); var c = Document.Get(x, y).Copy(); switch (Layer) { case MapLayer.Ground: c.BackImage &= 0x60000000; break; case MapLayer.Middle: c.MiddleImage = 0; c.MiddleFrames = 0; c.MiddleTick = 0; break; case MapLayer.Objects: c.Foreground = null; break; case MapLayer.LowCollision: case MapLayer.HighCollision: c.BackImage &= ~ActiveCollisionMask; break; } Document.Set(x, y, c); InvalidateCell(x,y); } History.Commit(); chunks.Clear(); frontRows.Clear(); InvalidateVisual(); Changed?.Invoke(); }
 }
 
 

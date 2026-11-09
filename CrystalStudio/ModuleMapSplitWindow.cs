@@ -21,7 +21,7 @@ internal sealed class ModuleSplitChoice(ModuleSplitPart part, AssetStore? assets
     internal event Action? Changed;
     public string Description => $"#{Part.Index + 1} · {Part.Area.Width} × {Part.Area.Height} · ({Part.Area.X}, {Part.Area.Y})\n" +
         (Part.Problem?.Message ?? LocalText.Format("{0} connections", Part.Draft!.Connections.Points.Count) + " · " + Shape());
-    private string Shape()
+    internal string Shape()
     {
         var edges = Part.Draft?.Connections.Points.Select(p => p.Edge).Distinct().ToArray() ?? [];
         return LocalText.T(edges.Length switch
@@ -62,6 +62,7 @@ internal sealed partial class ModuleMapSplitWindow : EditorWindow
     private readonly StackPanel settings;
     private readonly ProgressBar progress = new() { IsIndeterminate = true, Height = 4, IsVisible = false };
     private readonly TextBlock details = new() { TextWrapping = TextWrapping.Wrap };
+    private readonly TextBlock splitSummary = new() { Name = "ModuleSplitSummary", TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 8) };
     private readonly Button stop = new() { Content = LocalText.T("Stop") };
     private CancellationTokenSource? pending;
     private bool closed, saving, closeRequested;
@@ -98,7 +99,8 @@ internal sealed partial class ModuleMapSplitWindow : EditorWindow
         var w = new StackPanel(); w.Children.Add(new TextBlock { Text = LocalText.T("Block width") }); w.Children.Add(WidthBox);
         var h = new StackPanel { Margin = new Thickness(8, 0, 0, 0) }; h.Children.Add(new TextBlock { Text = LocalText.T("Block height") }); h.Children.Add(HeightBox);
         dimensions.Children.Add(w); Grid.SetColumn(h, 1); dimensions.Children.Add(h); settings.Children.Add(dimensions);
-        settings.Children.Add(new TextBlock { Text = LocalText.T("Preview even-sized blocks. Connections are paired across shared passable edges; empty or disconnected blocks are excluded. Choose fixed blocks or corridor-aware cuts, then inspect and adjust the candidates."), TextWrapping = TextWrapping.Wrap });
+        settings.Children.Add(new Expander { Header = LocalText.T("Split workflow and connection rules"), HorizontalAlignment = HorizontalAlignment.Stretch,
+            Content = new TextBlock { Text = LocalText.T("Preview even-sized blocks. Connections are paired across shared passable edges; empty or disconnected blocks are excluded. Choose fixed blocks or corridor-aware cuts, then inspect and adjust the candidates."), TextWrapping = TextWrapping.Wrap } });
         settings.Children.Add(SplitButton); left.Children.Add(settings);
         PartsList.ItemTemplate = new FuncDataTemplate<ModuleSplitChoice>((item, _) =>
         {
@@ -121,11 +123,12 @@ internal sealed partial class ModuleMapSplitWindow : EditorWindow
         var bounds = new ModuleConnectionRules.Bounds(0, 0, source.Width - 1, source.Height - 1);
         Preview = new(assets == null ? source.Cells.Select(c => new StampCell(c.Key % source.Width, c.Key / source.Width, c.Value)).ToArray() : [], bounds, assets);
         Preview.SetMap(source, bounds);
-        var right = new Grid { RowDefinitions = new("Auto,*,Auto") };
+        var right = new Grid { RowDefinitions = new("Auto,Auto,*,Auto") };
+        right.Children.Add(splitSummary);
         var toolbar = new WrapPanel { Orientation = Orientation.Horizontal };
         var fit = new Button { Content = LocalText.T("Fit preview") }; fit.Click += (_, _) => Preview.Fit(); toolbar.Children.Add(fit);
-        stop.Click += (_, _) => pending?.Cancel(); toolbar.Children.Add(stop); InitializeEditing(toolbar); right.Children.Add(toolbar);
-        Grid.SetRow(Preview, 1); right.Children.Add(Preview); Grid.SetRow(details, 2); right.Children.Add(details); Grid.SetColumn(right, 1); root.Children.Add(right);
+        stop.Click += (_, _) => pending?.Cancel(); toolbar.Children.Add(stop); InitializeEditing(toolbar); Grid.SetRow(toolbar, 1); right.Children.Add(toolbar);
+        Grid.SetRow(Preview, 2); right.Children.Add(Preview); Grid.SetRow(details, 3); right.Children.Add(details); Grid.SetColumn(right, 1); root.Children.Add(right);
         Grid.SetRow(progress, 1); Grid.SetColumnSpan(progress, 2); root.Children.Add(progress);
         var footer = new Grid { ColumnDefinitions = new("*,Auto"), Margin = new Thickness(0, 10, 0, 0) }; footer.Children.Add(Feedback);
         var actions = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
@@ -156,6 +159,10 @@ internal sealed partial class ModuleMapSplitWindow : EditorWindow
         SaveButton.IsEnabled = Result != null && !busy && Saved == null && selected.Length > 0 && validName;
         var keys = selected.SelectMany(c => c.Part.Draft!.Connections.Points).Select(p => (p.Edge, Kind: p.Kind.ToUpperInvariant(), p.Width)).ToHashSet();
         bool matches = keys.Any(k => keys.Contains(((ModuleEdge)(((int)k.Edge + 2) % 4), k.Kind, k.Width)));
+        splitSummary.Text = LocalText.Format("{0} blocks · {1} usable · {2} selected.", Choices.Count, Choices.Count(choice => choice.Part.Valid), selected.Length)
+            + " · " + LocalText.Format("Selected ports: {0}", selected.Sum(choice => choice.Part.Draft!.Connections.Points.Count)) + "\n"
+            + LocalText.T(matches ? "Matching opposite connections found" : "Select modules with matching opposite connections to generate a map.");
+        if (selected.Length > 0) splitSummary.Text += "\n" + string.Join(" · ", selected.GroupBy(choice => choice.Shape()).Select(group => $"{group.Key}: {group.Count()}"));
         GenerateButton.IsEnabled = SaveButton.IsEnabled && matches;
         var active = PartsList.SelectedItem as ModuleSplitChoice;
         Preview.Regions = Choices.Select(c => new ModulePreviewRegion($"#{c.Part.Index + 1} {(c.Part.Valid ? c.Selected ? "✓" : "○" : "!")}",

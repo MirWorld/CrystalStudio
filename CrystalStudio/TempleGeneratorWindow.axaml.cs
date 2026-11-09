@@ -32,9 +32,11 @@ public partial class TempleGeneratorWindow : EditorWindow
     public TempleGeneratorWindow(MapDocument document, AssetStore assets, WallCatalogue walls, TerrainCatalogue terrain, IReadOnlyDictionary<string, string>? parameters = null)
     {
         this.document = document; this.assets = assets; this.walls = walls; this.terrain = terrain; savedParameters = parameters;
+        PreviewState.SetSource(assets);
         resourceCache = new(terrain, assets);
         InitializeComponent();
-        PreviewMapInfo.Text = LocalText.Format("{0} × {1} cells · Changes apply only after confirmation.", document.Width, document.Height);
+        PreviewMapInfo.Text = LocalText.Format("Apply to current map · {0} × {1} cells · One undo step. This does not create a new map.", document.Width, document.Height);
+        ApplyButton.Content = LocalText.T("Apply to current map");
         WidthList.SelectedIndex = 1; TempleList.ItemsSource = TempleDefinition.All; TempleList.SelectedIndex = 0;
         DungeonTypeList.ItemsSource = Enum.GetValues<DungeonType>(); DungeonTypeList.SelectedIndex = 0;
         ThemeList.SelectedIndex = 0;
@@ -88,6 +90,7 @@ public partial class TempleGeneratorWindow : EditorWindow
     {
         if (!ready || closed || changingSettings) return;
         revision++; timer.Stop(); pending?.Cancel(); Plan = null; ApplyButton.IsEnabled = false;
+        PreviewState.SetPhase(GeneratorPreviewPhase.Waiting);
         PreviewImage.Opacity = .4; PreviewHint.IsVisible = true; PreviewHint.Text = LocalText.T("Updating preview…");
         timer.Start();
     }
@@ -109,7 +112,8 @@ public partial class TempleGeneratorWindow : EditorWindow
     {
         timer.Stop();
         if (closed || SelectedDefinition is not TempleDefinition temple) return;
-        if (!int.TryParse(SeedBox.Text, out int seed)) { PreviewHint.Text = ((FeedbackText.Text = LocalText.T("Enter a whole-number seed."))); return; }
+        if (!int.TryParse(SeedBox.Text, out int seed)) { PreviewHint.Text = ((FeedbackText.Text = LocalText.T("Enter a whole-number seed."))); PreviewState.SetPhase(GeneratorPreviewPhase.Failed, FeedbackText.Text); return; }
+        PreviewState.SetPhase(GeneratorPreviewPhase.Checking);
         int request = revision;
         var options = new TempleOptions(temple, seed, (int)RoomsSlider.Value, (int)SizeSlider.Value, WidthList.SelectedIndex + 1,
             (DungeonType)DungeonTypeList.SelectedItem, DoorCountSlider.IsEnabled ? (int)DoorCountSlider.Value : 0, SelectedTheme);
@@ -126,6 +130,7 @@ public partial class TempleGeneratorWindow : EditorWindow
                 var preflight = await Task.Run(() => MapResourcePreflight.Dungeon(options, walls, assets, resourceCache), job.Token);
                 if (closed || request != revision) return;
                 PreviewState.Report(preflight.Report); preflight.Report.EnsureReady();
+                PreviewState.SetPhase(GeneratorPreviewPhase.Generating);
                 Point? centre = inspectionCentre;
                 (plan, bitmap) = await Task.Run(() =>
                 {
@@ -158,7 +163,7 @@ public partial class TempleGeneratorWindow : EditorWindow
         catch (OperationCanceledException) { }
         catch (Exception ex)
         {
-            if (!closed && request == revision) { Plan = null; ApplyButton.IsEnabled = false; PreviewImage.Source = null; PreviewHint.Text = LocalText.T("Preview unavailable"); FeedbackText.Text = (ex.Message); }
+            if (!closed && request == revision) { Plan = null; ApplyButton.IsEnabled = false; PreviewImage.Source = null; PreviewHint.Text = LocalText.T("Preview unavailable"); FeedbackText.Text = (ex.Message); PreviewState.SetPhase(GeneratorPreviewPhase.Failed, ex.Message); }
         }
         finally { if (ReferenceEquals(pending, job)) pending = null; job.Dispose(); }
     }

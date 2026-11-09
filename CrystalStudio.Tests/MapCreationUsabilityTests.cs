@@ -362,7 +362,8 @@ public sealed class MapCreationUsabilityTests
                 window.Show(); await Task.Delay(80); Dispatcher.UIThread.RunJobs();
                 var controls = window.GetLogicalDescendants().ToArray();
                 Assert.Single(controls.OfType<ComboBox>(), choice => choice.Name == "QuickMapDensity");
-                Assert.False(Assert.Single(controls.OfType<Expander>()).IsExpanded);
+                Assert.False(Assert.Single(controls.OfType<Expander>(), expander => Equals(expander.Header, LocalText.T("Advanced generation settings"))).IsExpanded);
+                Assert.False(Assert.Single(controls.OfType<Expander>(), expander => expander.Name == "QuickMapResourceDiagnostics").IsExpanded);
                 var apply = controls.OfType<Button>().Single(button => button.Name == "ApplyButton");
                 Assert.Equal(LocalText.T("Create Map"), apply.Content);
                 var back = controls.OfType<Button>().Single(button => button.Name == "QuickMapBack");

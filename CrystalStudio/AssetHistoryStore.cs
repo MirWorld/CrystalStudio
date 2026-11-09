@@ -30,11 +30,13 @@ public sealed record AssetReference(string Source, int Library, int Index, MapLa
 
 public sealed class AssetHistoryStore
 {
+    public sealed record AssetAlias(AssetReference Asset, string Name);
     public const int RecentLimit = 48;
     public string FilePath { get; }
     public List<AssetReference> Favourites { get; private set; } = [];
     public List<AssetReference> Recent { get; private set; } = [];
-    public sealed record SavedAssets(List<AssetReference>? Favourites = null, List<AssetReference>? Recent = null);
+    public List<AssetAlias> Aliases { get; private set; } = [];
+    public sealed record SavedAssets(List<AssetReference>? Favourites = null, List<AssetReference>? Recent = null, List<AssetAlias>? Aliases = null);
 
     public AssetHistoryStore(string? filePath = null) => FilePath = filePath ?? Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "CrystalStudio", "assets.json");
@@ -52,6 +54,10 @@ public sealed class AssetHistoryStore
         }
         Favourites = Clean(saved.Favourites);
         Recent = Clean(saved.Recent).Take(RecentLimit).ToList();
+        Aliases = [];
+        foreach (var alias in saved.Aliases ?? [])
+            if (alias is { Asset.Valid: true, Name.Length: > 0 and <= 80 } && !alias.Name.Any(char.IsControl) && !Aliases.Any(item => item.Asset.SameAsset(alias.Asset)))
+                Aliases.Add(alias);
     }
 
     public bool IsFavourite(AssetReference asset) => Favourites.Any(asset.SameAsset);
@@ -70,5 +76,13 @@ public sealed class AssetHistoryStore
         if (Recent.Count > RecentLimit) Recent.RemoveRange(RecentLimit, Recent.Count - RecentLimit);
         return true;
     }
-    public void Save() => AtomicFile.WriteJson(FilePath, new SavedAssets(Favourites, Recent));
+    public string Alias(AssetReference? asset) => asset == null ? "" : Aliases.FirstOrDefault(item => item.Asset.SameAsset(asset))?.Name ?? "";
+    public void SetAlias(AssetReference asset, string name)
+    {
+        name = name.Trim();
+        if (!asset.Valid || name.Length > 80 || name.Any(char.IsControl)) throw new ArgumentException(LocalText.T("Enter an alias of at most 80 characters."));
+        Aliases.RemoveAll(item => item.Asset.SameAsset(asset));
+        if (name.Length > 0) Aliases.Add(new(asset, name));
+    }
+    public void Save() => AtomicFile.WriteJson(FilePath, new SavedAssets(Favourites, Recent, Aliases));
 }

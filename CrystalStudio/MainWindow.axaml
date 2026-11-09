@@ -88,6 +88,7 @@
     <StackPanel Spacing="6">
       <TextBlock x:Name="CellHoverCoordinates" FontWeight="SemiBold" />
       <TextBlock x:Name="CellHoverWalkability" FontWeight="SemiBold" />
+      <TextBlock Text="{local:Loc EditorUXHoverHint}" FontSize="11" TextWrapping="Wrap" Foreground="{DynamicResource Muted}" />
       <TextBlock x:Name="CellHoverDetails" FontSize="11" LineHeight="16" TextWrapping="Wrap" Foreground="{DynamicResource Muted}" />
     </StackPanel>
   </Border>

@@ -93,7 +93,7 @@ public partial class MainWindow
         return new AssetChoice
         {
             Asset = asset, Index = asset.Index, PreviewLayout = asset.Pattern, IsFavourite = assetHistory.IsFavourite(asset),
-            Label = label, Detail = saved ? $"{asset.Layer} \u00b7 Lib {asset.Library}" : "",
+            Label = label, Alias = assetHistory.Alias(asset), Detail = saved ? $"{asset.Layer} \u00b7 Lib {asset.Library}" : "",
             Description = $"{kind} {label} \u00b7 {asset.Layer} \u00b7 Library {asset.Library}\n{asset.Source}" +
                 (TileAvailable(asset) ? "" : "\nUnavailable in the current library folder"),
             Bitmap = TilePreview(asset)
@@ -104,7 +104,7 @@ public partial class MainWindow
     {
         string query = AssetSearch.Text?.Trim() ?? "";
         return (FavouritesPalette ? assetHistory.Favourites : assetHistory.Recent).Where(asset =>
-            query.Length == 0 || (asset.StampPath != null ? asset.StampPath :
+            query.Length == 0 || assetHistory.Alias(asset).Contains(query, StringComparison.OrdinalIgnoreCase) || (asset.StampPath != null ? asset.StampPath :
                 $"{asset.Layer} {asset.Library} {asset.Index} {asset.Source} Set {(asset.Pattern == TilePatternLayout.None ? asset.Index : asset.Index / AutoTileBrush.BlockSize(asset.Pattern))}")
             .Contains(query, StringComparison.OrdinalIgnoreCase)).ToList();
     }
@@ -118,7 +118,7 @@ public partial class MainWindow
         {
             if (asset.StampPath == null) { choices.Add(TileChoice(asset, true)); continue; }
             var choice = new AssetChoice { Asset = asset, StampPath = asset.StampPath,
-                Label = Path.GetFileNameWithoutExtension(asset.StampPath), Description = asset.StampPath,
+                Label = Path.GetFileNameWithoutExtension(asset.StampPath), Alias = assetHistory.Alias(asset), Description = asset.StampPath,
                 Detail = "Stamp",
                 IsFavourite = assetHistory.IsFavourite(asset) };
             if (string.Equals(selectedStampPath, asset.StampPath, StringComparison.OrdinalIgnoreCase) && File.Exists(asset.StampPath))

@@ -201,6 +201,7 @@ public partial class MainWindow
                 throw;
             }
             map.Path = target; map.Category = category; map.CategoryDirty = false; Viewport.History.Saved(); ForgetRecovery(map);
+            map.LastSavedAt = DateTime.Now;
             map.StampOriginX -= prepared.OffsetX; map.StampOriginY -= prepared.OffsetY;
             categoryIndex = StampCategories.Read(indexPath);
             selectedStampPath = null; selectedStampPreview = null;

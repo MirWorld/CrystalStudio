@@ -8,7 +8,7 @@ public sealed partial class MapViewport
         if (!ReferenceEquals(Document, plan.Source) || Document.PickupRevision != plan.SourceRevision)
             throw new InvalidOperationException("The map changed after the dungeon preview. Generate a fresh preview.");
         if (dragging) End();
-        History.Begin(); History.RecordStamps(Document);
+        History.Begin("Generate dungeon"); History.RecordStamps(Document);
         for (int y = 0; y < Document.Height; y++)
         for (int x = 0; x < Document.Width; x++)
         {

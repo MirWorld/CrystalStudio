@@ -45,6 +45,7 @@ public sealed class RegionCopy
     internal void CutSource(MapDocument document, EditHistory history, Action<int, int>? changed = null)
     {
         history.Commit();
+        history.Begin("Cut selection");
         foreach (var s in previewCells)
         {
             int x = sourceX + s.X, y = sourceY + s.Y;
@@ -72,6 +73,7 @@ public sealed class RegionCopy
     public bool Paste(MapDocument document, EditHistory history, int x, int y, Action<int, int>? changed = null)
     {
         if (!CanPaste(document, x, y)) return false;
+        history.Begin("Paste selection");
         for (int dy = 0; dy < Height; dy++) for (int dx = 0; dx < Width; dx++)
         {
             var source = cells[dy * Width + dx];

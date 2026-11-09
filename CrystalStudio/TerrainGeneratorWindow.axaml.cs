@@ -35,8 +35,10 @@ public partial class TerrainGeneratorWindow : EditorWindow
     public TerrainGeneratorWindow(MapDocument document, AssetStore assets, TerrainCatalogue catalogue, IReadOnlyDictionary<string, string>? parameters = null)
     {
         this.document = document; this.assets = assets; this.catalogue = catalogue; savedParameters = parameters;
+        PreviewState.SetSource(assets);
         InitializeComponent();
-        PreviewMapInfo.Text = LocalText.Format("{0} × {1} cells · Changes apply only after confirmation.", document.Width, document.Height);
+        PreviewMapInfo.Text = LocalText.Format("Apply to current map · {0} × {1} cells · One undo step. This does not create a new map.", document.Width, document.Height);
+        ApplyButton.Content = LocalText.T("Apply to current map");
         RouteList.SelectedIndex = 0;
         GeneratorPreferences.Restore(this, savedParameters);
         previewTimer.Tick += PreviewTimerTick;
@@ -80,7 +82,16 @@ public partial class TerrainGeneratorWindow : EditorWindow
             }
         }
         catch (OperationCanceledException) { }
-        catch (Exception ex) { if (!closed) { PreviewHint.Text = LocalText.T("Terrain artwork could not be loaded."); FeedbackText.Text = (ex.Message); } }
+        catch (Exception ex)
+        {
+            if (!closed && ready)
+            {
+                coastError = ex.Message; ReportResources();
+                if (IsIsland && islandCoast == null) PreviewState.SetPhase(GeneratorPreviewPhase.Failed, ex.Message);
+            }
+            else if (!closed)
+            { PreviewHint.Text = LocalText.T("Terrain artwork could not be loaded."); FeedbackText.Text = ex.Message; PreviewState.SetPhase(GeneratorPreviewPhase.Failed, ex.Message); }
+        }
         finally
         {
             if (ready && !closed)
@@ -144,11 +155,12 @@ public partial class TerrainGeneratorWindow : EditorWindow
     {
         if (!ready || closed || changingSettings) return;
         revision++;
+        PreviewState.SetPhase(GeneratorPreviewPhase.Waiting);
         previewTimer.Stop(); previewCancellation?.Cancel();
         Plan = null; ApplyButton.IsEnabled = false;
         PreviewHint.IsVisible = true;
         PreviewImage.Opacity = .45;
-        if (BaseList.SelectedItem is not TerrainSet) { PreviewHint.Text = LocalText.T("Choose a base terrain."); return; }
+        if (BaseList.SelectedItem is not TerrainSet) { PreviewHint.Text = LocalText.T("Choose a base terrain."); PreviewState.SetPhase(GeneratorPreviewPhase.Failed, PreviewHint.Text); return; }
         PreviewHint.Text = LocalText.T("Updating preview\u2026");
         previewTimer.Start();
     }
@@ -185,13 +197,14 @@ public partial class TerrainGeneratorWindow : EditorWindow
     {
         previewTimer.Stop();
         if (closed || BaseList.SelectedItem is not TerrainSet basis) return;
-        if (!int.TryParse(SeedBox.Text, out int seed)) { PreviewHint.Text = ((FeedbackText.Text = LocalText.T("Enter a whole-number seed."))); return; }
+        if (!int.TryParse(SeedBox.Text, out int seed)) { PreviewHint.Text = ((FeedbackText.Text = LocalText.T("Enter a whole-number seed."))); PreviewState.SetPhase(GeneratorPreviewPhase.Failed, FeedbackText.Text); return; }
+        PreviewState.SetPhase(GeneratorPreviewPhase.Checking);
         ReportResources();
         if (PreviewState.Resources?.CanGenerate == false)
         {
-            PreviewHint.Text = LocalText.T("Preview unavailable"); FeedbackText.Text = PreviewState.Resources.Summary; return;
+            PreviewHint.Text = LocalText.T("Preview unavailable"); FeedbackText.Text = PreviewState.Resources.Summary; PreviewState.SetPhase(GeneratorPreviewPhase.Failed); return;
         }
-        if(IsIsland&&islandCoast==null){PreviewHint.Text = LocalText.T("Island artwork is unavailable");FeedbackText.Text = (islandError ?? LocalText.T("Loading the original 5.map coast artwork\u2026"));return;}
+        if(IsIsland&&islandCoast==null){PreviewHint.Text = LocalText.T("Island artwork is unavailable");FeedbackText.Text = (islandError ?? LocalText.T("Loading the original 5.map coast artwork\u2026"));PreviewState.SetPhase(GeneratorPreviewPhase.Failed, FeedbackText.Text);return;}
         var options = new TerrainOptions(basis, PatchList.SelectedItem as TerrainSet, PathList.SelectedItem as TerrainSet, seed, CoverageSlider.Value, ScaleSlider.Value, WidthSlider.Value, RouteList.SelectedIndex + 1,WaterMode){BridgeCrossing=BridgeToggle.IsChecked==true,Island=IsIsland};
         var requestedPieces=options.BridgeCrossing?bridgePieces:coastPieces;
         var area = Area;
@@ -201,6 +214,7 @@ public partial class TerrainGeneratorWindow : EditorWindow
         var job = CancellationTokenSource.CreateLinkedTokenSource(cancellation.Token);
         previewCancellation = job;
         PreviewHint.Text = LocalText.T("Generating preview\u2026"); PreviewHint.IsVisible = true;
+        PreviewState.SetPhase(GeneratorPreviewPhase.Generating);
         try
         {
             var plan = cachedPlan != null && cachedOptions == options && cachedArea == area && cachedPlan.SourceRevision == document.PickupRevision
@@ -226,7 +240,7 @@ public partial class TerrainGeneratorWindow : EditorWindow
             PreviewState.Complete();
         }
         catch (OperationCanceledException) { }
-        catch (Exception ex) { if (!closed && requestedRevision == revision) { Plan = null; PreviewImage.Source = null; PreviewHint.Text = LocalText.T("Preview unavailable"); FeedbackText.Text = (ex.Message); } }
+        catch (Exception ex) { if (!closed && requestedRevision == revision) { Plan = null; PreviewImage.Source = null; PreviewHint.Text = LocalText.T("Preview unavailable"); FeedbackText.Text = (ex.Message); PreviewState.SetPhase(GeneratorPreviewPhase.Failed, ex.Message); } }
         finally { if (ReferenceEquals(previewCancellation, job)) previewCancellation = null; job.Dispose(); }
     }
     private void DetailChanged(object sender, RoutedEventArgs e)
@@ -237,7 +251,7 @@ public partial class TerrainGeneratorWindow : EditorWindow
     {
         PreviewState.Report(new([
             new("Base ground", true, BaseList.SelectedItem is TerrainSet basis && available.Contains(basis)),
-            new("River banks", false, coastPieces != null && waterReady),
+            new("River banks", false, coastPieces != null && waterReady, coastError),
             new("Beach and shoreline", false, shoreComponents != null),
             new("River crossing", false, bridgePieces != null),
             new("Island coastline", IsIsland, islandCoast != null, IsIsland ? islandError : null)

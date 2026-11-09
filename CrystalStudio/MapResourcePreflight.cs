@@ -30,6 +30,15 @@ internal sealed class MapResourceCache(TerrainCatalogue terrain, AssetStore asse
             terrain.Sets.FirstOrDefault(set => set.Id == id) is { } set && terrain.MatchesAssets(set, assets));
         return available;
     }
+    public string GroundDetail(string id)
+    {
+        var set = terrain.Sets.FirstOrDefault(candidate => candidate.Id == id);
+        if (set == null) return LocalText.Format("Catalogue entry not found: {0}", id);
+        string source = assets.Libraries.TryGetValue(set.Library, out var library)
+            ? library.Path + (Ground(id) ? "" : "\n" + LocalText.T("Loaded artwork does not match the catalogue (empty, unreadable or not 96 × 64)."))
+            : LocalText.Format("Library {0} is not loaded.", set.Library);
+        return $"{set.Name} ({id})\n{source}";
+    }
     public bool Wall(WallFamily? family, bool interior)
     {
         if (family == null) return false;
@@ -56,13 +65,24 @@ internal sealed class MapResourceCache(TerrainCatalogue terrain, AssetStore asse
         });
         return available;
     }
+    public string WallDetail(WallFamily? family, bool interior)
+    {
+        if (family == null) return LocalText.T("Required wall catalogue entry is missing.");
+        var selected = family.WithMode(interior);
+        var used = (selected.DrawInterior ? selected.InnerVariants : selected.Variants).SelectMany(variant => variant.Parts)
+            .SelectMany(part => new[] { part.PieceId }.Concat(part.Choices?.Select(choice => choice.PieceId) ?? [])).ToHashSet();
+        var libraries = selected.Pieces.Where(piece => used.Contains(piece.Id)).SelectMany(piece => piece.Cells)
+            .SelectMany(cell => cell.Cell.ForegroundImages).Select(front => front.Library).Distinct().Order();
+        return LocalText.T(family.Name) + "\n" + string.Join("\n", libraries.Select(id => assets.Libraries.TryGetValue(id, out var library)
+            ? library.Path : LocalText.Format("Library {0} is not loaded.", id)));
+    }
 }
 
 internal static class MapResourcePreflight
 {
     public static MapResourceReport ProvinceGround(ProvinceStyle style, MapResourceCache cache) => new([
-        new("Base ground", true, cache.Ground(style.BaseId), style.BaseId),
-        new("Patch ground", true, cache.Ground(style.PatchId), style.PatchId)
+        new("Base ground", true, cache.Ground(style.BaseId), cache.GroundDetail(style.BaseId)),
+        new("Patch ground", true, cache.Ground(style.PatchId), cache.GroundDetail(style.PatchId))
     ]);
 
     internal static bool Available(Func<bool> check)
@@ -84,7 +104,7 @@ internal static class MapResourcePreflight
         if (requested.CliffChance > 0)
         {
             bool available = cache.Wall(walls.Families.FirstOrDefault(family => family.Id == style.WallId), false) && cache.Ground(ProvinceCliffTerrain.PlateauId(style.WallId));
-            checks.Add(new("Cliffs and plateau", false, available, style.WallId));
+            checks.Add(new("Cliffs and plateau", false, available, cache.WallDetail(walls.Families.FirstOrDefault(family => family.Id == style.WallId), false)));
             if (!available) options = options with { CliffChance = 0, DoorCount = 0 };
         }
         if (requested.DoorCount > 0)
@@ -134,8 +154,8 @@ internal static class MapResourcePreflight
         var family = walls.Families.FirstOrDefault(family => family.Id == temple.WallId);
         var checks = new List<MapResourceCheck>
         {
-            new("Dungeon floor", true, cache.Ground(temple.FloorId), temple.FloorId),
-            new("Dungeon walls", true, cache.Wall(family, true), temple.WallId)
+            new("Dungeon floor", true, cache.Ground(temple.FloorId), cache.GroundDetail(temple.FloorId)),
+            new("Dungeon walls", true, cache.Wall(family, true), cache.WallDetail(family, true))
         };
         var options = requested;
         if (requested.DoorCount > 0)
@@ -148,12 +168,30 @@ internal static class MapResourcePreflight
     }
 }
 
+internal enum GeneratorPreviewPhase { Checking, Waiting, Generating, Ready, Failed }
+
 internal sealed class GeneratorPreviewState
 {
     public MapResourceReport? Resources { get; private set; }
+    public GeneratorPreviewPhase Phase { get; private set; } = GeneratorPreviewPhase.Checking;
+    public string SourceDescription { get; private set; } = "";
+    public string? Failure { get; private set; }
     public event EventHandler? Changed;
     public event EventHandler? Completed;
+    public void SetSource(AssetStore assets)
+    {
+        SourceDescription = LocalText.Format("Source format: {0} (.lib)\nLoaded folder: {1}", assets.Format == AssetSourceFormat.Sanxiu ? "Sanxiu" : "Crystal",
+            assets.LoadedFolder ?? LocalText.T("No folder metadata; see loaded library paths below."))
+            + "\n" + LocalText.Format("Loaded library paths (first {0} of {1}):", Math.Min(12, assets.Libraries.Count), assets.Libraries.Count)
+            + "\n" + string.Join("\n", assets.Libraries.OrderBy(pair => pair.Key).Take(12).Select(pair => $"{pair.Key}: {pair.Value.Path}"));
+    }
+    public void SetPhase(GeneratorPreviewPhase phase, string? failure = null)
+    {
+        Phase = phase; Failure = failure;
+        if (phase == GeneratorPreviewPhase.Waiting) Resources = null;
+        Notify();
+    }
     public void Report(MapResourceReport report) { Resources = report; Notify(); }
     public void Notify() => Changed?.Invoke(this, EventArgs.Empty);
-    public void Complete() { Notify(); Completed?.Invoke(this, EventArgs.Empty); }
+    public void Complete() { SetPhase(GeneratorPreviewPhase.Ready); Completed?.Invoke(this, EventArgs.Empty); }
 }

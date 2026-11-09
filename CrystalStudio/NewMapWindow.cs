@@ -1,5 +1,6 @@
 using System.IO;
 using Avalonia.Controls.Templates;
+using Avalonia.LogicalTree;
 
 namespace CrystalStudio;
 
@@ -22,6 +23,10 @@ internal sealed partial class NewMapWindow : EditorWindow
     internal readonly ComboBox PresetBox = new() { Name = "MapPreset", PlaceholderText = LocalText.T("Current draft") };
     internal readonly TextBox PresetNameBox = new() { Name = "SaveMapPreset", Watermark = LocalText.T("Optional preset name") };
     private readonly TextBlock feedback = new() { TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 10) };
+    private readonly TextBlock setupSummary = new() { Name = "QuickMapSetupSummary", TextWrapping = TextWrapping.Wrap, MaxLines = 2, Margin = new Thickness(0, 8, 0, 0) };
+    private readonly Dictionary<Control, TextBlock> fieldErrors = [];
+    private readonly Button locateError = new() { Name = "QuickMapLocateError", Content = LocalText.T("Go to first error"), IsVisible = false };
+    private Control? firstError;
     private readonly TextBlock sizeSummary = new() { TextWrapping = TextWrapping.Wrap };
     private readonly TextBlock templateHint = new() { TextWrapping = TextWrapping.Wrap };
     private readonly WrapPanel sizeChoices = new();
@@ -41,7 +46,7 @@ internal sealed partial class NewMapWindow : EditorWindow
         this.availability = availability; preferences = store;
         Title = LocalText.T("Quick Create Map"); Width = 600; Height = 780; MinWidth = 500; MinHeight = 480;
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
-        var root = new Grid { Margin = new Thickness(24), RowDefinitions = new RowDefinitions("*,Auto,Auto") };
+        var root = new Grid { Margin = new Thickness(24), RowDefinitions = new RowDefinitions("*,Auto,Auto,Auto") };
         var panel = new StackPanel { Spacing = 6 };
         panel.Children.Add(new TextBlock { Text = LocalText.T("Step 1 of 2 · Choose a starting point"), FontSize = 18, FontWeight = Avalonia.Media.FontWeight.SemiBold });
         panel.Children.Add(new TextBlock { Text = LocalText.T("Use a purpose template, or choose your own map settings. Blank maps can be created immediately."), TextWrapping = TextWrapping.Wrap });
@@ -66,8 +71,9 @@ internal sealed partial class NewMapWindow : EditorWindow
         Avalonia.Automation.AutomationProperties.SetName(HeightBox, LocalText.T("Map height in cells"));
         dimensions.Children.Add(WidthBox); Grid.SetColumn(HeightBox, 2); dimensions.Children.Add(HeightBox);
         AddField(panel, "Width × height in cells", dimensions);
+        AddError(panel, WidthBox);
         panel.Children.Add(new WrapPanel { Children = { LockRatioToggle, SwapDimensionsButton } }); panel.Children.Add(sizeSummary);
-        AddField(panel, "Map name", NameBox); panel.Children.Add(SaveToggle);
+        AddField(panel, "Map name", NameBox); AddError(panel, NameBox); panel.Children.Add(SaveToggle);
         var folder = new DockPanel();
         var browse = new Button { Content = LocalText.T("Browse…"), Margin = new Thickness(6, 0, 0, 0) };
         DockPanel.SetDock(browse, Dock.Right); folder.Children.Add(browse); folder.Children.Add(FolderBox);
@@ -76,20 +82,29 @@ internal sealed partial class NewMapWindow : EditorWindow
             var picker = new OpenFolderDialog { Title = LocalText.T("Choose an output folder."), InitialDirectory = FolderBox.Text };
             if (picker.ShowDialog(this) == true) FolderBox.Text = picker.FolderName;
         };
-        AddField(outputPanel, "Output folder", folder); panel.Children.Add(outputPanel);
+        AddField(outputPanel, "Output folder", folder); AddError(outputPanel, FolderBox); panel.Children.Add(outputPanel);
         if (store != null)
         {
             var advanced = new StackPanel { Spacing = 6, Margin = new Thickness(0, 8, 0, 0) };
             AddField(advanced, "Save/update preset after creation (optional)", PresetNameBox);
+            AddError(advanced, PresetNameBox);
             advanced.Children.Add(new TextBlock { Text = LocalText.T("Presets share generation settings only. Names and output folders stay on this computer."), TextWrapping = TextWrapping.Wrap });
             panel.Children.Add(new Expander { Header = LocalText.T("Advanced creation options"), Content = advanced, HorizontalAlignment = HorizontalAlignment.Stretch });
         }
         root.Children.Add(new ScrollViewer { Content = panel, VerticalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Auto });
-        var feedbackScroll = new ScrollViewer { Content = feedback, MaxHeight = 96, VerticalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Auto };
-        Grid.SetRow(feedbackScroll, 1); root.Children.Add(feedbackScroll);
+        Grid.SetRow(setupSummary, 1); root.Children.Add(setupSummary);
+        var feedbackPanel = new StackPanel { Children = { feedback, locateError } };
+        var feedbackScroll = new ScrollViewer { Content = feedbackPanel, MaxHeight = 84, VerticalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Auto };
+        Grid.SetRow(feedbackScroll, 2); root.Children.Add(feedbackScroll);
+        locateError.Click += (_, _) =>
+        {
+            if (firstError == null) return;
+            foreach (var expander in firstError.GetLogicalAncestors().OfType<Expander>()) expander.IsExpanded = true;
+            firstError.Focus(); firstError.BringIntoView();
+        };
         var actions = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Spacing = 8 };
         actions.Children.Add(new Button { Content = LocalText.T(session == null ? "Cancel" : "Return to preview"), IsCancel = true }); actions.Children.Add(CreateButton);
-        Grid.SetRow(actions, 2); root.Children.Add(actions); Content = root;
+        Grid.SetRow(actions, 3); root.Children.Add(actions); Content = root;
         var initial = session?.Settings ?? previous ?? new(availability.GetValueOrDefault(MapCreationKind.Province) == null ? MapCreationKind.Province : MapCreationKind.Blank);
         currentKind = Enum.IsDefined(initial.Kind) ? initial.Kind : MapCreationKind.Blank;
         KindBox.SelectedItem = currentKind;
@@ -220,30 +235,56 @@ internal sealed partial class NewMapWindow : EditorWindow
     private bool Validate()
     {
         if (KindBox.SelectedItem is not MapCreationKind kind) return false;
+        firstError = null;
+        foreach (var field in fieldErrors.Values) { field.Text = ""; field.IsVisible = false; }
         bool validWidth = int.TryParse(WidthBox.Text, out int width), validHeight = int.TryParse(HeightBox.Text, out int height);
         string? error = !validWidth || !validHeight
             ? "Enter dimensions between 16 and 4096." : MapDimensions.CreationError(width, height, kind);
+        SetError(!validWidth ? WidthBox : !validHeight ? HeightBox : WidthBox, error, WidthBox);
         sizeSummary.Text = width > 0 && height > 0 ? LocalText.Format("{0:N0} cells · about {1:N0} base ground tiles (2 × 2 cells each).", (long)width * height, ((long)width + 1) / 2 * (((long)height + 1) / 2)) : "";
         error ??= availability.GetValueOrDefault(kind);
-        if ((PresetNameBox.Text?.Trim().Length ?? 0) > 80) error ??= "Enter a preset name (1–80 characters).";
+        string? presetError = (PresetNameBox.Text?.Trim().Length ?? 0) > 80 ? "Enter a preset name (1–80 characters)." : null;
         if (!string.IsNullOrWhiteSpace(PresetNameBox.Text) && preferences?.Data.Presets.Count >= 50 &&
-            !preferences.Data.Presets.ContainsKey(PresetNameBox.Text.Trim())) error ??= "At most 50 map presets can be saved.";
+            !preferences.Data.Presets.ContainsKey(PresetNameBox.Text.Trim())) presetError ??= "At most 50 map presets can be saved.";
+        SetError(PresetNameBox, presetError); error ??= presetError;
         bool save = SaveToggle.IsChecked == true; outputPanel.IsVisible = save; outputPanel.IsEnabled = save;
+        string? nameError = null, folderError = null;
+        try { MapCreationPaths.ValidateName(NameBox.Text ?? ""); }
+        catch (ArgumentException exception) { nameError = exception.Message; }
         try
         {
-            MapCreationPaths.ValidateName(NameBox.Text ?? "");
-            if (save)
+            if (save && nameError == null)
             {
                 string target = MapCreationPaths.Target(FolderBox.Text ?? "", NameBox.Text ?? "");
-                if (File.Exists(target) || Directory.Exists(target)) error ??= "A map with this name already exists. Choose another name.";
+                if (File.Exists(target) || Directory.Exists(target)) nameError = "A map with this name already exists. Choose another name.";
             }
         }
         catch (Exception exception) when (exception is ArgumentException or NotSupportedException or PathTooLongException)
-        { error ??= exception.Message; }
+        { folderError = exception.Message; }
+        SetError(NameBox, nameError); SetError(FolderBox, folderError);
+        error ??= nameError ?? folderError;
+        setupSummary.Text = $"{NameBox.Text} · {WidthBox.Text} × {HeightBox.Text} · {MapCreationTemplates.KindLabel(kind)}\n" +
+            (save ? LocalText.Format("Save after creation: {0}", MapCreationPaths.FileName(NameBox.Text ?? "")) : LocalText.T("Create an unsaved map; choose its location with Save As."));
+        setupSummary.SetTip(setupSummary.Text + (save ? "\n" + FolderBox.Text : ""));
+        locateError.IsVisible = firstError != null;
         CreateButton.Content = LocalText.T(kind == MapCreationKind.Blank ? "Create Map" : "Next: Preview");
         CreateButton.IsEnabled = error == null;
         feedback.Text = LocalText.T(error ?? (kind == MapCreationKind.Blank ? "A blank map needs no game artwork."
             : "The next window checks artwork and previews the result. Cancelling leaves your maps unchanged."));
         return error == null;
+    }
+
+    private void AddError(StackPanel panel, Control field)
+    {
+        var message = new TextBlock { Name = field.Name + "FieldError", TextWrapping = TextWrapping.Wrap, IsVisible = false };
+        message.SetResource(TextBlock.ForegroundProperty, "ThemeD1AD77");
+        fieldErrors[field] = message; panel.Children.Add(message);
+    }
+
+    private void SetError(Control field, string? error, Control? messageField = null)
+    {
+        if (error == null) return;
+        firstError ??= field;
+        if (fieldErrors.TryGetValue(messageField ?? field, out var message)) { message.Text = LocalText.T(error); message.IsVisible = true; }
     }
 }
