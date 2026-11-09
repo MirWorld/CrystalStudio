@@ -147,7 +147,8 @@ internal sealed class MapCreationStore
             libraries[pair.Key.ToString(System.Globalization.CultureInfo.InvariantCulture)] = file.FullName + "|" + file.Length + "|" + file.LastWriteTimeUtc.Ticks;
         }
         return new(1, DateTime.UtcNow, kind, document.Width, document.Height, document.SourceFormat,
-            settings.LibraryFolder, "CrystalStudio/" + typeof(MainWindow).Assembly.GetName().Version + "/quick-map-v5", new(parameters), hashes) { LibraryVersions = libraries };
+            settings.LibraryFolder, "CrystalStudio/" + typeof(MainWindow).Assembly.GetName().Version + "/quick-map-v5" +
+                (GenerationAlgorithms.Read(parameters) == GenerationAlgorithms.Current ? "/algorithm-v2" : ""), new(parameters), hashes) { LibraryVersions = libraries };
     }
 
     public static void SaveRecipe(string mapPath, MapCreationRecipe recipe) => AtomicFile.WriteJson(mapPath + ".creation.json", recipe);

@@ -1,7 +1,9 @@
 namespace CrystalStudio;
 
-internal sealed class QuickMapCandidate(MapCreationSettings settings, IReadOnlyDictionary<string, string> parameters, RasterImage? thumbnail)
+internal sealed class QuickMapCandidate(MapCreationSettings settings, IReadOnlyDictionary<string, string> parameters, RasterImage? thumbnail, MapDesignSettings? design = null)
 {
+    private readonly MapDesignSettings? generationDesign = GenerationAlgorithms.Read(parameters) == GenerationAlgorithms.Current ? design?.Copy() ?? new() : null;
+    internal MapDesignSettings? CopyDesign() => generationDesign?.Copy();
     public MapGenerationSettings Generation { get; } = new(settings.Kind, settings.Width, settings.Height);
     public IReadOnlyDictionary<string, string> Parameters { get; } = new System.Collections.ObjectModel.ReadOnlyDictionary<string, string>(new Dictionary<string, string>(parameters));
     public RasterImage? Thumbnail { get; internal set; } = thumbnail;
@@ -10,7 +12,8 @@ internal sealed class QuickMapCandidate(MapCreationSettings settings, IReadOnlyD
     public bool IsFavorite { get; internal set; }
     public MapCandidateMetrics? Metrics { get; internal set; }
     public bool CanRestore(MapCreationSettings settings) => Generation.Kind == settings.Kind && Generation.Width == settings.Width && Generation.Height == settings.Height;
-    public bool Matches(MapCreationSettings settings, IReadOnlyDictionary<string, string> parameters) => CanRestore(settings) &&
+    public bool Matches(MapCreationSettings settings, IReadOnlyDictionary<string, string> parameters, MapDesignSettings? design = null) => CanRestore(settings) &&
+        (generationDesign == null || generationDesign.SameAs(design ?? new())) &&
         parameters.Count(pair => QuickMapCandidates.IsGenerationParameter(pair.Key)) == Parameters.Count &&
         Parameters.All(pair => parameters.TryGetValue(pair.Key, out string? value) && value == pair.Value);
 }
@@ -22,11 +25,11 @@ internal sealed class QuickMapCandidates : IDisposable
     public IReadOnlyList<QuickMapCandidate> Items => items;
     internal static bool IsGenerationParameter(string name) => name != "DetailToggle" && !name.StartsWith("QuickMap", StringComparison.Ordinal) && !name.StartsWith("Generator", StringComparison.Ordinal);
 
-    public QuickMapCandidate? Remember(MapCreationSettings settings, IReadOnlyDictionary<string, string> parameters, RasterImage? preview = null, bool isOverview = true)
+    public QuickMapCandidate? Remember(MapCreationSettings settings, IReadOnlyDictionary<string, string> parameters, RasterImage? preview = null, bool isOverview = true, MapDesignSettings? design = null)
     {
         var values = parameters.Where(pair => IsGenerationParameter(pair.Key))
             .ToDictionary(pair => pair.Key, pair => pair.Value);
-        var existing = items.FirstOrDefault(item => item.Matches(settings, values));
+        var existing = items.FirstOrDefault(item => item.Matches(settings, values, design));
         if (existing != null)
         {
             if (preview != null && isOverview && existing.Comparison == null)
@@ -43,7 +46,7 @@ internal sealed class QuickMapCandidates : IDisposable
             items.Remove(oldest); oldest.Thumbnail?.Dispose(); oldest.Comparison?.Dispose();
         }
         var images = preview == null ? default : Snapshots(preview, isOverview);
-        var candidate = new QuickMapCandidate(settings, values, images.Thumbnail) { Comparison = images.Comparison };
+        var candidate = new QuickMapCandidate(settings, values, images.Thumbnail, design) { Comparison = images.Comparison };
         items.Add(candidate); return candidate;
     }
 

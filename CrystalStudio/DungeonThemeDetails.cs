@@ -57,7 +57,7 @@ internal static class DungeonThemeDetails
 
     internal static ((int X, int Y)[] Centres, IReadOnlyList<PlacedStamp> Decorations) Place(MapDocument map,
         IReadOnlyList<(int X, int Y)> intended, DungeonTheme theme, int seed, AssetStore? assets,
-        DungeonThemeResources resources, CancellationToken token)
+        DungeonThemeResources resources, CancellationToken token, bool[]? designReservations = null)
     {
         var pieces = resources.Load(theme, assets, token);
         if (theme == DungeonTheme.CelestialPalace) PaintInlay(map, intended, assets, token);
@@ -80,7 +80,7 @@ internal static class DungeonThemeDetails
         }
         var centres = intended.Select(c => Nearby(c).FirstOrDefault(p => map.Contains(p.X, p.Y) && parent[p.Y * width + p.X] >= 0, (X: -1, Y: -1))).ToArray();
         if (centres.Any(p => p == (-1, -1))) throw new InvalidDataException("A themed chamber is disconnected. Use a larger map or fewer chambers.");
-        var reserved = new bool[parent.Length];
+        var reserved = designReservations == null ? new bool[parent.Length] : (bool[])designReservations.Clone();
         foreach (var centre in centres)
         for (int key = centre.Y * width + centre.X;; key = parent[key])
         {

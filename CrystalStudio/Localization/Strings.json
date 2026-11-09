@@ -4869,5 +4869,21 @@
   "WorkflowScene": {"English":"Scene","Chinese":"场景主题"},
   "WorkflowTheme": {"English":"Theme","Chinese":"主题"},
   "WorkflowTowns": {"English":"Towns","Chinese":"城镇数量"},
-  "WorkflowVegetation": {"English":"Vegetation","Chinese":"植被密度"}
+  "WorkflowVegetation": {"English":"Vegetation","Chinese":"植被密度"},
+  "AlgorithmLabel": {"English":"Generation algorithm","Chinese":"生成算法"},
+  "AlgorithmRestoreCandidate": {"English":"Restore generation parameters and recorded layout constraints, then regenerate with the currently loaded artwork.","Chinese":"恢复生成参数和记录的布局约束，再使用当前素材重新生成。"},
+  "AlgorithmCandidateSnapshot": {"English":"Candidates store parameters, layout constraints and bounded overview snapshots; switching regenerates the map. Favorites are not saved after closing.","Chinese":"候选保存参数、布局约束和限尺寸总览快照；切换会重新生成地图，收藏不会在关闭后保留。"},
+  "AlgorithmDesignDifference": {"English":"Layout constraints differ between these candidates.","Chinese":"这两个候选的布局约束不同。"},
+  "AlgorithmLegacy": {"English":"Legacy v1","Chinese":"兼容算法 v1"},
+  "AlgorithmRefined": {"English":"Refined v2","Chinese":"优化算法 v2"},
+  "AlgorithmChangeHint": {"English":"Changing algorithms changes seeded results. Old recipes keep the legacy algorithm.","Chinese":"切换算法会改变同一种子的生成结果；旧配方保留兼容算法。"},
+  "AlgorithmSquareFootprint": {"English":"Square footprint (cells)","Chinese":"方形占地边长（格）"},
+  "AlgorithmFootprint": {"English":" · footprint {0}×{0}","Chinese":" · 占地 {0}×{0}"},
+  "AlgorithmSquareFit": {"English":" · minimum square fit {0}×{0}","Chinese":" · 路线上最小方形净空 {0}×{0}"},
+  "AlgorithmFootprintChanged": {"English":"Footprint changed. Analyze again.","Chinese":"占地尺寸已改变，请重新分析。"},
+  "AlgorithmClearanceHint": {"English":"Route points are top-left anchors of an axis-aligned square footprint. Clearance uses both native collision bits and map bounds. Layout constraints keep their original one-cell semantics. Narrow cells still count neighbour degree, not width. This is not a server movement or gameplay-time guarantee.","Chinese":"路线点表示轴对齐方形占地的左上角锚点。净空同时检查两种原生碰撞位和地图边界；布局约束仍沿用原有的单格通行语义。狭窄格表示邻格连接度，不等于通道宽度；结果不保证服务端移动规则或游戏体验。"},
+  "AlgorithmOneCellConstraints": {"English":"Layout constraints (one-cell rule): ","Chinese":"布局约束（单格规则）："},
+  "AlgorithmReservationHint": {"English":"Required reservations guide placement before decoration. Required routes reserve an existing collision-free path; no road is carved automatically. Incompatible native structures still fail explicitly. Preferences only warn; protection regions retain their local-regeneration meaning.","Chinese":"必需预留区会在装饰前参与布局。必需路线预留现有无碰撞通路，不会自动开凿道路；与原生结构不兼容时仍明确报错。偏好条件只提示；保护区仍用于局部生成。"},
+  "AlgorithmBoundaryRegion": {"English":"Required reservation {0} intersects the sealed boundary at ({1}, {2}).","Chinese":"必需预留区 {0} 与封闭边界冲突，位置（{1}，{2}）。"},
+  "AlgorithmBoundaryPoint": {"English":"Required route point {0} intersects the sealed boundary at ({1}, {2}).","Chinese":"必需路线点 {0} 与封闭边界冲突，位置（{1}，{2}）。"}
 }

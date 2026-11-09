@@ -6,11 +6,15 @@ internal static class ProvinceEcology
     // It never repaints native banks or consumes the reserved walking lanes.
     internal static int PlantEdges(MapDocument map, TerrainCatalogue terrain, IReadOnlyList<ProvinceScenery> scenery,
         ProvinceStyle style, bool[] reserved, bool[] coast, IEnumerable<(int X, int Y)> roads,
-        int seed, int vegetation, CancellationToken token)
+        int seed, int vegetation, CancellationToken token, int algorithmVersion = GenerationAlgorithms.Legacy)
     {
         if (vegetation == 0) return 0;
         var pool = ProvinceSceneryPalette.Select(scenery, style, SpecialBrushKind.Bush);
         if (pool.Length == 0) return 0;
+        bool refined = algorithmVersion == GenerationAlgorithms.Current;
+        if (refined) pool = pool.OrderBy(tree => tree.Name, StringComparer.Ordinal).ThenBy(tree => tree.Path, StringComparer.Ordinal).ToArray();
+        var separation = new ScenerySpacing();
+        var footprints = pool.Distinct().ToDictionary(tree => tree, tree => ScenerySpacing.Footprint(tree, 1.1));
         int width = map.Width, height = map.Height;
         var trees = ProvinceSceneryPalette.Select(scenery, style, SpecialBrushKind.Tree).Select(t => t.Name).ToHashSet();
         var canopy = Distances(map.PlacedStamps.Where(s => trees.Contains(s.Name))
@@ -27,11 +31,14 @@ internal static class ProvinceEcology
             token.ThrowIfCancellationRequested();
             for (int sx = ProvinceBoundary.MaximumDepth + 2; sx < width - ProvinceBoundary.MaximumDepth - 2; sx += 3)
             {
-                int x = sx + random.Next(3), y = sy + random.Next(3), key = y * width + x;
+                int x = sx + (refined ? GenerationRandom.Index(seed, 0x4101, sx, sy, 3) : random.Next(3));
+                int y = sy + (refined ? GenerationRandom.Index(seed, 0x4101, sx, sy, 3, 1) : random.Next(3)), key = y * width + x;
                 double affinity = Math.Max(canopy[key] is >= 2 and <= 7 ? .38 : 0,
                     Math.Max(trails[key] is >= 4 and <= 8 ? .22 : 0, banks[key] is >= 1 and <= 7 ? .45 : 0));
-                if (reserved[key] || random.NextDouble() >= affinity * vegetation / 100.0 * style.BushDensity) continue;
-                var plant = pool[random.Next(pool.Length)];
+                if (reserved[key] || (refined ? GenerationRandom.Unit(seed, 0x4101, x, y, 2) : random.NextDouble()) >= affinity * vegetation / 100.0 * style.BushDensity) continue;
+                var plant = pool[refined ? GenerationRandom.Index(seed, 0x4101, x, y, pool.Length, 3) : random.Next(pool.Length)];
+                var footprint = footprints[plant];
+                if (refined && !separation.Fits(x + footprint.X, y + footprint.Y, footprint.Radius)) continue;
                 int left = x + plant.Cells.Min(c => c.X), right = x + plant.Cells.Max(c => c.X);
                 int top = y + plant.Cells.Min(c => c.Y), bottom = y + plant.Cells.Max(c => c.Y);
                 if (left < ProvinceBoundary.MaximumDepth || top < ProvinceBoundary.MaximumDepth ||
@@ -48,6 +55,7 @@ internal static class ProvinceEcology
                     { fits = false; break; }
                 }
                 if (!fits || map.PlaceStamp(plant.Cells, x, y, plant.Name, new(), (_, _) => { }) == null) continue;
+                if (refined) separation.Add(x + footprint.X, y + footprint.Y, footprint.Radius);
                 count++;
             }
         }

@@ -11,7 +11,7 @@ internal sealed class GeneratorChoiceDrafts(string selector)
         if (current >= 0)
         {
             var values = GeneratorPreferences.Capture(window);
-            values.Remove(selector); values.Remove("SeedBox"); values.Remove("DetailToggle");
+            values.Remove(selector); values.Remove("SeedBox"); values.Remove("DetailToggle"); values.Remove(GenerationAlgorithms.Parameter);
             drafts[current] = values;
         }
         current = index;

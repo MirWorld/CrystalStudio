@@ -25,7 +25,11 @@ public sealed record ProvinceStyle(string Name, string WallId, string Region, st
 public enum ProvinceScene { Wilderness, VillageCountryside, ForestRuins, MiningQuarry }
 public sealed record ProvinceOptions(int Seed = 1, ProvinceStyle? Style = null, int ForestChance = 85,
     int CliffChance = 70, int BeachChance = 35, int RiverChance = 55, int Vegetation = 55, int TownCount = 0, int DoorCount = 0,
-    ProvinceScene Scene = ProvinceScene.Wilderness, int RuinCount = 2, int MineCount = 2);
+    ProvinceScene Scene = ProvinceScene.Wilderness, int RuinCount = 2, int MineCount = 2)
+{
+    public int AlgorithmVersion { get; init; } = GenerationAlgorithms.Legacy;
+    internal MapDesignSettings? Design { get; init; }
+}
 public sealed record ProvinceScenery(BrushTree Tree, SpecialBrushKind Kind, IReadOnlyList<string> Regions)
 {
     public string? CatalogueId { get; init; }
@@ -82,6 +86,7 @@ public static class ProvinceGenerator
         RiverCoastPieces? banks = null, RiverShoreComponents? shore = null, AssetStore? assets = null,
         Action<string, TimeSpan>? timing = null, ProvinceTownResources? towns = null, ProvinceRuinResources? ruins = null, ProvinceMineResources? mines = null)
     {
+        GenerationAlgorithms.Validate(options.AlgorithmVersion);
         var watch = timing == null ? null : System.Diagnostics.Stopwatch.StartNew();
         void Mark(string stage) { if (watch != null) { timing!(stage, watch.Elapsed); watch.Restart(); } }
         cancellation.ThrowIfCancellationRequested();
@@ -91,7 +96,12 @@ public static class ProvinceGenerator
             options.MineCount is < 1 or > 4 || options.RuinCount is < 1 or > 4 || options.TownCount is < 0 or > 8 || options.DoorCount is < 0 or > WallEntrances.MaximumCount ||
             !Enum.IsDefined(options.Scene) || options.Style != null && !ProvinceStyle.All.Contains(options.Style)) throw new ArgumentException("Invalid province settings.");
         long revision = source.PickupRevision;
-        var random = new Random(options.Seed);
+        bool refined = options.AlgorithmVersion == GenerationAlgorithms.Current;
+        if (refined) scenery = scenery.OrderBy(item => item.CatalogueId, StringComparer.Ordinal).ThenBy(item => item.Tree.Name, StringComparer.Ordinal).ThenBy(item => item.Tree.Path, StringComparer.Ordinal).ToArray();
+        var constraints = refined ? GenerationConstraints.Compile(source, options.Design, cancellation) : null;
+        var boundary = ProvinceBoundary.CreateMask(source.Width, source.Height, options.Seed);
+        constraints?.CheckForbidden(boundary, cancellation);
+        var random = refined ? GenerationRandom.Stream(options.Seed, 0x1001) : new Random(options.Seed);
         var style = options.Style ?? ProvinceStyle.All[options.Scene is ProvinceScene.ForestRuins or ProvinceScene.MiningQuarry ? 0 : random.Next(ProvinceStyle.All.Count)];
         if (options.Scene is ProvinceScene.ForestRuins or ProvinceScene.MiningQuarry && style != ProvinceStyle.All[0])
             throw new ArgumentException("Forest ruins and mining yards require the Bichon woodland landscape.");
@@ -111,10 +121,11 @@ public static class ProvinceGenerator
         }
         var waterMode = river ? beach ? TerrainWaterMode.RiverToSea : TerrainWaterMode.River : beach ? TerrainWaterMode.Beach : TerrainWaterMode.None;
         var generated = new MapDocument(source.Width, source.Height);
-        double coverage = options.Scene == ProvinceScene.ForestRuins ? .8 + random.NextDouble() * .12 : style.PatchCoverage + random.NextDouble() * .2;
+        var groundRandom = refined ? GenerationRandom.Stream(options.Seed, 0x1002) : random;
+        double coverage = options.Scene == ProvinceScene.ForestRuins ? .8 + groundRandom.NextDouble() * .12 : style.PatchCoverage + groundRandom.NextDouble() * .2;
         var groundOptions = new TerrainOptions(basis, patch, null, options.Seed, coverage,
-            Math.Clamp(Math.Min(source.Width, source.Height) / 10.0, 12, 65) + random.Next(12), 2 + random.Next(3), 1 + random.Next(2), waterMode)
-            { KeepPathsOnBase = true, CompactBeach = beach && new Random(options.Seed ^ 0xBEAC4).Next(3) != 0 };
+            Math.Clamp(Math.Min(source.Width, source.Height) / 10.0, 12, 65) + groundRandom.Next(12), 2 + groundRandom.Next(3), 1 + groundRandom.Next(2), waterMode)
+            { KeepPathsOnBase = true, CompactBeach = beach && new Random(options.Seed ^ 0xBEAC4).Next(3) != 0, AlgorithmVersion = options.AlgorithmVersion };
         var ground = TerrainGenerator.Plan(generated, new(0, 0, source.Width, source.Height), terrain, groundOptions,
             cancellation, coastPieces: banks, shoreComponents: shore);
         if (beach && !ground.CoastObjects.Any(c => c.Layout.WaterMode is TerrainWaterMode.Beach or TerrainWaterMode.RiverToSea))
@@ -133,6 +144,7 @@ public static class ProvinceGenerator
         }
         history = new EditHistory();
         Mark("Ground and coast placement");
+        constraints?.ReserveRoutes(generated, cancellation, boundary);
 
         int width = generated.Width, height = generated.Height;
         var grassSets = terrain.Sets.Where(s => s.Material == "Grass").Select(s => s.Id).ToHashSet();
@@ -148,14 +160,17 @@ public static class ProvinceGenerator
         foreach (var coast in ground.CoastObjects)
             foreach (var cell in coast.Layout.Cells) Reserve(coast.X + cell.X, coast.Y + cell.Y, 3);
         var coastReserved = (bool[])reserved.Clone();
+        constraints?.MergeInto(coastReserved, cancellation);
+        constraints?.MergeInto(reserved, cancellation);
         foreach (var tile in ground.PathCells)
             if (Math.Min(Math.Min(tile.X, width - 1 - tile.X), Math.Min(tile.Y, height - 1 - tile.Y)) >= ProvinceBoundary.MaximumDepth + 3)
                 Reserve(tile.X, tile.Y, 3);
         // Large clearings and their surroundings remain usable even when a
         // seed chooses a dense forest. The terrain paths join these open areas.
         double Field(double x, double y, double scale, int salt) => Noise(x / scale, y / scale, options.Seed ^ salt);
-        bool[] forestSides = Enumerable.Range(0, 4).Select(_ => forest && random.NextDouble() < .7).ToArray();
-        if (forest && !forestSides.Any(b => b)) forestSides[random.Next(4)] = true;
+        var borderRandom = refined ? GenerationRandom.Stream(options.Seed, 0x1003) : random;
+        bool[] forestSides = Enumerable.Range(0, 4).Select(_ => forest && borderRandom.NextDouble() < .7).ToArray();
+        if (forest && !forestSides.Any(b => b)) forestSides[borderRandom.Next(4)] = true;
         Mark("Reservations");
         IReadOnlyList<GeneratedEntrance> entrances=[];
 
@@ -190,7 +205,6 @@ public static class ProvinceGenerator
             if (assets != null && !terrain.MatchesAssets(rock, assets)) throw new InvalidDataException("The cliff plateau terrain artwork is unavailable.");
             ProvinceCliffTerrain.Apply(generated, ground, terrain, walls.Families.Single(f => f.Id == style.WallId).WithMode(false), options.Seed, cancellation, style);
         }
-        var boundary = ProvinceBoundary.CreateMask(width, height, options.Seed);
         Mark("Cliff terrain");
         var settlements = options.TownCount == 0 ? null : ProvinceTowns.Place(generated, ground, terrain, style,
             options, coastReserved, reserved, towns ?? new(), assets, notes, cancellation);
@@ -210,12 +224,18 @@ public static class ProvinceGenerator
         if (miningSites.Count > 0) features.Add(LocalText.Format("{0} mining and quarry yards", miningSites.Count));
         Mark("Mining yards and haul roads");
         var sceneryGround = new ProvinceSceneryGround(terrain);
-        int perimeterObjects = ProvinceBoundary.Plant(generated, boundary, scenery, style, options.Seed, cancellation, forestSides, options.Scene is ProvinceScene.ForestRuins or ProvinceScene.MiningQuarry ? reserved : settlements?.Protected, sceneryGround);
+        var boundaryClearings = options.Scene is ProvinceScene.ForestRuins or ProvinceScene.MiningQuarry ? reserved : settlements?.Protected;
+        if (constraints != null)
+        {
+            boundaryClearings = boundaryClearings == null ? new bool[width * height] : (bool[])boundaryClearings.Clone();
+            constraints.MergeInto(boundaryClearings, cancellation);
+        }
+        int perimeterObjects = ProvinceBoundary.Plant(generated, boundary, scenery, style, options.Seed, cancellation, forestSides, boundaryClearings, sceneryGround);
         Mark("Boundary scenery");
         var groves = ProvinceLandmarks.PlantGroves(generated, scenery, style, reserved, options.Seed, options.Vegetation, cancellation, sceneryGround);
         if (groves.Groves > 0) features.Add($"{groves.Groves} dense inland groves");
         int edgePlants = ProvinceEcology.PlantEdges(generated, terrain, scenery, style, reserved, coastReserved,
-            roads.Concat(ruinScenes.SelectMany(r => r.Approach)).Concat(miningSites.SelectMany(m => m.Approach)), options.Seed, options.Vegetation, cancellation);
+            roads.Concat(ruinScenes.SelectMany(r => r.Approach)).Concat(miningSites.SelectMany(m => m.Approach)), options.Seed, options.Vegetation, cancellation, options.AlgorithmVersion);
         edgePlants += ProvinceRuins.PlantOvergrowth(generated, ruinScenes, scenery, terrain, style, reserved, options, cancellation);
         if (edgePlants > 0) features.Add(LocalText.Format("{0} woodland, trail and shore edge plants", edgePlants));
         int trees = (style.Arid ? 0 : perimeterObjects) + groves.Trees + Scatter(SpecialBrushKind.Tree, 4);
@@ -226,6 +246,7 @@ public static class ProvinceGenerator
         else if (forest) notes.Add("The wider border could not fit around the water and cliffs for this seed.");
         features.Add($"{trees:N0} trees · {bushes:N0} bushes · {rocks:N0} rocks");
         ProvinceBoundary.Seal(generated, boundary, cancellation);
+        constraints?.EnsureSatisfied(generated, cancellation);
         Mark("Seal");
         features.Add("Continuous 10–15 tile unwalkable perimeter");
         foreach (var kind in Enum.GetValues<SpecialBrushKind>())
@@ -238,6 +259,19 @@ public static class ProvinceGenerator
         {
             var pool = ProvinceSceneryPalette.Select(scenery, style, kind);
             if (pool.Length == 0) return 0;
+            double Density(int x, int y)
+            {
+                double grove = Math.Clamp((Field(x, y, 34, 331) - .44) * 3.5, 0, 1);
+                double clearing = Math.Pow((x - width * .5) / (width * .18), 2) + Math.Pow((y - height * .5) / (height * .18), 2);
+                double density = kind switch
+                {
+                    SpecialBrushKind.Tree => grove * (grass.Contains((x & ~1, y & ~1)) ? .6 : .1) * options.Vegetation / 100.0 * style.TreeDensity,
+                    SpecialBrushKind.Bush => (.09 + grove * .12) * options.Vegetation / 100.0 * style.BushDensity,
+                    _ => (.045 + .09 * Field(x, y, 23, 812)) * style.RockDensity
+                };
+                return density * (.1 + .9 * Math.Clamp((Math.Sqrt(clearing) - .25) / .75, 0, 1));
+            }
+            if (refined) return ProvinceScenerySampling.Place(generated, pool, sceneryGround, reserved, spacing, options.Seed, 0x4000 + (int)kind, Density, cancellation);
             int count = 0;
             // One jittered candidate per site avoids rows without making the
             // distribution depend on preview size or asynchronous rendering.
@@ -248,15 +282,7 @@ public static class ProvinceGenerator
                 {
                     int x = sx + random.Next(spacing), y = sy + random.Next(spacing);
                     if (!generated.Contains(x, y)) continue;
-                    double grove = Math.Clamp((Field(x, y, 34, 331) - .44) * 3.5, 0, 1);
-                    double clearing = Math.Pow((x - width * .5) / (width * .18), 2) + Math.Pow((y - height * .5) / (height * .18), 2);
-                    double density = kind switch
-                    {
-                        SpecialBrushKind.Tree => grove * (grass.Contains((x & ~1, y & ~1)) ? .6 : .1) * options.Vegetation / 100.0 * style.TreeDensity,
-                        SpecialBrushKind.Bush => (.09 + grove * .12) * options.Vegetation / 100.0 * style.BushDensity,
-                        _ => (.045 + .09 * Field(x, y, 23, 812)) * style.RockDensity
-                    };
-                    density *= .1 + .9 * Math.Clamp((Math.Sqrt(clearing) - .25) / .75, 0, 1);
+                    double density = Density(x, y);
                     if (random.NextDouble() >= density) continue;
                     var tree = pool[random.Next(pool.Length)];
                     if (!sceneryGround.CanPlace(generated, tree, x, y)) continue;

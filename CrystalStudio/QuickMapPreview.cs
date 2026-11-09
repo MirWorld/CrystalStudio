@@ -59,6 +59,7 @@ internal sealed class QuickMapPreview
             else
             {
                 var parameters = new Dictionary<string, string>(session.Parameters);
+                if (captured.TryGetValue(GenerationAlgorithms.Parameter, out string? algorithm)) parameters[GenerationAlgorithms.Parameter] = algorithm;
                 foreach (var control in window.GetLogicalDescendants().OfType<Control>().Where(control =>
                     control is Slider or TextBox { Name: "SeedBox" } or CheckBox { Name: "DetailToggle" } or
                         ComboBox { Name: "SceneList" or "ThemeList" or "DungeonTypeList" or "WidthList" or "RouteList" }))
@@ -168,7 +169,7 @@ internal sealed class QuickMapPreview
         void RefreshCandidates()
         {
             var parameters = GeneratorPreferences.Capture(window);
-            selected = state.Phase == GeneratorPreviewPhase.Ready && !session.BatchRunning ? session.Candidates.Items.FirstOrDefault(candidate => candidate.Matches(session.Settings, parameters)) : null;
+            selected = state.Phase == GeneratorPreviewPhase.Ready && !session.BatchRunning ? session.Candidates.Items.FirstOrDefault(candidate => candidate.Matches(session.Settings, parameters, session.Design)) : null;
             candidates.Children.Clear();
             compare.IsEnabled = !session.BatchRunning && state.Phase == GeneratorPreviewPhase.Ready && session.Candidates.Items.Count(candidate => candidate.CanRestore(session.Settings) && candidate.Comparison != null) >= 2;
             foreach (var candidate in session.Candidates.Items)
@@ -179,9 +180,13 @@ internal sealed class QuickMapPreview
                 content.Children.Add(new TextBlock { Text = LocalText.Format("Seed {0}", seed), FontSize = 11 });
                 if (candidate.Comparison == null) content.Children.Add(new TextBlock { Text = LocalText.T("Detail only"), FontSize = 11 });
                 var restore = new Button { Name = "QuickMapCandidate" + candidates.Children.Count, Content = content, Padding = new Thickness(4), IsEnabled = !session.BatchRunning && candidate.CanRestore(session.Settings), BorderThickness = new Thickness(ReferenceEquals(selected, candidate) ? 2 : 1) };
-                restore.SetTip(LocalText.T("Restore these parameters and regenerate with the currently loaded artwork."));
+                restore.SetTip(LocalText.T("Restore generation parameters and recorded layout constraints, then regenerate with the currently loaded artwork."));
                 if (candidate.Metrics != null) restore.SetTip(candidate.Metrics.ToString());
-                restore.Click += (_, _) => { GeneratorPreferences.Restore(window, candidate.Parameters); selected = candidate; RefreshCandidates(); };
+                restore.Click += (_, _) =>
+                {
+                    if (candidate.CopyDesign() is { } design && Configured.TryGetValue(window, out var navigation)) navigation.production?.RestoreDesign(design);
+                    GeneratorPreferences.Restore(window, candidate.Parameters); selected = candidate; RefreshCandidates();
+                };
                 var favorite = new CheckBox { Name = "QuickMapFavorite" + candidates.Children.Count, Content = LocalText.T("Favorite"), IsChecked = candidate.IsFavorite, FontSize = 11 };
                 favorite.IsCheckedChanged += (_, _) => session.Candidates.SetFavorite(candidate, favorite.IsChecked == true);
                 var card = new StackPanel { Spacing = 2 }; card.Children.Add(restore); card.Children.Add(favorite); candidates.Children.Add(card);
@@ -203,7 +208,8 @@ internal sealed class QuickMapPreview
             report.Text = LocalText.T(phase) + (state.Resources is { } resources ? "\n" +
                 LocalText.Format("{0} required missing · {1} optional unavailable", resources.Errors.Count, resources.Warnings.Count) : "");
             if (state.Phase == GeneratorPreviewPhase.Failed && window.GetLogicalDescendants().OfType<TextBlock>().FirstOrDefault(control => control.Name == "FeedbackText") is { } errorFeedback)
-                errorFeedback.Text = LocalText.T("Expand artwork details for the source and recovery steps. You can also go back without changing any maps.");
+                errorFeedback.Text = (string.IsNullOrWhiteSpace(state.Failure) ? "" : state.Failure + "\n")
+                    + LocalText.T("Expand artwork details for the source and recovery steps. You can also go back without changing any maps.");
         };
         state.Completed += (_, _) =>
         {
@@ -220,11 +226,11 @@ internal sealed class QuickMapPreview
             }
             if (!apply.IsEnabled || image.Source is not RasterImage bitmap) return;
             var overview = window switch { TerrainGeneratorWindow terrain => terrain.OverviewPreview, ProvinceGeneratorWindow province => province.OverviewPreview, TempleGeneratorWindow dungeon => dungeon.OverviewPreview, _ => null };
-            selected = session.Candidates.Remember(session.Settings, GeneratorPreferences.Capture(window), overview ?? bitmap, overview != null || detail.IsChecked != true);
+            selected = session.Candidates.Remember(session.Settings, GeneratorPreferences.Capture(window), overview ?? bitmap, overview != null || detail.IsChecked != true, session.Design);
             if (selected != null) selected.DisplayValues = GeneratorPreferences.Describe(window, selected.Parameters);
             candidateHint.Text = selected == null ? LocalText.T("All five candidates are favorites. Unfavorite one to retain another result.")
                 : selected.Comparison == null ? LocalText.T("Local detail is not stored as an overview candidate. Switch to Overview to retain this result for A / B comparison.")
-                : LocalText.T("Candidates store parameters and bounded overview snapshots only; switching regenerates the map. Favorites are not saved after closing.");
+                : LocalText.T("Candidates store parameters, layout constraints and bounded overview snapshots; switching regenerates the map. Favorites are not saved after closing.");
             RefreshCandidates();
         };
         state.Notify(); RefreshCandidates();

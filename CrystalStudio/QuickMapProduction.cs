@@ -6,6 +6,7 @@ namespace CrystalStudio;
 internal sealed record QuickMapBatchResult(int Seed, Dictionary<string, string> Parameters, MapCandidateMetrics? Metrics,
     bool Accepted, string Details)
 {
+    internal MapDesignSettings? Design { get; init; }
     public override string ToString() => LocalText.Format("Seed {0} · {1}", Seed, LocalText.T(Accepted ? "Accepted" : "Filtered")) + "\n" + (Metrics?.ToString() ?? Details) +
         (Metrics != null && Details.Length > 0 ? "\n" + Details : "");
 }
@@ -35,8 +36,12 @@ internal sealed class QuickMapProduction : StackPanel
     {
         this.window = window; this.session = session; this.state = state; this.apply = apply; Spacing = 6;
         editor = new(session.Design, session.Settings.Width, session.Settings.Height);
+        GenerationAlgorithms.SetDesign(window, session.Design);
         Children.Add(new Expander { Header = LocalText.T("Route points, reservations and protection"), Content = editor, HorizontalAlignment = HorizontalAlignment.Stretch });
-        Children.Add(MapDesignEditor.Hint("Reservations filter generated layouts; they do not carve roads or place server entities. Required conflicts block creation; preferences only warn. Search may find no matching seed."));
+        string ReservationHint() => GenerationAlgorithms.Version(window) == GenerationAlgorithms.Current
+            ? "Required reservations guide placement before decoration. Required routes reserve an existing collision-free path; no road is carved automatically. Incompatible native structures still fail explicitly. Preferences only warn; protection regions retain their local-regeneration meaning."
+            : "Reservations filter generated layouts; they do not carve roads or place server entities. Required conflicts block creation; preferences only warn. Search may find no matching seed.";
+        var reservationHint = MapDesignEditor.Hint(ReservationHint()); Children.Add(reservationHint);
         Children.Add(MapDesignEditor.Fields(("Attempts (2–10)", attempts), ("Min walkable %", minimumWalkable), ("Min connected %", minimumConnected), ("Min rooms (dungeon)", minimumRooms)));
         minimumRooms.IsEnabled = session.Settings.Kind == MapCreationKind.Dungeon;
         var actions = new WrapPanel(); actions.Children.Add(start); actions.Children.Add(stop); actions.Children.Add(restore);
@@ -50,6 +55,7 @@ internal sealed class QuickMapProduction : StackPanel
         {
             if (!session.BatchRunning && !confirming && results.SelectedItem is QuickMapBatchResult result)
             {
+                if (result.Design != null) RestoreDesign(result.Design);
                 GeneratorPreferences.Restore(window, result.Parameters);
                 feedback.Text = LocalText.Format("Restored seed {0}. Review the rebuilt preview; constraints are checked again before creation.", result.Seed);
             }
@@ -65,16 +71,22 @@ internal sealed class QuickMapProduction : StackPanel
             if (!session.BatchRunning && !confirming && batchResults.Count > 0)
                 feedback.Text = LocalText.T("Search settings changed. Listed results belong to the previous search; search again to evaluate the new settings.");
         }
-        editor.Changed += SettingsChanged;
+        editor.Changed += () => { SettingsChanged(); GenerationAlgorithms.SetDesign(window, session.Design); };
         foreach (var number in new[] { attempts, minimumWalkable, minimumConnected, minimumRooms }) number.ValueChanged += (_, _) => SettingsChanged();
         state.Changed += (_, _) =>
         {
-            start.IsEnabled = !session.BatchRunning && !confirming && state.Phase == GeneratorPreviewPhase.Ready;
+            reservationHint.Text = LocalText.T(ReservationHint());
+            start.IsEnabled = !session.BatchRunning && !confirming && CanSearch;
             if (session.BatchRunning || confirming) apply.IsEnabled = false;
         };
         window.Closed += (_, _) => { closed = true; pending?.Cancel(); };
-        start.IsEnabled = state.Phase == GeneratorPreviewPhase.Ready;
+        start.IsEnabled = CanSearch;
     }
+
+    internal void RestoreDesign(MapDesignSettings design) => editor.Restore(design);
+
+    private bool CanSearch => state.Phase == GeneratorPreviewPhase.Ready ||
+        GenerationAlgorithms.Version(window) == GenerationAlgorithms.Current && state.Phase == GeneratorPreviewPhase.Failed;
 
     internal static object? CurrentPlan(EditorWindow window) => window switch
     {
@@ -144,7 +156,7 @@ internal sealed class QuickMapProduction : StackPanel
 
     internal async Task SearchAsync()
     {
-        if (closed || session.BatchRunning || confirming || state.Phase != GeneratorPreviewPhase.Ready) return;
+        if (closed || session.BatchRunning || confirming || !CanSearch) return;
         var seedBox = window.GetLogicalDescendants().OfType<TextBox>().Distinct().Single(control => control.Name == "SeedBox");
         if (!int.TryParse(seedBox.Text, out int firstSeed)) return;
         var locked = LockInputs();
@@ -184,11 +196,12 @@ internal sealed class QuickMapProduction : StackPanel
                     if (!accepted && details.Length == 0) details = LocalText.T("Below the selected metric thresholds.");
                     if (accepted)
                     {
-                        var candidate = session.Candidates.Remember(session.Settings, parameters, Overview);
+                        var candidate = session.Candidates.Remember(session.Settings, parameters, Overview, design: design);
                         if (candidate != null) { candidate.Metrics = measured.Metrics; candidate.DisplayValues = GeneratorPreferences.Describe(window, candidate.Parameters); }
                         else details += (details.Length == 0 ? "" : "\n") + LocalText.T("All five candidates are favorites. Unfavorite one to retain another result.");
                     }
-                    batchResults.Add(new(seed, parameters, measured.Metrics, accepted, details));
+                    batchResults.Add(new(seed, parameters, measured.Metrics, accepted, details)
+                        { Design = GenerationAlgorithms.Version(window) == GenerationAlgorithms.Current ? design.Copy() : null });
                 }
                 catch (OperationCanceledException) { throw; }
                 catch (Exception exception) { batchResults.Add(new(seed, GeneratorPreferences.Capture(window), null, false, exception.Message)); }

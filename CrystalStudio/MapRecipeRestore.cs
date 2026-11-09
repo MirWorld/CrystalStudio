@@ -19,6 +19,7 @@ internal static class MapRecipeRestore
         if (MapDimensions.CreationError(recipe.Width, recipe.Height, recipe.Kind) is { } error)
             throw new InvalidDataException(LocalText.T(error));
         recipe.Design?.Validate(recipe.Width, recipe.Height);
+        GenerationAlgorithms.Read(recipe.Parameters);
     }
 
     internal static IReadOnlyList<string> Differences(MapCreationRecipe recipe, MapCreationRecipe current)

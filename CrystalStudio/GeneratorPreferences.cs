@@ -30,12 +30,14 @@ internal static class GeneratorPreferences
             };
             if (value != null) values[control.Name!] = value;
         }
+        GenerationAlgorithms.Capture(window, values);
         return values;
     }
 
     public static void Restore(EditorWindow window, IReadOnlyDictionary<string, string>? values)
     {
         if (values == null) return;
+        GenerationAlgorithms.Restore(window, values);
         foreach (var control in window.GetLogicalDescendants().OfType<Control>().Where(control => control.Name != null).ToArray())
         {
             if (!values.TryGetValue(control.Name!, out string? value)) continue;
@@ -60,6 +62,7 @@ internal static class GeneratorPreferences
     public static IReadOnlyDictionary<string, string> Describe(EditorWindow window, IReadOnlyDictionary<string, string> values)
     {
         var descriptions = new Dictionary<string, string>(values);
+        if (values.ContainsKey(GenerationAlgorithms.Parameter)) descriptions[GenerationAlgorithms.Parameter] = GenerationAlgorithms.Label(GenerationAlgorithms.Read(values));
         foreach (var choice in window.GetLogicalDescendants().OfType<ComboBox>())
         {
             if (choice.Name == null || !values.TryGetValue(choice.Name, out string? value)) continue;

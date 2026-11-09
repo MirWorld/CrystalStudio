@@ -43,6 +43,7 @@ public partial class TempleGeneratorWindow : EditorWindow
         WidthList.SelectedIndex = 1; TempleList.ItemsSource = TempleDefinition.All; TempleList.SelectedIndex = 0;
         DungeonTypeList.ItemsSource = Enum.GetValues<DungeonType>(); DungeonTypeList.SelectedIndex = 0;
         ThemeList.SelectedIndex = 0;
+        GenerationAlgorithms.Register(this, parameters, Schedule);
         GeneratorPreferences.Restore(this, savedParameters);
         timer.Tick += GeneratePreview;
         Loaded += (_, _) => { ready = true; PreferencesRestored = true; Schedule(); };
@@ -126,7 +127,8 @@ public partial class TempleGeneratorWindow : EditorWindow
         PreviewState.SetPhase(GeneratorPreviewPhase.Checking);
         int request = revision;
         var options = new TempleOptions(temple, seed, (int)RoomsSlider.Value, (int)SizeSlider.Value, WidthList.SelectedIndex + 1,
-            (DungeonType)DungeonTypeList.SelectedItem, DoorCountSlider.IsEnabled ? (int)DoorCountSlider.Value : 0, SelectedTheme);
+            (DungeonType)DungeonTypeList.SelectedItem, DoorCountSlider.IsEnabled ? (int)DoorCountSlider.Value : 0, SelectedTheme)
+        { AlgorithmVersion = GenerationAlgorithms.Version(this), Design = GenerationAlgorithms.Design(this) };
         bool detail = DetailToggle.IsChecked == true;
         var job = new CancellationTokenSource(); pending = job;
         PreviewState.SetStage("Checking required and optional artwork…");

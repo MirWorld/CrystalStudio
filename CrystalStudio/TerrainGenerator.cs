@@ -5,6 +5,8 @@ namespace CrystalStudio;
 public readonly record struct TerrainArea(int X, int Y, int Width, int Height);
 public sealed record TerrainOptions(TerrainSet Base, TerrainSet? Patches, TerrainSet? Path, int Seed = 1, double Coverage = .35, double PatchScale = 12, double PathWidth = 3, int PathCount = 1, TerrainWaterMode WaterMode = TerrainWaterMode.None, double WaterWidth = 18, double WaterCoverage = .4)
 {
+    public int AlgorithmVersion { get; init; } = GenerationAlgorithms.Legacy;
+    internal MapDesignSettings? Design { get; init; }
     public bool BridgeCrossing { get; init; }
     public bool Island { get; init; }
     // Provinces leave winding clearings in their native dirt base.
@@ -36,7 +38,10 @@ public static class TerrainGenerator
     }
     public static TerrainPlan Plan(MapDocument document, TerrainArea requested, TerrainCatalogue catalogue, TerrainOptions options, CancellationToken cancellationToken = default, IReadOnlyList<RiverCoastLayout>? coastLayouts = null, RiverCoastPieces? coastPieces = null, RiverShoreComponents? shoreComponents = null,IslandCoastObjects? islandCoast = null)
     {
+        GenerationAlgorithms.Validate(options.AlgorithmVersion);
         var source = document; long sourceRevision = source.PickupRevision;
+        var design = options.AlgorithmVersion == GenerationAlgorithms.Current ? options.Design : null;
+        design?.Validate(document.Width, document.Height);
         var area = AlignArea(document, requested);
         int width = (area.Width + 1) / 2, height = (area.Height + 1) / 2, stride = width + 1;
         if (width < 3 || height < 3) throw new ArgumentException("Select at least 6×6 cells for terrain generation.");
@@ -126,6 +131,11 @@ public static class TerrainGenerator
         int[] Corners(int x, int y) => [y * stride + x, y * stride + x + 1, (y + 1) * stride + x, (y + 1) * stride + x + 1];
         void Normalize(bool[] field, bool fill, int margin)
         {
+            if (options.AlgorithmVersion == GenerationAlgorithms.Current)
+            {
+                TerrainFieldNormalizer.Normalize(field, width, height, fill, (x, y) => Interior(x, y, margin), options.Seed, cancellationToken);
+                return;
+            }
             // Monotone updates resolve unsupported disconnected diagonal shapes.
             // Path coverage fills tips; noise patches trim tips. All nested fields
             // are resolved before tile selection, preserving shared vertices.
@@ -233,7 +243,8 @@ public static class TerrainGenerator
             for (int route = 0; route < options.PathCount; route++)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                var points = RoutePoints(width, height, random, firstRoute).ToArray();
+                var routeRandom = options.AlgorithmVersion == GenerationAlgorithms.Current ? GenerationRandom.Stream(options.Seed, 0x3000 + route) : random;
+                var points = RoutePoints(width, height, routeRandom, firstRoute).ToArray();
                 firstRoute ??= points;
                 foreach (var (px, py) in points)
                 {
@@ -292,6 +303,7 @@ public static class TerrainGenerator
         }
         PlaceFields(waterRoute,waterFields); PlaceFields(pathRoute, pathFields); PlaceFields(patchRoute, patchFields);
         var result = new List<TerrainTile>(width * height);
+        var orderedVariants = new Dictionary<(TerrainSet Set, int Mask), List<TerrainVariant>>();
         for (int y = 0; y < height; y++)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -311,10 +323,21 @@ public static class TerrainGenerator
                 string background = labels.Length == 1 ? set.Id : surfaces[surfaces[label].Parent].Set.Id;
                 if (labels.Length == 2 && !catalogue.CanBlend(surfaces[surfaces[label].Parent].Set, set)
                     && !islandAliases.Contains((surfaces[surfaces[label].Parent].Set.Id,set.Id))) throw new InvalidDataException("Missing reviewed blend for a terrain transition.");
+                if (options.AlgorithmVersion == GenerationAlgorithms.Current)
+                {
+                    if (!orderedVariants.TryGetValue((set, mask), out var ordered))
+                        orderedVariants[(set, mask)] = ordered = variants.OrderBy(variant => variant.Index).ToList();
+                    variants = ordered;
+                }
                 long sum = variants.Sum(v => v.Weight), roll = (long)(Unit(x + area.X / 2, y + area.Y / 2, options.Seed ^ set.Start) * sum);
                 var chosen = variants[^1]; foreach (var v in variants) { roll -= v.Weight; if (roll < 0) { chosen = v; break; } }
                 result.Add(new(area.X + x * 2, area.Y + y * 2, set.Library, chosen.Index, set.Id, mask, background));
             }
+        }
+        if (design != null)
+        {
+            var snapshot = GeneratedMapSnapshot.Terrain(new(source, area, result, options.Seed, waterPlan) { CoastObjects = coast == null ? [] : [coast] }, cancellationToken);
+            GenerationConstraints.EnsureSatisfied(snapshot, design, cancellationToken);
         }
         if (source.PickupRevision != sourceRevision) throw new InvalidOperationException("The map changed while generating the terrain preview.");
         var pathCells = result.Where(t => Corners((t.X - area.X) / 2, (t.Y - area.Y) / 2).Any(k => envelope[k]))

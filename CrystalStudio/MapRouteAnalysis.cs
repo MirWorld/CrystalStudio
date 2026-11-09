@@ -3,10 +3,13 @@ namespace CrystalStudio;
 internal sealed record MapRouteLeg(MapRoutePoint From, MapRoutePoint To, bool Reachable, int Steps,
     int Manhattan, int NarrowCells, int DeadEnds, IReadOnlyList<int> Path)
 {
+    public int FootprintSize { get; init; } = 1;
+    public int MinimumSquareClearance { get; init; }
     public override string ToString() => From.Name + " → " + To.Name + " · " + (Reachable
         ? LocalText.Format("{0:N0} steps · detour {1:0.00}× · narrow {2:N0} · dead ends {3:N0}", Steps,
             Manhattan == 0 ? 1 : (double)Steps / Manhattan, NarrowCells, DeadEnds)
-        : LocalText.T("Unreachable"));
+        : LocalText.T("Unreachable")) + (FootprintSize > 1 ? LocalText.Format(" · footprint {0}×{0}", FootprintSize) : "")
+        + (Reachable ? LocalText.Format(" · minimum square fit {0}×{0}", MinimumSquareClearance) : "");
 }
 internal sealed record MapRouteResult(IReadOnlyList<MapRouteLeg> Legs);
 internal sealed record MapCandidateMetrics(int WalkableCells, int LargestArea, int TotalCells, int DeadEnds, int StampCount, int? Rooms = null)
@@ -29,13 +32,16 @@ internal static class MapRouteAnalysis
         return count;
     }
 
-    internal static MapRouteResult Analyze(MapDocument document, IReadOnlyList<MapRoutePoint> points, CancellationToken cancellation = default)
+    internal static MapRouteResult Analyze(MapDocument document, IReadOnlyList<MapRoutePoint> points, CancellationToken cancellation = default, int footprintSize = 1)
     {
         cancellation.ThrowIfCancellationRequested();
+        if (footprintSize is < 1 or > 64) throw new ArgumentOutOfRangeException(nameof(footprintSize));
         new MapDesignSettings { Points = points.ToList() }.Validate(document.Width, document.Height);
         int count = CellCount(document);
         var legs = new List<MapRouteLeg>();
         if (points.Count < 2) return new(legs);
+        var clearance = MapClearance.Build(document, cancellation);
+        bool Fits(int column, int row) => clearance.At(column, row) >= footprintSize;
         var distance = new int[count]; var queue = new int[count];
         for (int pointIndex = 1; pointIndex < points.Count; pointIndex++)
         {
@@ -43,8 +49,8 @@ internal static class MapRouteAnalysis
             var from = points[pointIndex - 1]; var to = points[pointIndex];
             int start = from.Y * document.Width + from.X, goal = to.Y * document.Width + to.X;
             int manhattan = Math.Abs(from.X - to.X) + Math.Abs(from.Y - to.Y);
-            if (!Walkable(document, from.X, from.Y) || !Walkable(document, to.X, to.Y))
-            { legs.Add(new(from, to, false, 0, manhattan, 0, 0, [])); continue; }
+            if (!Fits(from.X, from.Y) || !Fits(to.X, to.Y))
+            { legs.Add(new(from, to, false, 0, manhattan, 0, 0, []) { FootprintSize = footprintSize }); continue; }
             Array.Fill(distance, -1);
             int head = 0, tail = 0; queue[tail++] = start; distance[start] = 0;
             while (head < tail && distance[goal] < 0)
@@ -52,15 +58,17 @@ internal static class MapRouteAnalysis
                 if ((head & 4095) == 0) cancellation.ThrowIfCancellationRequested();
                 int current = queue[head++];
                 foreach (int neighbour in Neighbours(current, document.Width, document.Height))
-                    if (distance[neighbour] < 0 && Walkable(document, neighbour % document.Width, neighbour / document.Width))
+                    if (distance[neighbour] < 0 && Fits(neighbour % document.Width, neighbour / document.Width))
                     { distance[neighbour] = distance[current] + 1; queue[tail++] = neighbour; }
             }
-            if (distance[goal] < 0) { legs.Add(new(from, to, false, 0, manhattan, 0, 0, [])); continue; }
+            if (distance[goal] < 0) { legs.Add(new(from, to, false, 0, manhattan, 0, 0, []) { FootprintSize = footprintSize }); continue; }
             int cursor = goal, narrow = 0, dead = 0;
+            int minimumClearance = int.MaxValue;
             var path = new List<int>(); int stride = Math.Max(1, (distance[goal] + 4095) / 4096);
             while (true)
             {
                 if ((distance[cursor] & 4095) == 0) cancellation.ThrowIfCancellationRequested();
+                minimumClearance = Math.Min(minimumClearance, clearance.At(cursor % document.Width, cursor / document.Width));
                 int degree = 0;
                 foreach (int neighbour in Neighbours(cursor, document.Width, document.Height)) if (Walkable(document, neighbour % document.Width, neighbour / document.Width)) degree++;
                 if (degree <= 2) narrow++;
@@ -70,7 +78,8 @@ internal static class MapRouteAnalysis
                 foreach (int neighbour in Neighbours(cursor, document.Width, document.Height))
                     if (distance[neighbour] == distance[cursor] - 1) { cursor = neighbour; break; }
             }
-            path.Reverse(); legs.Add(new(from, to, true, distance[goal], manhattan, narrow, dead, path));
+            path.Reverse(); legs.Add(new(from, to, true, distance[goal], manhattan, narrow, dead, path)
+                { FootprintSize = footprintSize, MinimumSquareClearance = minimumClearance });
         }
         return new(legs);
     }

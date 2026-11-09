@@ -7,6 +7,7 @@ internal sealed class MapDesignEditor : StackPanel
     private readonly ListBox points = new() { Name = "QuickMapDesignPoints", MinHeight = 65, MaxHeight = 140 };
     private readonly ListBox regions = new() { Name = "QuickMapDesignRegions", MinHeight = 65, MaxHeight = 140 };
     private readonly TextBlock feedback = new() { Name = "QuickMapDesignFeedback", TextWrapping = TextWrapping.Wrap };
+    private readonly CheckBox required = new() { Name = "QuickMapRequireRoute", Content = LocalText.T("Require the ordered route to be reachable") };
     internal event Action? Changed;
 
     internal MapDesignEditor(MapDesignSettings design, int width, int height, Func<Rect?>? selection = null)
@@ -41,7 +42,7 @@ internal sealed class MapDesignEditor : StackPanel
             if (points.SelectedItem is not MapRoutePoint point) return;
             pointName.Text = point.Name; pointX.Value = point.X; pointY.Value = point.Y;
         };
-        var required = new CheckBox { Name = "QuickMapRequireRoute", Content = LocalText.T("Require the ordered route to be reachable"), IsChecked = design.RequireRoute };
+        required.IsChecked = design.RequireRoute;
         required.IsCheckedChanged += (_, _) => { design.RequireRoute = required.IsChecked == true; Notify(); }; Children.Add(required);
         Children.Add(Hint("Protection affects local regeneration only. Clear-object reservations check anchors and stamp footprints, not every overhanging artwork pixel."));
         Children.Add(regions);
@@ -91,6 +92,16 @@ internal sealed class MapDesignEditor : StackPanel
             if (index < 0 || target < 0 || target >= design.Points.Count) return;
             (design.Points[index], design.Points[target]) = (design.Points[target], design.Points[index]); Notify(); points.SelectedIndex = target;
         }
+    }
+
+    internal void Restore(MapDesignSettings snapshot)
+    {
+        snapshot.Validate(width, height);
+        if (design.SameAs(snapshot)) return;
+        design.Points = [.. snapshot.Points]; design.Regions = [.. snapshot.Regions]; design.RequireRoute = snapshot.RequireRoute;
+        bool toggleChanged = required.IsChecked != snapshot.RequireRoute;
+        required.IsChecked = snapshot.RequireRoute;
+        if (!toggleChanged) Notify();
     }
 
     private void Refresh()

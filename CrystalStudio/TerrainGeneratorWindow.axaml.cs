@@ -43,6 +43,7 @@ public partial class TerrainGeneratorWindow : EditorWindow
         PreviewMapInfo.Text = LocalText.Format("Apply to current map · {0} × {1} cells · One undo step. This does not create a new map.", document.Width, document.Height);
         ApplyButton.Content = LocalText.T("Apply to current map");
         RouteList.SelectedIndex = 0;
+        GenerationAlgorithms.Register(this, parameters, SchedulePreview);
         GeneratorPreferences.Restore(this, savedParameters);
         previewTimer.Tick += PreviewTimerTick;
         Loaded += LoadAvailable;
@@ -215,7 +216,8 @@ public partial class TerrainGeneratorWindow : EditorWindow
             PreviewHint.Text = LocalText.T("Preview unavailable"); FeedbackText.Text = PreviewState.Resources.Summary; PreviewState.SetPhase(GeneratorPreviewPhase.Failed); return;
         }
         if(IsIsland&&islandCoast==null){PreviewHint.Text = LocalText.T("Island artwork is unavailable");FeedbackText.Text = (islandError ?? LocalText.T("Loading the original 5.map coast artwork\u2026"));PreviewState.SetPhase(GeneratorPreviewPhase.Failed, FeedbackText.Text);return;}
-        var options = new TerrainOptions(basis, PatchList.SelectedItem as TerrainSet, PathList.SelectedItem as TerrainSet, seed, CoverageSlider.Value, ScaleSlider.Value, WidthSlider.Value, RouteList.SelectedIndex + 1,WaterMode){BridgeCrossing=BridgeToggle.IsChecked==true,Island=IsIsland};
+        var options = new TerrainOptions(basis, PatchList.SelectedItem as TerrainSet, PathList.SelectedItem as TerrainSet, seed, CoverageSlider.Value, ScaleSlider.Value, WidthSlider.Value, RouteList.SelectedIndex + 1,WaterMode)
+        { BridgeCrossing = BridgeToggle.IsChecked == true, Island = IsIsland, AlgorithmVersion = GenerationAlgorithms.Version(this), Design = GenerationAlgorithms.Design(this) };
         var requestedPieces=options.BridgeCrossing?bridgePieces:coastPieces;
         var area = Area;
         bool detail = DetailToggle.IsChecked == true;

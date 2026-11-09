@@ -10,7 +10,7 @@ internal sealed class QuickMapComparisonWindow : EditorWindow
         "RoomsSlider" => "Rooms", "SizeSlider" => "Room size", "DoorCountSlider" => "Entrances", "WidthList" => "Corridor width",
         "VegetationSlider" => "Vegetation", "ForestSlider" => "Forest", "CliffSlider" => "Cliffs", "BeachSlider" => "Beach", "RiverSlider" => "River",
         "RiverToggle" => "River", "BeachToggle" => "Beach", "BridgeToggle" => "River crossing", "TownCountSlider" => "Towns",
-        "RuinCountSlider" => "Ruins", "MineCountSlider" => "Mines", _ => key
+        "RuinCountSlider" => "Ruins", "MineCountSlider" => "Mines", GenerationAlgorithms.Parameter => "Generation algorithm", _ => key
     });
     internal static IReadOnlyList<string> Differences(IReadOnlyDictionary<string, string> left, IReadOnlyDictionary<string, string> right,
         IReadOnlyDictionary<string, string>? leftDisplay = null, IReadOnlyDictionary<string, string>? rightDisplay = null) =>
@@ -58,6 +58,8 @@ internal sealed class QuickMapComparisonWindow : EditorWindow
             var firstCandidate = first.SelectedItem as QuickMapCandidate; var secondCandidate = second.SelectedItem as QuickMapCandidate;
             var rows = Differences(firstCandidate?.Parameters ?? new Dictionary<string, string>(), secondCandidate?.Parameters ?? new Dictionary<string, string>(),
                 firstCandidate?.DisplayValues, secondCandidate?.DisplayValues);
+            if (!(firstCandidate?.CopyDesign() ?? new()).SameAs(secondCandidate?.CopyDesign() ?? new()))
+                rows = rows.Append(LocalText.T("Layout constraints differ between these candidates.")).ToArray();
             difference.Text = rows.Count == 0 ? LocalText.T("No parameter differences.") : string.Join("\n", rows);
         }
         first.SelectionChanged += (_, _) => Refresh(); second.SelectionChanged += (_, _) => Refresh();

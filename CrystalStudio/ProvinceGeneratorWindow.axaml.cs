@@ -45,6 +45,7 @@ public partial class ProvinceGeneratorWindow : EditorWindow
         ApplyButton.Content = LocalText.T("Apply to current map");
         TownCountSlider.Maximum = Math.Clamp(document.Width * document.Height / (128 * 128), 1, 8);
         StyleList.ItemsSource = ProvinceStyle.All; StyleList.SelectedIndex = 0;
+        GenerationAlgorithms.Register(this, parameters, Schedule);
         SceneList.SelectedIndex = parameters is { Count: > 0 } && !parameters.ContainsKey("SceneList") ? 0 : 1;
         GeneratorPreferences.Restore(this, savedParameters);
         timer.Tick += Generate;
@@ -177,7 +178,8 @@ public partial class ProvinceGeneratorWindow : EditorWindow
         PreviewState.SetPhase(GeneratorPreviewPhase.Checking);
         var options = new ProvinceOptions(seed, StyleList.SelectedItem as ProvinceStyle, (int)ForestSlider.Value,
             (int)CliffSlider.Value, (int)BeachSlider.Value, (int)RiverSlider.Value, (int)VegetationSlider.Value, (int)TownCountSlider.Value,
-            DoorCountSlider.IsEnabled ? (int)DoorCountSlider.Value : 0, (ProvinceScene)SceneList.SelectedIndex, (int)RuinCountSlider.Value, (int)MineCountSlider.Value);
+            DoorCountSlider.IsEnabled ? (int)DoorCountSlider.Value : 0, (ProvinceScene)SceneList.SelectedIndex, (int)RuinCountSlider.Value, (int)MineCountSlider.Value)
+        { AlgorithmVersion = GenerationAlgorithms.Version(this), Design = GenerationAlgorithms.Design(this) };
         int request = revision; bool detail = DetailToggle.IsChecked == true;
         var job = CancellationTokenSource.CreateLinkedTokenSource(lifetime.Token); pending = job;
         PreviewState.SetStage("Checking required and optional artwork…");
