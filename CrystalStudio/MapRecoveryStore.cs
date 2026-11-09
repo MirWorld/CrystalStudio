@@ -5,7 +5,8 @@ namespace CrystalStudio;
 internal sealed record MapRecoveryEntry(int Version, Guid SessionId, Guid Id, string SnapshotFile,
     string? OriginalPath, string DisplayName, DateTime SavedAtUtc, AssetSourceFormat AssetFormat, MapCreationRecipe? Recipe,
     bool IsStamp = false, int OriginX = 0, int OriginY = 0, CategorizedStamp? Category = null,
-    bool CategoryDirty = false, bool LegacyJson = false, MapDesignSettings? Design = null);
+    bool CategoryDirty = false, bool LegacyJson = false, MapDesignSettings? Design = null,
+    string? PluginId = null);
 
 internal sealed class MapRecoveryStore : IDisposable
 {
@@ -23,7 +24,8 @@ internal sealed class MapRecoveryStore : IDisposable
 
     public static MapDocument Capture(MapDocument document)
     {
-        var snapshot = new MapDocument(document.Width, document.Height) { SourceFormat = document.SourceFormat };
+        var snapshot = new MapDocument(document.Width, document.Height) { SourceFormat = document.SourceFormat,
+            PluginId = document.PluginId, PluginData = (byte[])document.PluginData.Clone() };
         foreach (var pair in document.Cells) snapshot.Set(pair.Key % document.Width, pair.Key / document.Width, pair.Value.Copy());
         snapshot.RestoreStamps(document.PlacedStamps.Select(stamp => stamp with
         {
@@ -47,13 +49,14 @@ internal sealed class MapRecoveryStore : IDisposable
             try
             {
                 snapshot.Save(target);
+                if (snapshot.PluginId != null) AtomicFile.Write(target + ".plugin", stream => stream.Write(snapshot.PluginData));
                 AtomicFile.WriteJson(manifest, new MapRecoveryEntry(1, sessionId, id, filename, originalPath, displayName,
                     DateTime.UtcNow, snapshot.SourceFormat, recipe, metadata?.IsStamp ?? false, metadata?.OriginX ?? 0, metadata?.OriginY ?? 0,
-                    metadata?.Category, metadata?.CategoryDirty ?? false, Design: metadata?.Design?.Copy()));
+                    metadata?.Category, metadata?.CategoryDirty ?? false, Design: metadata?.Design?.Copy(), PluginId: snapshot.PluginId));
             }
-            catch { if (File.Exists(target)) File.Delete(target); throw; }
+            catch { TryDelete(target); TryDelete(target + ".plugin"); throw; }
             foreach (string old in Directory.GetFiles(folder, id.ToString("N") + ".*.map"))
-                if (!string.Equals(old, target, StringComparison.OrdinalIgnoreCase)) TryDelete(old);
+                if (!string.Equals(old, target, StringComparison.OrdinalIgnoreCase)) { TryDelete(old); TryDelete(old + ".plugin"); }
         }
     }
 
@@ -118,7 +121,14 @@ internal sealed class MapRecoveryStore : IDisposable
             using var stream = File.OpenRead(path);
             return (StudioJson.Deserialize<MapRecoveryData>(stream) ?? throw new InvalidDataException("Empty recovery snapshot.")).Restore();
         }
-        return MapDocument.Load(path, entry.AssetFormat);
+        var map = MapDocument.Load(path, entry.AssetFormat);
+        map.PluginId = entry.PluginId;
+        if (entry.PluginId != null)
+        {
+            if (new FileInfo(path + ".plugin").Length > NativeMapPlugin.MaximumBytes) throw new InvalidDataException("Excessive recovery plugin data.");
+            map.PluginData = File.ReadAllBytes(path + ".plugin");
+        }
+        return map;
     }
 
     public void Delete(Guid id) => Delete(new MapRecoveryEntry(1, sessionId, id, "", null, "", DateTime.UtcNow, AssetSourceFormat.Default, null));
@@ -135,7 +145,7 @@ internal sealed class MapRecoveryStore : IDisposable
                 if (entry.SessionId != sessionId)
                     inactive = new FileStream(Path.Combine(folder, "session.lock"), FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
                 TryDelete(Path.Combine(folder, entry.Id.ToString("N") + ".json"));
-                foreach (string path in Directory.GetFiles(folder, entry.Id.ToString("N") + ".*.map")) TryDelete(path);
+                foreach (string path in Directory.GetFiles(folder, entry.Id.ToString("N") + ".*.map")) { TryDelete(path); TryDelete(path + ".plugin"); }
             }
             finally { inactive?.Dispose(); }
         }
@@ -165,7 +175,7 @@ internal sealed class MapRecoveryStore : IDisposable
             string folder = SessionFolder(sessionId);
             if (!Directory.Exists(folder)) return;
             foreach (string path in Directory.GetFiles(folder))
-                if (Path.GetExtension(path) is ".json" or ".map" or ".tmp" || Path.GetFileName(path) == "session.lock") TryDelete(path);
+                if (Path.GetExtension(path) is ".json" or ".map" or ".tmp" or ".plugin" || Path.GetFileName(path) == "session.lock") TryDelete(path);
             try { Directory.Delete(folder); }
             catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
             { StudioLog.Error("Recovery.CleanupSession", exception); }

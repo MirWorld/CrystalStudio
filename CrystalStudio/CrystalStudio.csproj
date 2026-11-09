@@ -45,5 +45,6 @@
     <Content Include="../catalogue/walls/**/walls.json" Link="catalogue/walls/%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
     <Content Update="@(Content)" ExcludeFromSingleFile="true" />
     <Content Include="../Attachments/**/*" Link="Attachments/%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" ExcludeFromSingleFile="true" />
+    <Content Include="../SDK/NativeMapPlugin/*" Link="SDK/NativeMapPlugin/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" ExcludeFromSingleFile="true" />
   </ItemGroup>
 </Project>

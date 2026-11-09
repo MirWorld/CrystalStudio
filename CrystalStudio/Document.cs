@@ -40,6 +40,8 @@ public sealed partial class MapDocument
         Width = width; Height = height;
     }
     public AssetSourceFormat SourceFormat { get; internal set; }
+    internal string? PluginId { get; set; }
+    internal byte[] PluginData { get; set; } = [];
     private readonly Dictionary<int, Cell> cells = [];
     private readonly Dictionary<int, Cell> presentationCells = [];
     private static readonly Cell empty = new();

@@ -6,7 +6,7 @@ public sealed partial class MapDocument
     {
         var area = AlignSelection(selection);
         int left = (int)area.X, top = (int)area.Y, right = (int)area.Right, bottom = (int)area.Bottom;
-        var result = new MapDocument((int)area.Width, (int)area.Height) { SourceFormat = SourceFormat };
+        var result = new MapDocument((int)area.Width, (int)area.Height) { SourceFormat = SourceFormat, PluginId = PluginId, PluginData = (byte[])PluginData.Clone() };
         foreach (var pair in cells)
         {
             int x = pair.Key % Width, y = pair.Key / Width;

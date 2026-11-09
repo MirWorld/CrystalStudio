@@ -1,0 +1,8 @@
+cmake_minimum_required(VERSION 3.20)
+project(CrystalMapPluginExample LANGUAGES CXX)
+add_library(example_plugin SHARED example.cpp)
+target_compile_features(example_plugin PRIVATE cxx_std_17)
+set_target_properties(example_plugin PROPERTIES PREFIX "" OUTPUT_NAME "example.plugin")
+if(MINGW)
+  target_link_options(example_plugin PRIVATE -static-libgcc -static-libstdc++)
+endif()
