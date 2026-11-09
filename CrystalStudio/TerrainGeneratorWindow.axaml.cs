@@ -5,6 +5,7 @@ public partial class TerrainGeneratorWindow : EditorWindow
 {
     private readonly MapDocument document;
     private readonly AssetStore assets;
+    internal AssetStore PreviewAssets => assets;
     private readonly TerrainCatalogue catalogue;
     private readonly CancellationTokenSource cancellation = new();
     private readonly DispatcherTimer previewTimer = new(DispatcherPriority.Background) { Interval = TimeSpan.FromMilliseconds(350) };
@@ -30,6 +31,8 @@ public partial class TerrainGeneratorWindow : EditorWindow
     private TerrainArea cachedArea;
     private Point? inspectionCentre;
     private Rect displayedRegion;
+    private bool displayedPadded;
+    internal (Rect Region, bool Padded) DesignFrame => (displayedRegion, displayedPadded);
     internal GeneratorPreviewState PreviewState { get; } = new();
     internal GeneratorWorkflow Workflow { get; }
     public TerrainPlan? Plan { get; private set; }
@@ -254,6 +257,7 @@ public partial class TerrainGeneratorWindow : EditorWindow
             PreviewImage.Source = bitmap; PreviewImage.Opacity = 1;
             Plan = plan; ApplyButton.IsEnabled = true; PreviewHint.IsVisible = false;
             displayedRegion = TerrainPreview.Region(plan, detail, inspectionCentre);
+            displayedPadded = plan.CoastObjects.Count > 0;
             FeedbackText.Text = string.Concat(string.Concat(string.Concat(string.Concat(LocalText.Format("{0:N0} ground tiles",plan.Tiles.Count), ((plan.Water==null ? ("") : LocalText.Format(" + {0:N0} native bank sprites",plan.Water.Banks.Count)))), (string.Concat(plan.CoastObjects.Select(c=>$" + {c.Layout.Name}")))), LocalText.Format(" · Area {0},{1} — {2}×{3} cells · Seed {4}. Apply creates one undo step; existing objects and collisions are preserved.",plan.Area.X,plan.Area.Y,plan.Area.Width,plan.Area.Height,seed)), ((plan.Notes.Count==0 ? ("") : string.Concat(("\n"), (string.Join(" ",plan.Notes))))));
             PreviewState.SetImpact(cachedImpact); PreviewState.Complete();
         }

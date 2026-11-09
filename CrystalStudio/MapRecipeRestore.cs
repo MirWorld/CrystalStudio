@@ -19,6 +19,8 @@ internal static class MapRecipeRestore
         if (MapDimensions.CreationError(recipe.Width, recipe.Height, recipe.Kind) is { } error)
             throw new InvalidDataException(LocalText.T(error));
         recipe.Design?.Validate(recipe.Width, recipe.Height);
+        if (recipe.DecorationNames is { } names && (names.Count > 1000 || names.Any(name => string.IsNullOrWhiteSpace(name) || name.Length > 512) || names.Distinct(StringComparer.Ordinal).Count() != names.Count))
+            throw new InvalidDataException("Invalid decoration variation scope.");
         GenerationAlgorithms.Read(recipe.Parameters);
     }
 

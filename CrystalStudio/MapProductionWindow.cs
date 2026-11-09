@@ -20,7 +20,7 @@ internal sealed class MapProductionWindow : EditorWindow
     internal MapProductionWindow(MapDocument source, AssetStore? assets, MapDesignSettings design, MapCreationRecipe? recipe,
         Func<MapCreationRecipe, IReadOnlyList<string>> compatibility, Action designChanged, Action<int, int> locate,
         Func<Rect?> selection, Func<EditorWindow, MapCreationKind, PartialGenerationLayer, CancellationToken, Task<string?>> regenerate,
-        Func<EditorWindow, CancellationToken, Task<string?>> export)
+        Func<EditorWindow, CancellationToken, Task<string?>> export, MapCreationReview? creationReview = null)
     {
         this.source = source; this.compatibility = compatibility;
         Title = LocalText.T("Map production tools"); Width = 1100; Height = 780; MinWidth = 780; MinHeight = 520;
@@ -35,6 +35,7 @@ internal sealed class MapProductionWindow : EditorWindow
         Avalonia.Automation.AutomationProperties.SetLiveSetting(feedback, Avalonia.Automation.AutomationLiveSetting.Polite);
         footer.Children.Add(new Button { Content = LocalText.T("Close"), IsCancel = true, Margin = new Thickness(8, 0, 0, 0) });
         Grid.SetRow(footer, 2); root.Children.Add(footer); Content = root;
+        if (creationReview != null) tabs.Items.Add(new TabItem { Header = LocalText.T("Creation handoff"), Content = new MapCreationReviewView(this, source, design, creationReview, assets, locate) });
 
         var route = new Grid { ColumnDefinitions = new ColumnDefinitions("340,*"), ColumnSpacing = 16 };
         var editor = new MapDesignEditor(design, source.Width, source.Height, selection);
@@ -75,6 +76,7 @@ internal sealed class MapProductionWindow : EditorWindow
             routeImage.Source = null; routeBitmap?.Dispose(); routeImage.Source = routeBitmap = MapRouteAnalysis.Draw(snapshot, result.Route, markers);
             analyzedRevision = revision;
             analyzedDesign = markers;
+            creationReview?.RecordCheck(source, markers, result.Check);
             return (result.Route.Legs.Count == 0 ? LocalText.T("Add at least two ordered points to analyze a route.") :
                 LocalText.Format("Route analysis complete: {0}/{1} legs reachable.", result.Route.Legs.Count(leg => leg.Reachable), result.Route.Legs.Count)) + "\n" +
                 (!markers.RequireRoute && result.Route.Legs.Any(leg => !leg.Reachable) ? LocalText.T("The ordered route is advisory. Enable the required-route option to make reachability a creation constraint.") + "\n" : "") +
@@ -180,6 +182,7 @@ internal sealed class MapProductionWindow : EditorWindow
             var differences = compatibility(value);
             description = LocalText.Format("Recipe source: {0}", origin) + "\n" + MapCreationTemplates.KindLabel(value.Kind) + $" · {value.Width} × {value.Height}\n" +
                 value.CreatedAtUtc.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss") + "\n" + value.GeneratorVersion + "\n" + LocalText.Format("Seed {0}", value.Parameters.GetValueOrDefault("SeedBox", "—")) + "\n\n" +
+                (value.DecorationSeed is { } decorationSeed ? LocalText.Format("Decoration variation seed: {0}. The base layout is rebuilt and structure-checked before varying decoration.", decorationSeed) + "\n" : "") +
                 (differences.Count == 0 ? LocalText.T("Recorded versions match current identities; exact reconstruction is still not guaranteed.") : string.Join("\n", differences)) +
                 (value.Width == source.Width && value.Height == source.Height ? "" : "\n\n" + LocalText.T("The recipe size differs from this map. Restoration uses the recipe dimensions in a new map.")) +
                 "\n\n" + LocalText.T("Missing choices or unsupported parameters may fall back to available controls. Review the restored preview before creating.");

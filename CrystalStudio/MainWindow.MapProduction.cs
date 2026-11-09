@@ -34,7 +34,7 @@ public partial class MainWindow
             }, () =>
             {
                 Viewport.History.MarkUnsaved(); map.RecoveryRevision = -1; map.RecoveryVersion++; UpdateMapTabLabels(); UpdateLabels();
-            }, (column, row) => Viewport.LocateCell(column, row), () => Viewport.Selection, RegenerateSelectionAsync, ExportDeliveryAsync) { Owner = this };
+            }, (column, row) => Viewport.LocateCell(column, row), () => Viewport.Selection, RegenerateSelectionAsync, ExportDeliveryAsync, map.CreationReview) { Owner = this };
             if (dialog.ShowDialog() == true && dialog.SelectedRecipe is { } restored) await QuickCreateAsync(restored);
         }
         catch (Exception exception) { StudioLog.Error("MapProduction", exception); MessageBox.Show(this, exception.Message, "Map production tools"); }

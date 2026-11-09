@@ -21,6 +21,8 @@ internal sealed record MapCreationRecipe(int Version, DateTime CreatedAtUtc, Map
 {
     public Dictionary<string, string> LibraryVersions { get; init; } = [];
     public MapDesignSettings? Design { get; init; }
+    public int? DecorationSeed { get; init; }
+    public List<string>? DecorationNames { get; init; }
 }
 
 internal sealed class MapCreationStore
@@ -148,7 +150,7 @@ internal sealed class MapCreationStore
         }
         return new(1, DateTime.UtcNow, kind, document.Width, document.Height, document.SourceFormat,
             settings.LibraryFolder, "CrystalStudio/" + typeof(MainWindow).Assembly.GetName().Version + "/quick-map-v5" +
-                (GenerationAlgorithms.Read(parameters) >= GenerationAlgorithms.Refined ? "/algorithm-v" + GenerationAlgorithms.Read(parameters) : ""), new(parameters), hashes) { LibraryVersions = libraries };
+                (GenerationAlgorithms.Read(parameters) >= GenerationAlgorithms.Refined ? "/algorithm-v" + GenerationAlgorithms.Read(parameters) : "") + "/workflow-v1", new(parameters), hashes) { LibraryVersions = libraries };
     }
 
     public static void SaveRecipe(string mapPath, MapCreationRecipe recipe) => AtomicFile.WriteJson(mapPath + ".creation.json", recipe);

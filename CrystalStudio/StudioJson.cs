@@ -48,6 +48,7 @@ internal static class StudioJson
 [JsonSerializable(typeof(MapCreationPresetPackage))]
 [JsonSerializable(typeof(MapCreationRecipe))]
 [JsonSerializable(typeof(MapDesignFile))]
+[JsonSerializable(typeof(QuickMapDraft))]
 [JsonSerializable(typeof(MapDeliveryReport))]
 [JsonSerializable(typeof(MapRecoveryEntry))]
 [JsonSerializable(typeof(MapRecoveryData))]

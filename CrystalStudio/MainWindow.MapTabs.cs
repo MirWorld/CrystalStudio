@@ -11,6 +11,7 @@ public partial class MainWindow
         public bool KeepSourceFormat;
         public MapCreationRecipe? Recipe;
         public MapDesignSettings Design = new();
+        public MapCreationReview? CreationReview;
         public DateTime? LastSavedAt;
         public DateTime? LastRecoveryAt;
         public bool RecoveryFailed;

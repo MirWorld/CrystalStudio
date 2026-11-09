@@ -35,11 +35,26 @@ public partial class MainWindow
         var initial = recipe != null ? new MapCreationSettings(recipe.Kind, recipe.Width, recipe.Height, "RecreatedMap", MapCreationPaths.DefaultDirectory(settings.LibraryFolder), false)
             : creationStore.Data.Last ?? new MapCreationSettings(availability.GetValueOrDefault(MapCreationKind.Province) == null ? MapCreationKind.Province : MapCreationKind.Blank);
         var session = new MapCreationSession(initial, recipe?.Parameters ?? creationStore.Parameters(initial.Kind)) { Design = recipe?.Design?.Copy() ?? new() };
+        session.RequestedDecorationSeed = recipe?.DecorationSeed;
+        session.DecorationNames = recipe?.DecorationNames?.ToList();
+        session.DraftStore = new QuickMapDraftStore(Path.Combine(Path.GetDirectoryName(creationStore.FilePath)!, "quick-map-draft.json"));
+        session.RecipeFactory = () => MapCreationStore.Recipe(new MapDocument(session.Settings.Width, session.Settings.Height) { SourceFormat = settings.AssetFormat },
+            session.Settings.Kind, session.Parameters, settings, assets) with { Design = session.Design.Copy(), DecorationSeed = session.DecorationVariant?.Seed ?? session.RequestedDecorationSeed, DecorationNames = session.DecorationNames?.ToList() };
         using var candidates = session.Candidates;
         bool ConfigureSetup(EditorWindow owner, bool returning)
         {
             var dialog = new NewMapWindow(MapCreationPaths.DefaultDirectory(settings.LibraryFolder), availability,
                 session.Settings, creationStore, returning ? session : null, !returning && recipe != null ? session.Parameters : null) { Owner = owner };
+            if (!returning && recipe == null && session.DraftStore.Exists) dialog.OfferDraft(() =>
+            {
+                var saved = session.DraftStore.Load();
+                var current = MapCreationStore.Recipe(new MapDocument(saved.Settings.Width, saved.Settings.Height) { SourceFormat = settings.AssetFormat }, saved.Settings.Kind, saved.Recipe.Parameters, settings, assets);
+                var differences = MapRecipeRestore.Differences(saved.Recipe, current);
+                if (differences.Count > 0 && MessageBox.Show(dialog, string.Join("\n", differences.Take(12)) + "\n\n" +
+                    LocalText.T("Artwork or generator versions differ. Restore parameters, markers and favorite recipes only? Old previews, check results and decoration variants will not be restored."),
+                    "Resume creation task", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes) return false;
+                QuickMapDraftStore.Restore(saved, session, differences.Count == 0); return true;
+            }, session);
             if (dialog.ShowDialog() != true || dialog.Result is not { } result) return false;
             session.Update(result, dialog.SelectedParameters, dialog.PresetNameBox.Text?.Trim() ?? "");
             return true;
@@ -86,7 +101,8 @@ public partial class MainWindow
                 if (navigation.RestartRequested) continue;
                 if (!accepted) return;
                 session.RememberParameters(GeneratorPreferences.Capture(preview));
-                if (preview is TerrainGeneratorWindow { Plan: { } terrain })
+                if (session.Output is { } chosenOutput) document = MapRecoveryStore.Capture(chosenOutput);
+                else if (preview is TerrainGeneratorWindow { Plan: { } terrain })
                 {
                     var staging = new MapViewport();
                     try { staging.SetDocument(draft); staging.ApplyTerrain(terrain); }
@@ -104,6 +120,9 @@ public partial class MainWindow
             activeMap!.Name = request.Name; activeMap.KeepSourceFormat = true;
             activeMap.Design = session.Design.Copy();
             RememberGeneration(request.Kind, parameters);
+            if (activeMap.Recipe is { } generatedRecipe) activeMap.Recipe = generatedRecipe with { DecorationSeed = session.DecorationVariant?.Seed, DecorationNames = session.DecorationVariant == null ? null : session.DecorationNames?.ToList() };
+            activeMap.CreationReview = await Task.Run(() => new MapCreationReview(document, session.Design, activeMap.Recipe));
+            try { if (session.DraftSaved) session.DraftStore.Clear(); } catch (Exception exception) { StudioLog.Error("QuickMap.ClearDraft", exception); }
             try
             {
                 creationStore.Data.Last = request;

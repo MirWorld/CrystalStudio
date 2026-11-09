@@ -10,7 +10,15 @@ internal sealed class MapDesignEditor : StackPanel
     private readonly CheckBox required = new() { Name = "QuickMapRequireRoute", Content = LocalText.T("Require the ordered route to be reachable") };
     internal NumericUpDown Footprint { get; }
     private bool restoring;
+    private readonly ComboBox pointRole = new() { Name = "QuickMapPointRole", ItemsSource = Enum.GetValues<MapPointRole>(), ItemTemplate = LocalText.ChoiceTemplate, SelectedIndex = 0, MinWidth = 130 };
+    private readonly NumericUpDown pointClear = Number("QuickMapPointClearance", 0, 32, 0);
+    private readonly NumericUpDown minimumSteps = Number("QuickMapMinimumSteps", 0, 124000000, 0);
+    private readonly NumericUpDown maximumSteps = Number("QuickMapMaximumSteps", 0, 124000000, 0);
+    private readonly CheckBox targetCrossing = new() { Name = "QuickMapTargetCrossing", Content = LocalText.T("Require crossing the target footprint before the exit") };
+    private readonly CheckBox intentRequired = new() { Name = "QuickMapIntentRequired", Content = LocalText.T("Treat enabled design-intent checks as required") };
     internal event Action? Changed;
+    internal event Action<int, int>? SelectionChanged;
+    internal void Select(int point, int region) { points.SelectedIndex = point; regions.SelectedIndex = region; }
 
     internal MapDesignEditor(MapDesignSettings design, int width, int height, Func<Rect?>? selection = null)
     {
@@ -31,30 +39,49 @@ internal sealed class MapDesignEditor : StackPanel
         var pointName = new TextBox { Name = "QuickMapPointName", Watermark = LocalText.T("Point name"), MaxLength = 80 };
         var pointX = Number("QuickMapPointX", 0, width - 1, width / 2); var pointY = Number("QuickMapPointY", 0, height - 1, height / 2);
         Children.Add(pointName); Children.Add(Fields(("X", pointX), ("Y", pointY)));
+        Children.Add(Fields(("Point role", pointRole), ("Clear radius (0 disables)", pointClear)));
         var pointActions = new WrapPanel(); Children.Add(pointActions);
         Add(pointActions, "Add route point", () =>
         {
             if (design.Points.Count >= 32) throw new InvalidOperationException(LocalText.T("Use at most 32 route points and 64 design regions."));
-            design.Points.Add(new(Label(pointName, "Point", design.Points.Count), Value(pointX), Value(pointY))); Notify(); points.SelectedIndex = design.Points.Count - 1;
+            design.Points.Add(new(Label(pointName, "Point", design.Points.Count), Value(pointX), Value(pointY)) { Role = (MapPointRole)pointRole.SelectedIndex, ClearRadius = Value(pointClear) }); Notify(); points.SelectedIndex = design.Points.Count - 1;
         });
         var updatePoint = Add(pointActions, "Update selected", () =>
         {
             int index = points.SelectedIndex;
             if (index < 0) return;
-            design.Points[index] = new(Label(pointName, "Point", index), Value(pointX), Value(pointY)); Notify(); points.SelectedIndex = index;
+            design.Points[index] = new(Label(pointName, "Point", index), Value(pointX), Value(pointY)) { Role = (MapPointRole)pointRole.SelectedIndex, ClearRadius = Value(pointClear) }; Notify(); points.SelectedIndex = index;
         });
         var removePoint = Add(pointActions, "Remove point", () => { if (points.SelectedItem is MapRoutePoint point) { design.Points.Remove(point); Notify(); } });
         var moveUp = Add(pointActions, "Move up", () => Move(-1)); var moveDown = Add(pointActions, "Move down", () => Move(1));
         updatePoint.Name = "QuickMapUpdatePoint"; removePoint.Name = "QuickMapRemovePoint"; moveUp.Name = "QuickMapMovePointUp"; moveDown.Name = "QuickMapMovePointDown";
         points.SelectionChanged += (_, _) =>
         {
+            SelectionChanged?.Invoke(points.SelectedIndex, -1);
             updatePoint.IsEnabled = removePoint.IsEnabled = points.SelectedIndex >= 0;
             moveUp.IsEnabled = points.SelectedIndex > 0; moveDown.IsEnabled = points.SelectedIndex >= 0 && points.SelectedIndex < design.Points.Count - 1;
             if (points.SelectedItem is not MapRoutePoint point) return;
             pointName.Text = point.Name; pointX.Value = point.X; pointY.Value = point.Y;
+            pointRole.SelectedIndex = (int)point.Role; pointClear.Value = point.ClearRadius;
         };
         required.IsChecked = design.RequireRoute;
         required.IsCheckedChanged += (_, _) => { if (!restoring) { design.RequireRoute = required.IsChecked == true; Notify(); } }; Children.Add(required);
+        minimumSteps.Value = design.MinimumRouteSteps; maximumSteps.Value = design.MaximumRouteSteps;
+        targetCrossing.IsChecked = design.RequireTargetCrossing; intentRequired.IsChecked = design.IntentRequired;
+        var intent = new StackPanel { Spacing = 5 };
+        intent.Children.Add(Fields(("Minimum ordered steps (0 disables)", minimumSteps), ("Maximum ordered steps (0 disables)", maximumSteps)));
+        intent.Children.Add(targetCrossing); intent.Children.Add(intentRequired);
+        intent.Children.Add(Hint("Roles are editor metadata, not NPCs or quests. Limits measure four-way path cells, not play time. Target crossing is a spatial bottleneck check; all checks are opt-in."));
+        Children.Add(new Expander { Header = LocalText.T("Design intent (optional)"), Content = intent });
+        void IntentChanged()
+        {
+            if (restoring) return;
+            try { design.MinimumRouteSteps = Value(minimumSteps); design.MaximumRouteSteps = Value(maximumSteps);
+                design.RequireTargetCrossing = targetCrossing.IsChecked == true; design.IntentRequired = intentRequired.IsChecked == true; Notify(); }
+            catch (InvalidOperationException exception) { feedback.Text = exception.Message; Changed?.Invoke(); }
+        }
+        minimumSteps.ValueChanged += (_, _) => IntentChanged(); maximumSteps.ValueChanged += (_, _) => IntentChanged();
+        targetCrossing.IsCheckedChanged += (_, _) => IntentChanged(); intentRequired.IsCheckedChanged += (_, _) => IntentChanged();
         Children.Add(Hint("Protection affects local regeneration only. Clear-object reservations check anchors and stamp footprints, not every overhanging artwork pixel."));
         Children.Add(regions);
         var regionName = new TextBox { Name = "QuickMapRegionName", Watermark = LocalText.T("Region name"), MaxLength = 80 }; Children.Add(regionName);
@@ -88,6 +115,7 @@ internal sealed class MapDesignEditor : StackPanel
         });
         regions.SelectionChanged += (_, _) =>
         {
+            SelectionChanged?.Invoke(-1, regions.SelectedIndex);
             updateRegion.IsEnabled = removeRegion.IsEnabled = regions.SelectedIndex >= 0;
             if (regions.SelectedItem is not MapDesignRegion region) return;
             regionName.Text = region.Name; regionX.Value = region.X; regionY.Value = region.Y;
@@ -114,12 +142,16 @@ internal sealed class MapDesignEditor : StackPanel
         {
             design.Points = [.. snapshot.Points]; design.Regions = [.. snapshot.Regions]; design.RequireRoute = snapshot.RequireRoute; design.FootprintSize = snapshot.FootprintSize;
             required.IsChecked = snapshot.RequireRoute; Footprint.Value = snapshot.FootprintSize;
+            design.MinimumRouteSteps = snapshot.MinimumRouteSteps; design.MaximumRouteSteps = snapshot.MaximumRouteSteps;
+            design.RequireTargetCrossing = snapshot.RequireTargetCrossing; design.IntentRequired = snapshot.IntentRequired;
+            minimumSteps.Value = snapshot.MinimumRouteSteps; maximumSteps.Value = snapshot.MaximumRouteSteps;
+            targetCrossing.IsChecked = snapshot.RequireTargetCrossing; intentRequired.IsChecked = snapshot.IntentRequired;
         }
         finally { restoring = false; }
         Notify();
     }
 
-    internal void EnsureValid() { Value(Footprint); design.Validate(width, height); }
+    internal void EnsureValid() { Value(Footprint); Value(minimumSteps); Value(maximumSteps); design.Validate(width, height); }
     internal bool InputValid { get { try { EnsureValid(); return true; } catch (Exception exception) when (exception is InvalidOperationException or System.IO.InvalidDataException) { return false; } } }
 
     private void Refresh()

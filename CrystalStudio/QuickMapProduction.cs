@@ -32,6 +32,16 @@ internal sealed class QuickMapProduction : StackPanel
     private CancellationTokenSource? pending;
     private bool closed, confirming;
     internal event Action? CandidatesChanged;
+    internal MapDesignEditor DesignEditor => editor;
+    internal bool IsBusy => confirming || session.BatchRunning || session.VariationBusy;
+    internal event Action<MapConstraintFinding>? LocateRequested;
+    internal event Action<IReadOnlyList<MapConstraintFinding>>? FindingsChanged;
+    private readonly ListBox issues = new() { Name = "QuickMapConstraintIssues", MaxHeight = 180 };
+    private readonly Button check = new() { Name = "QuickMapCheckLayout", Content = LocalText.T("Check current layout") };
+    private readonly Button locate = new() { Name = "QuickMapLocateIssue", Content = LocalText.T("Locate selected issue"), IsEnabled = false };
+    private object? checkedPlan;
+    private MapDocument? checkedOutput;
+    private MapDesignSettings? checkedDesign;
 
     internal QuickMapProduction(EditorWindow window, MapCreationSession session, GeneratorPreviewState state, Button apply)
     {
@@ -39,6 +49,12 @@ internal sealed class QuickMapProduction : StackPanel
         editor = new(session.Design, session.Settings.Width, session.Settings.Height);
         GenerationAlgorithms.SetDesign(window, session.Design);
         Children.Add(new Expander { Header = LocalText.T("Route points, reservations and protection"), Content = editor, HorizontalAlignment = HorizontalAlignment.Stretch });
+        issues.ItemTemplate = new FuncDataTemplate<MapConstraintFinding>((finding, _) => new TextBlock { Text = finding?.ToString(), TextWrapping = TextWrapping.Wrap, Margin = new Thickness(4) });
+        var issueActions = new WrapPanel(); issueActions.Children.Add(check); issueActions.Children.Add(locate);
+        Children.Add(issueActions); Children.Add(issues);
+        check.Click += async (_, _) => await CheckAsync(false);
+        issues.SelectionChanged += (_, _) => locate.IsEnabled = issues.SelectedItem is MapConstraintFinding;
+        locate.Click += (_, _) => { if (issues.SelectedItem is MapConstraintFinding finding) LocateRequested?.Invoke(finding); };
         string ReservationHint() => GenerationAlgorithms.UsesConstraints(GenerationAlgorithms.Version(window))
             ? "Required reservations guide placement before decoration. Required routes reserve an existing collision-free path; no road is carved automatically. Incompatible native structures still fail explicitly. Preferences only warn; protection regions retain their local-regeneration meaning."
             : "Reservations filter generated layouts; they do not carve roads or place server entities. Required conflicts block creation; preferences only warn. Search may find no matching seed.";
@@ -75,6 +91,7 @@ internal sealed class QuickMapProduction : StackPanel
         }
         editor.Changed += () =>
         {
+            InvalidateFindings();
             SettingsChanged(); GenerationAlgorithms.SetDesign(window, session.Design);
             if (!session.BatchRunning && !confirming) apply.IsEnabled = editor.InputValid && CurrentPlan(window) != null && state.Phase == GeneratorPreviewPhase.Ready;
             start.IsEnabled = editor.InputValid && !session.BatchRunning && !confirming && CanSearch;
@@ -82,18 +99,34 @@ internal sealed class QuickMapProduction : StackPanel
         foreach (var number in new[] { attempts, minimumWalkable, minimumConnected, minimumRooms }) number.ValueChanged += (_, _) => SettingsChanged();
         state.Changed += (_, _) =>
         {
+            check.IsEnabled = !IsBusy && editor.InputValid && state.Phase == GeneratorPreviewPhase.Ready;
+            if (state.Phase != GeneratorPreviewPhase.Ready || checkedPlan != null && (!ReferenceEquals(checkedPlan, CurrentPlan(window)) || !ReferenceEquals(checkedOutput, session.Output) || checkedDesign?.SameAs(session.Design) != true)) InvalidateFindings();
+            if (state.Phase == GeneratorPreviewPhase.Failed && state.FailureDetails is { Findings.Count: > 0 } failure) PublishFindings(failure.Findings);
             reservationHint.Text = LocalText.T(ReservationHint());
             start.IsEnabled = editor.InputValid && !session.BatchRunning && !confirming && CanSearch;
             if (session.BatchRunning || confirming || !editor.InputValid) apply.IsEnabled = false;
         };
-        window.Closed += (_, _) => { closed = true; pending?.Cancel(); };
+        session.OutputChanged += InvalidateFindings;
+        window.Closed += (_, _) => { closed = true; pending?.Cancel(); session.OutputChanged -= InvalidateFindings; };
         start.IsEnabled = CanSearch;
     }
 
     internal void RestoreDesign(MapDesignSettings design) => editor.Restore(design);
 
-    private bool CanSearch => state.Phase == GeneratorPreviewPhase.Ready ||
-        GenerationAlgorithms.UsesConstraints(GenerationAlgorithms.Version(window)) && state.Phase == GeneratorPreviewPhase.Failed;
+    private void InvalidateFindings()
+    {
+        if (checkedPlan != null) feedback.Text = LocalText.T("The map or design changed. Previous checks are stale; check again.");
+        checkedPlan = null; checkedOutput = null; checkedDesign = null; issues.ItemsSource = null; locate.IsEnabled = false;
+        FindingsChanged?.Invoke([]);
+    }
+
+    private void PublishFindings(IReadOnlyList<MapConstraintFinding> findings)
+    {
+        issues.ItemsSource = findings; locate.IsEnabled = false; FindingsChanged?.Invoke(findings);
+    }
+
+    private bool CanSearch => !session.StructureLocked && !session.VariationBusy && (state.Phase == GeneratorPreviewPhase.Ready ||
+        GenerationAlgorithms.UsesConstraints(GenerationAlgorithms.Version(window)) && state.Phase == GeneratorPreviewPhase.Failed);
 
     internal static object? CurrentPlan(EditorWindow window) => window switch
     {
@@ -124,28 +157,33 @@ internal sealed class QuickMapProduction : StackPanel
         TempleGeneratorWindow dungeon => dungeon.OverviewPreview, _ => null
     };
 
-    internal async Task<bool> ConfirmAsync()
+    internal Task<bool> ConfirmAsync() => CheckAsync(true);
+
+    internal async Task<bool> CheckAsync(bool creating)
     {
-        if (session.BatchRunning || confirming || closed || state.Phase != GeneratorPreviewPhase.Ready || CurrentPlan(window) is not { } plan) return false;
+        if (IsBusy || closed || state.Phase != GeneratorPreviewPhase.Ready || CurrentPlan(window) is not { } plan) return false;
         try { editor.EnsureValid(); }
         catch (Exception exception) { feedback.Text = exception.Message; return false; }
-        if (session.Design.Empty) return true;
+        if (session.Design.Empty && creating) return true;
         confirming = true; apply.IsEnabled = false;
         using var job = new CancellationTokenSource(); pending = job;
         var locked = LockInputs(); editor.IsEnabled = false; start.IsEnabled = restore.IsEnabled = false;
         stop.Content = LocalText.T("Stop check"); stop.IsEnabled = true;
         var design = session.Design.Copy(); string identity = Convert.ToBase64String(StudioJson.SerializeToUtf8Bytes(new MapDesignFile(1, session.Settings.Width, session.Settings.Height, design)));
+        var output = session.Output;
         bool Current() => !closed && !job.IsCancellationRequested && state.Phase == GeneratorPreviewPhase.Ready && ReferenceEquals(CurrentPlan(window), plan) &&
+            ReferenceEquals(output, session.Output) &&
             identity == Convert.ToBase64String(StudioJson.SerializeToUtf8Bytes(new MapDesignFile(1, session.Settings.Width, session.Settings.Height, session.Design)));
         try
         {
             feedback.Text = LocalText.T("Checking layout constraints…");
-            var check = await Task.Run(() => MapDesignConstraints.Check(Materialize(plan, job.Token), design, job.Token), job.Token);
+            var check = await Task.Run(() => MapDesignConstraints.Check(output ?? Materialize(plan, job.Token), design, job.Token), job.Token);
             job.Token.ThrowIfCancellationRequested();
             if (!Current()) { if (!closed) feedback.Text = LocalText.T("The preview or constraints changed. Check the current preview again."); return false; }
+            checkedPlan = plan; checkedOutput = output; checkedDesign = design; PublishFindings(check.Findings);
             feedback.Text = check.Findings.Count == 0 ? LocalText.T("All layout constraints are satisfied.") : string.Join("\n", check.Findings);
-            if (!check.Accepted) MessageBox.Show(window, feedback.Text, "Layout constraints", MessageBoxButton.OK, MessageBoxImage.Warning);
-            else if (check.Findings.Count > 0 && MessageBox.Show(window, feedback.Text + "\n\n" + LocalText.T("Preferred constraints were not met. Create this map anyway?"), "Layout constraints", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return false;
+            if (creating && !check.Accepted) MessageBox.Show(window, feedback.Text, "Layout constraints", MessageBoxButton.OK, MessageBoxImage.Warning);
+            else if (creating && check.Findings.Count > 0 && MessageBox.Show(window, feedback.Text + "\n\n" + LocalText.T("Preferred constraints were not met. Create this map anyway?"), "Layout constraints", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return false;
             return check.Accepted && Current();
         }
         catch (OperationCanceledException) { if (!closed) feedback.Text = LocalText.T("Operation cancelled. No pending changes were applied."); return false; }

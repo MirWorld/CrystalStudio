@@ -17,7 +17,7 @@ internal sealed class QuickMapComparisonWindow : EditorWindow
         left.Keys.Concat(right.Keys).Distinct().Order().Where(key => left.GetValueOrDefault(key) != right.GetValueOrDefault(key))
             .Select(key => ParameterLabel(key) + ": " + LocalText.T((leftDisplay ?? left).GetValueOrDefault(key, "—")) + " → " + LocalText.T((rightDisplay ?? right).GetValueOrDefault(key, "—"))).ToArray();
 
-    internal QuickMapComparisonWindow(QuickMapCandidate[] candidates, QuickMapCandidate? selected, bool moduleLayout = false)
+    internal QuickMapComparisonWindow(QuickMapCandidate[] candidates, QuickMapCandidate? selected, bool moduleLayout = false, MapCreationSession? session = null)
     {
         Title = LocalText.T("Compare candidates A / B"); Width = 1060; Height = 680; MinWidth = 660; MinHeight = 440;
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
@@ -49,10 +49,17 @@ internal sealed class QuickMapComparisonWindow : EditorWindow
         }
         Grid.SetRow(views, 1); root.Children.Add(views);
         var difference = new TextBlock { Name = "QuickMapParameterDifferences", TextWrapping = TextWrapping.Wrap, Foreground = Brushes.DarkOrange };
+        int? savedFirst = session?.CompareAIndex, savedSecond = session?.CompareBIndex;
         var differences = new ScrollViewer { Content = difference, MaxHeight = 120, Margin = new Thickness(0, 8) };
         Grid.SetRow(differences, 2); root.Children.Add(differences);
         void Refresh()
         {
+            if (session != null)
+            {
+                session.CompareAIndex = first.SelectedItem is QuickMapCandidate firstItem ? session.Candidates.Items.ToList().IndexOf(firstItem) : null;
+                session.CompareBIndex = second.SelectedItem is QuickMapCandidate secondItem ? session.Candidates.Items.ToList().IndexOf(secondItem) : null;
+                session.NotifyDraft();
+            }
             leftImage.Source = (first.SelectedItem as QuickMapCandidate)?.Comparison;
             rightImage.Source = (second.SelectedItem as QuickMapCandidate)?.Comparison;
             var firstCandidate = first.SelectedItem as QuickMapCandidate; var secondCandidate = second.SelectedItem as QuickMapCandidate;
@@ -65,6 +72,11 @@ internal sealed class QuickMapComparisonWindow : EditorWindow
         first.SelectionChanged += (_, _) => Refresh(); second.SelectionChanged += (_, _) => Refresh();
         second.SelectedItem = selected != null && candidates.Contains(selected) ? selected : candidates.LastOrDefault();
         first.SelectedItem = candidates.FirstOrDefault(candidate => !ReferenceEquals(candidate, second.SelectedItem)) ?? candidates.FirstOrDefault();
+        if (session != null)
+        {
+            if (savedFirst is { } firstIndex && firstIndex >= 0 && firstIndex < session.Candidates.Items.Count && candidates.Contains(session.Candidates.Items[firstIndex])) first.SelectedItem = session.Candidates.Items[firstIndex];
+            if (savedSecond is { } secondIndex && secondIndex >= 0 && secondIndex < session.Candidates.Items.Count && candidates.Contains(session.Candidates.Items[secondIndex])) second.SelectedItem = session.Candidates.Items[secondIndex];
+        }
         var actions = new WrapPanel();
         var zoom = new TextBlock { Name = "QuickMapCompareZoom", Text = "100%", VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 8, 0) };
         left.ViewChanged += () => zoom.Text = $"{left.Zoom:P0}"; right.ViewChanged += () => zoom.Text = $"{right.Zoom:P0}";

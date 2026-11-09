@@ -5,6 +5,7 @@ public partial class ProvinceGeneratorWindow : EditorWindow
 {
     private readonly MapDocument document;
     private readonly AssetStore assets;
+    internal AssetStore PreviewAssets => assets;
     private readonly WallCatalogue? suppliedWalls;
     private readonly CancellationTokenSource lifetime = new();
     private readonly SemaphoreSlim worker = new(1);
@@ -25,6 +26,7 @@ public partial class ProvinceGeneratorWindow : EditorWindow
     private Point? inspectionCentre;
     private Point? detailCentre;
     private Rect displayedRegion;
+    internal (Rect Region, bool Padded) DesignFrame => (displayedRegion, true);
     internal GeneratorPreviewState PreviewState { get; } = new();
     internal GeneratorWorkflow Workflow { get; }
     private RasterImage? overview, detailPreview;

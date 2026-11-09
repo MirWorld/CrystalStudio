@@ -2,7 +2,12 @@ using System.IO;
 
 namespace CrystalStudio;
 
-internal sealed record MapRoutePoint(string Name, int X, int Y);
+internal enum MapPointRole { None, Entry, Target, Exit }
+internal sealed record MapRoutePoint(string Name, int X, int Y)
+{
+    public MapPointRole Role { get; init; }
+    public int ClearRadius { get; init; }
+}
 internal enum MapRegionPurpose { Protect, ClearObjects, Walkable }
 internal sealed record MapDesignRegion(string Name, int X, int Y, int Width, int Height,
     MapRegionPurpose Purpose = MapRegionPurpose.Protect, bool Required = true)
@@ -18,9 +23,16 @@ internal sealed class MapDesignSettings
     public List<MapDesignRegion> Regions { get; set; } = [];
     public bool RequireRoute { get; set; }
     public int FootprintSize { get; set; } = 1;
-    public bool Empty => Points.Count == 0 && Regions.Count == 0 && !RequireRoute && FootprintSize == 1;
-    public MapDesignSettings Copy() => new() { Points = [.. Points], Regions = [.. Regions], RequireRoute = RequireRoute, FootprintSize = FootprintSize };
-    public bool SameAs(MapDesignSettings other) => RequireRoute == other.RequireRoute && FootprintSize == other.FootprintSize && Points.SequenceEqual(other.Points) && Regions.SequenceEqual(other.Regions);
+    public int MinimumRouteSteps { get; set; }
+    public int MaximumRouteSteps { get; set; }
+    public bool RequireTargetCrossing { get; set; }
+    public bool IntentRequired { get; set; }
+    public bool HasIntent => MinimumRouteSteps > 0 || MaximumRouteSteps > 0 || RequireTargetCrossing || Points.Any(point => point.ClearRadius > 0);
+    public bool Empty => Points.Count == 0 && Regions.Count == 0 && !RequireRoute && FootprintSize == 1 && !HasIntent;
+    public MapDesignSettings Copy() => new() { Points = [.. Points], Regions = [.. Regions], RequireRoute = RequireRoute, FootprintSize = FootprintSize,
+        MinimumRouteSteps = MinimumRouteSteps, MaximumRouteSteps = MaximumRouteSteps, RequireTargetCrossing = RequireTargetCrossing, IntentRequired = IntentRequired };
+    public bool SameAs(MapDesignSettings other) => RequireRoute == other.RequireRoute && FootprintSize == other.FootprintSize && Points.SequenceEqual(other.Points) && Regions.SequenceEqual(other.Regions) &&
+        MinimumRouteSteps == other.MinimumRouteSteps && MaximumRouteSteps == other.MaximumRouteSteps && RequireTargetCrossing == other.RequireTargetCrossing && IntentRequired == other.IntentRequired;
 
     public void Validate(int width, int height)
     {
@@ -29,13 +41,18 @@ internal sealed class MapDesignSettings
         if (Points == null || Regions == null || Points.Count > 32 || Regions.Count > 64)
             throw GenerationDiagnostics.Reject(GenerationFailureKind.InputConflict, "Input validation", LocalText.T("Use at most 32 route points and 64 design regions."));
         if (Points.Any(point => point == null || string.IsNullOrWhiteSpace(point.Name) || point.Name.Length > 80 ||
-            point.X < 0 || point.Y < 0 || point.X >= width || point.Y >= height) ||
+            !Enum.IsDefined(point.Role) || point.ClearRadius is < 0 or > 32 || point.X < 0 || point.Y < 0 || point.X >= width || point.Y >= height) ||
             Regions.Any(region => region == null || string.IsNullOrWhiteSpace(region.Name) || region.Name.Length > 80 ||
                 !Enum.IsDefined(region.Purpose) || region.X < 0 || region.Y < 0 || region.Width <= 0 || region.Height <= 0 ||
                 (long)region.X + region.Width > width || (long)region.Y + region.Height > height))
             throw GenerationDiagnostics.Reject(GenerationFailureKind.InputConflict, "Input validation", LocalText.T("A design marker is invalid or outside this map. Adjust markers after resizing."));
         if (RequireRoute && Points.Count < 2)
             throw GenerationDiagnostics.Reject(GenerationFailureKind.InputConflict, "Input validation", LocalText.T("A required route needs at least two ordered points."));
+        if (MinimumRouteSteps < 0 || MaximumRouteSteps < 0 || MinimumRouteSteps > MapRouteAnalysis.MaximumCells * 31L || MaximumRouteSteps > MapRouteAnalysis.MaximumCells * 31L ||
+            MaximumRouteSteps > 0 && MinimumRouteSteps > MaximumRouteSteps || (MinimumRouteSteps > 0 || MaximumRouteSteps > 0) && Points.Count < 2)
+            throw GenerationDiagnostics.Reject(GenerationFailureKind.InputConflict, "Input validation", LocalText.T("Route limits need at least two points and a valid minimum / maximum range. Zero disables a limit."));
+        if (RequireTargetCrossing && new[] { MapPointRole.Entry, MapPointRole.Target, MapPointRole.Exit }.Any(role => Points.Count(point => point.Role == role) != 1))
+            throw GenerationDiagnostics.Reject(GenerationFailureKind.InputConflict, "Input validation", LocalText.T("Target-crossing checks need exactly one entry, one target and one exit."));
     }
 }
 
@@ -115,6 +132,7 @@ internal static class MapDesignConstraints
             foreach (var leg in route.Legs.Where(leg => !leg.Reachable))
                 findings.Add(new(leg.From.Name + " → " + leg.To.Name, true, LocalText.T("Required route is unreachable."), leg.To.X, leg.To.Y));
         }
+        if (design.HasIntent) findings.AddRange(MapDesignIntent.Check(document, design, cancellation));
         return new(findings);
     }
 }

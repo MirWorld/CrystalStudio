@@ -14,6 +14,7 @@ internal sealed class QuickMapCandidate(MapCreationSettings settings, IReadOnlyD
     private MapDesignSettings? evaluationDesign;
     internal bool SameEvaluation(MapDesignSettings design) => evaluationDesign?.SameAs(design) == true;
     internal void Evaluate(MapCandidateMetrics metrics, MapDesignSettings design) { Metrics = metrics; evaluationDesign = design.Copy(); }
+    internal void RestoreDesignContext(MapDesignSettings design) { evaluationDesign = design.Copy(); Metrics = null; }
     public bool CanRestore(MapCreationSettings settings) => Generation.Kind == settings.Kind && Generation.Width == settings.Width && Generation.Height == settings.Height;
     public bool Matches(MapCreationSettings settings, IReadOnlyDictionary<string, string> parameters, MapDesignSettings? design = null)
     {
@@ -29,6 +30,7 @@ internal sealed class QuickMapCandidates : IDisposable
     public const int Capacity = 5;
     private readonly List<QuickMapCandidate> items = [];
     public IReadOnlyList<QuickMapCandidate> Items => items;
+    internal void Replace(IEnumerable<QuickMapCandidate> restored) { Dispose(); items.AddRange(restored); }
     internal static bool IsGenerationParameter(string name) => name != "DetailToggle" && !name.StartsWith("QuickMap", StringComparison.Ordinal) && !name.StartsWith("Generator", StringComparison.Ordinal);
 
     public QuickMapCandidate? Remember(MapCreationSettings settings, IReadOnlyDictionary<string, string> parameters, RasterImage? preview = null, bool isOverview = true, MapDesignSettings? design = null)

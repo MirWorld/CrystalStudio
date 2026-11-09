@@ -147,7 +147,7 @@ internal sealed class QuickMapPreview
         preview.RowDefinitions.Add(new RowDefinition(GridLength.Auto)); Grid.SetRow(inspection, preview.RowDefinitions.Count - 1); preview.Children.Add(inspection);
         viewport.InspectRequested += normalized =>
         {
-            if (!apply.IsEnabled) return;
+            if (!apply.IsEnabled || session.StructureLocked || session.VariationBusy) return;
             switch (window)
             {
                 case TerrainGeneratorWindow terrain: terrain.Inspect(normalized); break;
@@ -158,18 +158,19 @@ internal sealed class QuickMapPreview
         var candidates = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
         var candidateHint = new TextBlock { TextWrapping = TextWrapping.Wrap, FontSize = 11 };
         var candidatePanel = new StackPanel { Name = "QuickMapCandidatesPanel", Spacing = 5, Margin = new Thickness(0, 10, 0, 0) };
-        candidatePanel.Children.Add(new TextBlock { Text = LocalText.T("Recent candidates · favorites stay in this session"), FontWeight = FontWeight.SemiBold });
+        candidatePanel.Children.Add(new TextBlock { Text = LocalText.T(session.DraftStore == null ? "Recent candidates · favorites stay in this session" : "Recent candidates · favorites are retained in the task draft"), FontWeight = FontWeight.SemiBold });
         candidatePanel.Children.Add(new ScrollViewer { Content = candidates, HorizontalScrollBarVisibility = ScrollBarVisibility.Auto, VerticalScrollBarVisibility = ScrollBarVisibility.Disabled });
         candidatePanel.Children.Add(candidateHint);
         preview.RowDefinitions.Add(new RowDefinition(GridLength.Auto)); Grid.SetRow(candidatePanel, preview.RowDefinitions.Count - 1); preview.Children.Add(candidatePanel);
         QuickMapCandidate? selected = null;
         var compare = new Button { Name = "QuickMapCompare", Content = LocalText.T("Compare candidates A / B"), IsEnabled = false };
         candidatePanel.Children.Insert(1, compare);
-        compare.Click += (_, _) => new QuickMapComparisonWindow(session.Candidates.Items.Where(candidate => candidate.CanRestore(session.Settings) && candidate.Comparison != null).ToArray(), selected).ShowDialog(window);
+        compare.Click += (_, _) => new QuickMapComparisonWindow(session.Candidates.Items.Where(candidate => candidate.CanRestore(session.Settings) && candidate.Comparison != null).ToArray(), selected, session: session).ShowDialog(window);
         void RefreshCandidates()
         {
             var parameters = GeneratorPreferences.Capture(window);
             selected = state.Phase == GeneratorPreviewPhase.Ready && !session.BatchRunning ? session.Candidates.Items.FirstOrDefault(candidate => candidate.Matches(session.Settings, parameters, session.Design)) : null;
+            session.SelectedCandidateIndex = selected == null ? null : session.Candidates.Items.ToList().IndexOf(selected);
             if (selected == null && state.Phase == GeneratorPreviewPhase.Ready && !session.BatchRunning)
                 candidateHint.Text = LocalText.T("The current preview is not a retained candidate. Restore a retained candidate or a completed search result; no map was applied.");
             candidates.Children.Clear();
@@ -190,7 +191,7 @@ internal sealed class QuickMapPreview
                     GeneratorPreferences.Restore(window, candidate.Parameters); selected = candidate; RefreshCandidates();
                 };
                 var favorite = new CheckBox { Name = "QuickMapFavorite" + candidates.Children.Count, Content = LocalText.T("Favorite"), IsChecked = candidate.IsFavorite, FontSize = 11 };
-                favorite.IsCheckedChanged += (_, _) => session.Candidates.SetFavorite(candidate, favorite.IsChecked == true);
+                favorite.IsCheckedChanged += (_, _) => { session.Candidates.SetFavorite(candidate, favorite.IsChecked == true); session.NotifyDraft(); };
                 var card = new StackPanel { Spacing = 2 }; card.Children.Add(restore); card.Children.Add(favorite); candidates.Children.Add(card);
             }
         }
@@ -232,11 +233,75 @@ internal sealed class QuickMapPreview
             if (selected != null) selected.DisplayValues = GeneratorPreferences.Describe(window, selected.Parameters);
             candidateHint.Text = selected == null ? LocalText.T("All five candidates are favorites. Unfavorite one to retain another result.")
                 : selected.Comparison == null ? LocalText.T("Local detail is not stored as an overview candidate. Switch to Overview to retain this result for A / B comparison.")
-                : LocalText.T("Candidates store parameters, layout constraints and bounded overview snapshots; switching regenerates the map. Favorites are not saved after closing.");
+                : LocalText.T(session.DraftStore == null ? "Candidates store parameters, layout constraints and bounded overview snapshots; switching regenerates the map. Favorites are not saved after closing." :
+                    "Candidates store parameters, layout constraints and bounded overview snapshots. Task drafts retain favorites; restoring candidates regenerates and checks against current artwork.");
             RefreshCandidates();
         };
         state.Notify(); RefreshCandidates();
         var production = new QuickMapProduction(window, session, state, apply);
+        var workspace = new MapDesignWorkspace(production.DesignEditor, session.Design, session.Settings.Width, session.Settings.Height);
+        (Rect Region, bool Padded) Frame() => session.StructureLocked ? (new Rect(0, 0, session.Settings.Width, session.Settings.Height), true) : window switch
+        {
+            TerrainGeneratorWindow terrain => terrain.DesignFrame, ProvinceGeneratorWindow province => province.DesignFrame,
+            TempleGeneratorWindow dungeon => dungeon.DesignFrame, _ => (new Rect(0, 0, session.Settings.Width, session.Settings.Height), false)
+        };
+        var canvas = new MapPreviewDesign(session.Design, workspace, session.Settings.Width, session.Settings.Height, Frame,
+            () => image.Source != null && state.Phase is not (GeneratorPreviewPhase.Failed or GeneratorPreviewPhase.Cancelled or GeneratorPreviewPhase.Cancelling) && !production.IsBusy && !session.StructureLocked);
+        viewport.DesignEditor = canvas;
+        var editFeedback = new TextBlock { Name = "QuickMapCanvasFeedback", TextWrapping = TextWrapping.Wrap };
+        canvas.Feedback += message => editFeedback.Text = message;
+        var tool = new ComboBox { Name = "QuickMapDesignTool", ItemsSource = Enum.GetValues<MapDesignTool>(), ItemTemplate = LocalText.ChoiceTemplate, SelectedIndex = 0, MinWidth = 130 };
+        tool.SelectionChanged += (_, _) => { canvas.Cancel(); workspace.Tool = (MapDesignTool)tool.SelectedIndex; viewport.InvalidateVisual(); };
+        Avalonia.Automation.AutomationProperties.SetName(tool, LocalText.T("Preview editing tool"));
+        toolbar.Children.Add(tool);
+        Action("QuickMapDesignUndo", "Undo marker edit", workspace.Undo);
+        Action("QuickMapDesignRedo", "Redo marker edit", workspace.Redo);
+        inspection.Children.Add(MapDesignEditor.Hint("Choose a tool to place points or draw regions. Select: drag to move, bottom-right handle to resize; arrows nudge, Shift moves 10 cells. Middle button pans. Esc cancels; Ctrl+Z / Ctrl+Y undo marker edits."));
+        inspection.Children.Add(editFeedback);
+        workspace.Changed += () =>
+        {
+            session.NotifyDraft();
+            canvas.Highlight = null; viewport.InvalidateVisual();
+            toolbar.Children.OfType<Button>().Single(button => button.Name == "QuickMapDesignUndo").IsEnabled = workspace.CanUndo && !production.IsBusy;
+            toolbar.Children.OfType<Button>().Single(button => button.Name == "QuickMapDesignRedo").IsEnabled = workspace.CanRedo && !production.IsBusy;
+        };
+        toolbar.Children.OfType<Button>().Single(button => button.Name == "QuickMapDesignUndo").IsEnabled = false;
+        toolbar.Children.OfType<Button>().Single(button => button.Name == "QuickMapDesignRedo").IsEnabled = false;
+        MapConstraintFinding? pendingLocation = null;
+        void ShowLocation()
+        {
+            if (pendingLocation is not { } finding || state.Phase != GeneratorPreviewPhase.Ready || image.Source == null) return;
+            var frame = Frame();
+            var normalized = MapPreviewProjection.Project(new(finding.X + .5, finding.Y + .5), frame.Region, image.Source.Size, frame.Padded);
+            viewport.FocusPoint(normalized); canvas.Highlight = finding; pendingLocation = null; viewport.InvalidateVisual();
+        }
+        production.LocateRequested += finding =>
+        {
+            pendingLocation = finding; detail.IsChecked = false; canvas.Highlight = finding;
+            int pointIndex = session.Design.Points.FindIndex(point => point.Name == finding.Name);
+            if (pointIndex < 0) pointIndex = session.Design.Points.FindIndex(point => point.X == finding.X && point.Y == finding.Y);
+            int regionIndex = session.Design.Regions.FindIndex(region => region.Name == finding.Name);
+            workspace.Select(pointIndex, regionIndex); tool.SelectedIndex = (int)MapDesignTool.Select;
+            if (production.DesignEditor.GetLogicalAncestors().OfType<Expander>().FirstOrDefault() is { } markerSection) markerSection.IsExpanded = true;
+            ShowLocation();
+        };
+        production.FindingsChanged += findings =>
+        {
+            canvas.Highlight = null; viewport.InvalidateVisual();
+            if (findings.Count > 0 && production.GetLogicalAncestors().OfType<Expander>().FirstOrDefault() is { } section) section.IsExpanded = true;
+        };
+        state.Completed += (_, _) => ShowLocation();
+        var previewAssets = window switch { TerrainGeneratorWindow terrain => terrain.PreviewAssets, ProvinceGeneratorWindow province => province.PreviewAssets, TempleGeneratorWindow dungeon => dungeon.PreviewAssets, _ => null };
+        if (previewAssets != null) settings?.Children.Add(new Expander { Name = "QuickMapVariants", Header = LocalText.T("Controlled decoration variants"), Content = new QuickMapVariants(window, session, state, apply, image, previewAssets) });
+        if (session.DraftStore != null) settings?.Children.Add(new Expander { Name = "QuickMapTaskDraft", Header = LocalText.T("Creation task draft"), Content = new QuickMapDraftPanel(window, session, state) });
+        void OutputChanged()
+        {
+            canvas.Cancel(); canvas.Highlight = null; if (session.StructureLocked) tool.SelectedIndex = (int)MapDesignTool.Pan;
+            editFeedback.Text = session.StructureLocked ? LocalText.T("Layout locked. Navigation remains available; unlock before editing markers or structure.") : "";
+            viewport.InvalidateVisual();
+        }
+        session.OutputChanged += OutputChanged;
+        window.Closed += (_, _) => session.OutputChanged -= OutputChanged;
         if (Configured.TryGetValue(window, out var navigation)) navigation.production = production;
         production.CandidatesChanged += RefreshCandidates;
         settings?.Children.Add(new Expander { Name = "QuickMapProduction", Header = LocalText.T("Production tools and seed search"), Content = production, HorizontalAlignment = HorizontalAlignment.Stretch });
