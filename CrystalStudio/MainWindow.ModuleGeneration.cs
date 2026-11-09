@@ -33,12 +33,12 @@ public partial class MainWindow
     {
         if (busy) return;
         if (assets == null) { Status.Text = LocalText.T("Load game libraries in Settings before generating a module map."); return; }
-        var picker = new OpenFileDialog { Filter = "Mir map (*.map)|*.map" };
+        var picker = new OpenFileDialog { Filter = MapFormatPlugins.Default.OpenFilter };
         if (picker.ShowDialog(this) != true) return;
         await Run(async () =>
         {
             string indexPath = StampCategories.FindIndex() ?? throw new System.IO.FileNotFoundException(LocalText.T("The stamp category catalogue was not found."));
-            var map = await Task.Run(() => MapDocument.Load(picker.FileName, settings.AssetFormat));
+            var map = await Task.Run(() => MapFormatPlugins.Default.Open(picker.FileName, settings.AssetFormat));
             if (closed) return;
             if ((long)map.Width * map.Height > 4_000_000 || map.Width < 2 || map.Height < 2)
                 throw new System.IO.InvalidDataException(LocalText.T("Split maps of at least 2 × 2 and at most 4,000,000 cells."));

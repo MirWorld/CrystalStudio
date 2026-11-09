@@ -11,6 +11,16 @@ The Crystal map editor based on Avalonia 11 and .net 10 retains the original com
 > rust版本: https://github.com/lxf505226/CrystalStudio-Rust
 
 
+## 私有地图格式 DLL 插件
+
+支持加载原生 C/C++ DLL，在普通 .NET 版和 NativeAOT 版中识别、打开、编辑并保存私有地图。
+入口为 **文件 → 地图格式插件 → 加载 DLL…**。普通保存保持原格式，另存为可选择插件格式或
+内置 Crystal 格式，支持只读插件及私有附加数据的自动恢复。
+
+公共 C ABI、数据结构、编译示例和错误/内存管理约定见
+[原生地图插件 SDK](SDK/NativeMapPlugin/README.md)。私有实现无需引用编辑器或公开源码；
+本接口扩展地图文件格式，图片素材库仍使用现有读取功能。
+
 ## Build from Source
 
 Requires the .NET 10 SDK. Keep the `CrystalStudio`, `catalogue` and

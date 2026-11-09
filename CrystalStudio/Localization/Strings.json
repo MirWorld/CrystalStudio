@@ -1,4 +1,13 @@
 {
+  "MapPluginContinue": {"English":"Continue","Chinese":"继续"},
+  "MapFormatPlugins": {"English": "Map format plugins", "Chinese": "地图格式插件"},
+  "MapPluginLoad": {"English": "Load DLL…", "Chinese": "加载 DLL…"},
+  "MapPluginDescription": {"English": "Load a trusted native DLL matching the editor architecture. Supported in .NET and NativeAOT builds. Restart to update a loaded DLL.", "Chinese": "加载与编辑器架构一致且可信的原生 DLL，支持普通版和 NativeAOT 版。更新已加载的 DLL 后需重启。"},
+  "MapPluginCapabilities": {"English": "Read: {0} · Write: {1}", "Chinese": "读取：{0} · 保存：{1}"},
+  "MapPluginLoaded": {"English": "Loaded {0}", "Chinese": "已加载 {0}"},
+  "MapPluginSaveFormat": {"English": "Save map format", "Chinese": "选择地图保存格式"},
+  "MapPluginSupported": {"English": "Supported maps", "Chinese": "支持的地图"},
+  "MapPluginDll": {"English": "Native map plugin (*.dll)", "Chinese": "原生地图插件 (*.dll)"},
   "ProductionDepth16": {"English":"Load artwork libraries before local regeneration. Export remains available without artwork.","Chinese":"局部生成前请先加载素材库；未加载素材时仍可导出交付包。"},
   "ProductionDepth15": {"English":"Generation type","Chinese":"生成类型"},
   "ProductionDepth01": {"English":"Restored seed {0}. Review the rebuilt preview; constraints are checked again before creation.","Chinese":"已恢复种子 {0}。请审阅重新生成的预览，创建前会重新检查布局约束。"},

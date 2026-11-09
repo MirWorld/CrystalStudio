@@ -61,7 +61,7 @@ internal sealed class ObjectExtractionService
         {
             token.ThrowIfCancellationRequested();progress?.Report(new("Reading map",sources.Count,unique.Count,occurrences,input.Source));
             MapDocument map;
-            try{map=input.Snapshot??MapDocument.Load(input.Source,format);token.ThrowIfCancellationRequested();}
+            try{map=input.Snapshot??MapFormatPlugins.Default.Open(input.Source,format);token.ThrowIfCancellationRequested();}
             catch(Exception ex) when(ex is IOException or InvalidDataException or UnauthorizedAccessException or ArgumentException or IndexOutOfRangeException)
             {warnings.Add(input.Source+": "+ex.Message);continue;}
             sources.Add(input.Source);

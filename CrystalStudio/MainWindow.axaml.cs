@@ -466,7 +466,7 @@ public partial class MainWindow : EditorWindow
 
     }
 
-    private async void OpenClick(object s, RoutedEventArgs e) { if (busy) return; var picker = new OpenFileDialog { Filter = "Mir map (*.map)|*.map", Multiselect = true }; if (picker.ShowDialog(this) == true) await Run(async () => { foreach (var path in picker.FileNames) await OpenMap(path); }); }
+    private async void OpenClick(object s, RoutedEventArgs e) { if (busy) return; var picker = new OpenFileDialog { Filter = MapFormatPlugins.Default.OpenFilter, Multiselect = true }; if (picker.ShowDialog(this) == true) await Run(async () => { foreach (var path in picker.FileNames) await OpenMap(path); }); }
 
     private async Task OpenMap(string path)
     {
@@ -475,7 +475,7 @@ public partial class MainWindow : EditorWindow
         var existing = mapTabs.Items.Cast<TabItem>().FirstOrDefault(t => string.Equals(((OpenMapTab)t.Tag).Path, path, StringComparison.OrdinalIgnoreCase));
         if (existing != null) { mapTabs.SelectedItem = existing; RememberMap(path); return; }
         Status.Text = LocalText.T("Reading map\u2026");
-        var d = await Task.Run(() => MapDocument.Load(path, settings.AssetFormat));
+        var d = await Task.Run(() => MapFormatPlugins.Default.Open(path, settings.AssetFormat));
         AddMapTab(d, path);
         try { activeMap!.Recipe = MapCreationStore.LoadRecipe(path, d); }
         catch (Exception exception) { StudioLog.Error("MapCreation.LoadRecipe", exception, $"Path={path}"); }
@@ -520,18 +520,34 @@ public partial class MainWindow : EditorWindow
     {
 
         if (activeMap?.IsStamp == true) return SaveStampEditor(saveAs);
-        string? target = saveAs ? null : mapPath; if (target == null) { var picker = new SaveFileDialog { Filter = "Crystal map (*.map)|*.map", FileName = mapPath == null ? MapCreationPaths.FileName(activeMap?.Name.StartsWith("Untitled ", StringComparison.Ordinal) == false ? activeMap.Name : "Untitled") : Path.GetFileName(mapPath), InitialDirectory = mapPath == null ? MapCreationPaths.DefaultDirectory(settings.LibraryFolder) : Path.GetDirectoryName(mapPath), DefaultExt = ".map", AddExtension = true, OverwritePrompt = true }; if (picker.ShowDialog(this) != true) return false; target = picker.FileName; }
-
-        return SaveMapTo(target);
-
+        string? target = saveAs ? null : mapPath;
+        string? pluginId = Viewport.Document.PluginId;
+        if (target == null)
+        {
+            if (!ChooseMapSaveFormat(out pluginId)) return false;
+            var plugin = pluginId == null ? null : MapFormatPlugins.Default.Require(pluginId);
+            string extension = plugin?.Extensions[0] ?? ".map";
+            var picker = new SaveFileDialog { Filter = plugin == null ? "Crystal map (*.map)|*.map" : $"{plugin.Name}|{string.Join(';', plugin.Extensions.Select(e => "*" + e))}",
+                FileName = Path.ChangeExtension(mapPath == null ? MapCreationPaths.FileName(activeMap?.Name.StartsWith("Untitled ", StringComparison.Ordinal) == false ? activeMap.Name : "Untitled") : Path.GetFileName(mapPath), extension),
+                InitialDirectory = mapPath == null ? MapCreationPaths.DefaultDirectory(settings.LibraryFolder) : Path.GetDirectoryName(mapPath),
+                DefaultExt = extension, AddExtension = true, OverwritePrompt = true };
+            if (picker.ShowDialog(this) != true) return false;
+            target = picker.FileName;
+        }
+        return SaveMapToFormat(target, pluginId);
     }
 
-    private bool SaveMapTo(string target, bool overwrite = true)
+
+    private bool SaveMapTo(string target, bool overwrite = true) => SaveMapToFormat(target, Viewport.Document.PluginId, overwrite);
+
+    private bool SaveMapToFormat(string target, string? formatId, bool overwrite = true)
     {
         try
         {
             if (mapPath == null && activeMap?.KeepSourceFormat != true) Viewport.Document.SourceFormat = settings.AssetFormat;
-            if (overwrite) Viewport.Document.Save(target); else Viewport.Document.SaveNew(target);
+            MapFormatPlugins.Default.Save(Viewport.Document, target, formatId, overwrite);
+            if (Viewport.Document.PluginId != formatId) Viewport.Document.PluginData = [];
+            Viewport.Document.PluginId = formatId;
             mapPath = target; RememberMap(target); Viewport.History.Saved();
             if (activeMap != null) { ForgetRecovery(activeMap); activeMap.LastSavedAt = DateTime.Now; }
             UpdateLabels(); UpdateMapTabLabels(); Status.Text = LocalText.Format("Saved {0}", Path.GetFileName(target));

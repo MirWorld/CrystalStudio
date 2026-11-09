@@ -304,3 +304,16 @@ Release 独立输出目录 Build/RegionEditingRelease 编译成功，0 错误、
 执行 `AotBuild.win-x64.bat -SkipTests` 编译成功，输出 `../Build/CrystalStudioAvalonia/aot/win-x64/CrystalStudio.exe`，SHA-256 为 `6722898C03DE70CD8BDC79C3F30DA70A3A4ADE30A5B52196F2FF8EC2B7EA3318`，AMD64 原生 PE 的 CLR 目录 RVA 为 0。使用 `D:/App/LomcnClient/Map/bonguk1.map` 及对应资源在原生窗口连续验证空查询、非空查询后的右键取样，检查边框显示与离开后隐藏，正常退出且日志无 Fatal。该原生取样位置周围未找到中间层图片，因此非空中间层取样以鼠标事件回归为依据；已有资源像素长度错误仍会记录。
 
 原始地图、用户设置、最近地图及资源历史的哈希均保持一致。证据位于仓库根目录 `_codex_artifacts/crystalstudio-pointer-fix`，包括 `reported-crash.txt`、两次完整测试日志与 TRX、`pointer-regression.trx`、`aot-publish.log`、`publication.json`、`native-verification.json`、`profile-preservation.json` 和原生界面截图。
+
+
+## 原生地图格式 DLL 插件（2026-11-09）
+
+- 定义 C ABI v1：版本、静态 UTF-8 格式信息、内容识别、读取、保存、插件分配缓冲的释放；不动态加载托管程序集，普通 .NET 与 NativeAOT 使用相同调用代码。
+- CSMP v1 交换格式保留全部现有格子字段、原始标志位、素材来源及私有附加数据；验证尺寸、记录长度、重复/越界坐标、版本和私有数据长度。
+- 使用 g++ 编译 SDK 示例、只读及失败写入三个真实 DLL，通过打开同扩展名文件、编辑后保存重载、跨会话注册、重复 ID、识别冲突、错误缓冲释放和保存失败不覆盖原文件的验证。
+- 私有数据通过独立 `.map.plugin` 二进制恢复附件保存，测试使用 1,100,000 字节，避免超过恢复清单原有 1 MiB 限制；验证恢复、扩边所需快照、撤销后不回退已另存的格式及附件删除。
+- 最终相关回归 **35 项通过、0 失败、0 跳过**，包括原生插件、地图创建/保存、恢复、选区移动、扩边和物件面板。日志：`$env:TEMP/CrystalStudio-native-focused-final.log`。
+- 先前记录的三修素材缩略图用例在当前上游版本单独补测 **1 项通过**，不沿用旧版本失败结论。日志：`$env:TEMP/CrystalStudio-native-sanxiu.log`。
+- 编辑器完整 NativeAOT 发布成功：`Build/NativePluginAotEditor/CrystalStudio.exe`。包含 SDK 头文件、协议说明及 C++ 示例；仍有既有 Avalonia 反射绑定裁剪警告。
+- 独立 AotSmoke 实际原生发布并执行，完成真实 C++ DLL 的 probe/read/write/error/free 往返，输出 PASS；不是仅根据编译推断可用。
+- 全套回归执行 **669 项：668 通过、1 失败、0 跳过**（7 分 1 秒；单独排除的三修项已另行补测通过）。唯一失败为 `ObjectExtractionTests.ExportedObjectAppearsInPaletteWithPreviewAndSelectablePlacement` 的面板初始化等待超时；该项在上述最终 35 项集中复测中通过。整套运行期间并行执行了 NativeAOT 编译，不能把这次整套结果表述为全部通过，也未为此修改无关的 UI 等待测试。日志：`$env:TEMP/CrystalStudio-native-final-regression.log`。
