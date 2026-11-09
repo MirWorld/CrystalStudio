@@ -20,11 +20,14 @@ public partial class TempleGeneratorWindow : EditorWindow
     private TemplePlan? cached;
     private TempleOptions? cachedRequest;
     private RasterImage? overview, detailPreview;
+    internal RasterImage? OverviewPreview => overview;
     private readonly MapResourceCache resourceCache;
     private Point? inspectionCentre;
     private Point? detailCentre;
     private Rect displayedRegion;
     internal GeneratorPreviewState PreviewState { get; } = new();
+    internal GeneratorWorkflow Workflow { get; }
+    private GenerationImpact? cachedImpact;
     public TemplePlan? Plan { get; private set; }
     internal bool PreferencesRestored { get; private set; }
     private readonly IReadOnlyDictionary<string, string>? savedParameters;
@@ -43,6 +46,7 @@ public partial class TempleGeneratorWindow : EditorWindow
         GeneratorPreferences.Restore(this, savedParameters);
         timer.Tick += GeneratePreview;
         Loaded += (_, _) => { ready = true; PreferencesRestored = true; Schedule(); };
+        Workflow = new(this, PreviewState, CancelPreview, () => { resourceCache.Clear(); Schedule(); }, () => pending != null || timer.IsEnabled);
         Closed += (_, _) => { closed = true; timer.Stop(); pending?.Cancel(); };
     }
 
@@ -94,6 +98,12 @@ public partial class TempleGeneratorWindow : EditorWindow
         PreviewImage.Opacity = .4; PreviewHint.IsVisible = true; PreviewHint.Text = LocalText.T("Updating preview…");
         timer.Start();
     }
+    internal void CancelPreview()
+    {
+        timer.Stop(); Plan = null; ApplyButton.IsEnabled = false;
+        PreviewState.SetPhase(pending == null ? GeneratorPreviewPhase.Cancelled : GeneratorPreviewPhase.Cancelling);
+        pending?.Cancel();
+    }
     private void ShuffleClick(object sender, RoutedEventArgs e) => SeedBox.Text = Random.Shared.Next(int.MaxValue).ToString();
     private void RandomizeClick(object sender, RoutedEventArgs e)
     {
@@ -119,6 +129,7 @@ public partial class TempleGeneratorWindow : EditorWindow
             (DungeonType)DungeonTypeList.SelectedItem, DoorCountSlider.IsEnabled ? (int)DoorCountSlider.Value : 0, SelectedTheme);
         bool detail = DetailToggle.IsChecked == true;
         var job = new CancellationTokenSource(); pending = job;
+        PreviewState.SetStage("Checking required and optional artwork…");
         PreviewHint.Text = LocalText.T("Generating dungeon preview…");
         try
         {
@@ -131,6 +142,7 @@ public partial class TempleGeneratorWindow : EditorWindow
                 if (closed || request != revision) return;
                 PreviewState.Report(preflight.Report); preflight.Report.EnsureReady();
                 PreviewState.SetPhase(GeneratorPreviewPhase.Generating);
+                PreviewState.SetStage("Planning layout and filling artwork…");
                 Point? centre = inspectionCentre;
                 (plan, bitmap) = await Task.Run(() =>
                 {
@@ -141,14 +153,17 @@ public partial class TempleGeneratorWindow : EditorWindow
                     {
                         job.Token.ThrowIfCancellationRequested();
                         result = TempleGenerator.Plan(document, family, floor, preflight.Options, job.Token, assets, themes);
-                        cached = result; cachedRequest = options; overview = detailPreview = null;
+                        cached = result; cachedRequest = options; overview = detailPreview = null; cachedImpact = null;
                     }
+                    cachedImpact ??= GenerationImpact.Compare(document, result.Generated, job.Token);
+                    Dispatcher.UIThread.Post(() => { if (!closed && request == revision && !job.IsCancellationRequested) PreviewState.SetStage("Rendering preview…"); });
                     var preview = (detail ? detailCentre == centre ? detailPreview : null : overview) ?? TemplePreview.Create(result, assets, detail, job.Token, centre);
                     if (detail) { detailPreview = preview; detailCentre = centre; } else overview = preview;
                     return (result, preview);
                 }, job.Token);
             }
             finally { worker.Release(); }
+            job.Token.ThrowIfCancellationRequested();
             if (closed || request != revision) return;
             cached = Plan = plan; PreviewImage.Source = bitmap; PreviewImage.Opacity = 1;
             displayedRegion = TemplePreview.Region(plan, detail, inspectionCentre);
@@ -158,14 +173,14 @@ public partial class TempleGeneratorWindow : EditorWindow
             if (options.Theme != DungeonTheme.Classic)
                 FeedbackText.Text = DungeonThemes.Description(options.Theme) + "\n" + FeedbackText.Text +
                     LocalText.Format(" · {0} scene details", plan.Decorations.Count);
-            PreviewState.Complete();
+            PreviewState.SetImpact(cachedImpact!); PreviewState.Complete();
         }
-        catch (OperationCanceledException) { }
+        catch (OperationCanceledException) { if (!closed && request == revision) PreviewState.SetPhase(GeneratorPreviewPhase.Cancelled); }
         catch (Exception ex)
         {
             if (!closed && request == revision) { Plan = null; ApplyButton.IsEnabled = false; PreviewImage.Source = null; PreviewHint.Text = LocalText.T("Preview unavailable"); FeedbackText.Text = (ex.Message); PreviewState.SetPhase(GeneratorPreviewPhase.Failed, ex.Message); }
         }
-        finally { if (ReferenceEquals(pending, job)) pending = null; job.Dispose(); }
+        finally { if (ReferenceEquals(pending, job)) { pending = null; if (PreviewState.Phase == GeneratorPreviewPhase.Cancelling) PreviewState.SetPhase(GeneratorPreviewPhase.Cancelled); else PreviewState.Notify(); } job.Dispose(); }
     }
     internal void Inspect(Point normalized)
     {

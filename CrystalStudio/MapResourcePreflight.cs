@@ -30,15 +30,16 @@ internal sealed class MapResourceCache(TerrainCatalogue terrain, AssetStore asse
             terrain.Sets.FirstOrDefault(set => set.Id == id) is { } set && terrain.MatchesAssets(set, assets));
         return available;
     }
-    public string GroundDetail(string id)
+    public string GroundDetail(string id, bool? available = null)
     {
         var set = terrain.Sets.FirstOrDefault(candidate => candidate.Id == id);
         if (set == null) return LocalText.Format("Catalogue entry not found: {0}", id);
         string source = assets.Libraries.TryGetValue(set.Library, out var library)
-            ? library.Path + (Ground(id) ? "" : "\n" + LocalText.T("Loaded artwork does not match the catalogue (empty, unreadable or not 96 × 64)."))
+            ? library.Path + ((available ?? Ground(id)) ? "" : "\n" + LocalText.T("Loaded artwork does not match the catalogue (empty, unreadable or not 96 × 64)."))
             : LocalText.Format("Library {0} is not loaded.", set.Library);
         return $"{set.Name} ({id})\n{source}";
     }
+    public void Clear() { ground.Clear(); walls.Clear(); entrances.Clear(); }
     public bool Wall(WallFamily? family, bool interior)
     {
         if (family == null) return false;
@@ -168,7 +169,7 @@ internal static class MapResourcePreflight
     }
 }
 
-internal enum GeneratorPreviewPhase { Checking, Waiting, Generating, Ready, Failed }
+internal enum GeneratorPreviewPhase { Checking, Waiting, Generating, Ready, Failed, Cancelling, Cancelled }
 
 internal sealed class GeneratorPreviewState
 {
@@ -176,6 +177,8 @@ internal sealed class GeneratorPreviewState
     public GeneratorPreviewPhase Phase { get; private set; } = GeneratorPreviewPhase.Checking;
     public string SourceDescription { get; private set; } = "";
     public string? Failure { get; private set; }
+    public string Stage { get; private set; } = "Checking required and optional artwork…";
+    public GenerationImpact? Impact { get; private set; }
     public event EventHandler? Changed;
     public event EventHandler? Completed;
     public void SetSource(AssetStore assets)
@@ -188,9 +191,21 @@ internal sealed class GeneratorPreviewState
     public void SetPhase(GeneratorPreviewPhase phase, string? failure = null)
     {
         Phase = phase; Failure = failure;
+        Stage = phase switch
+        {
+            GeneratorPreviewPhase.Checking => "Checking required and optional artwork…",
+            GeneratorPreviewPhase.Generating => "Planning layout and filling artwork…",
+            GeneratorPreviewPhase.Waiting => "Parameters changed. Waiting to rebuild; the old preview cannot be applied.",
+            GeneratorPreviewPhase.Cancelling => "Stopping… Please wait for cancellation to finish.",
+            GeneratorPreviewPhase.Cancelled => "Generation cancelled. The map was not changed.",
+            GeneratorPreviewPhase.Ready => "Preview ready",
+            _ => "Preview failed. Review artwork details or change the style."
+        };
         if (phase == GeneratorPreviewPhase.Waiting) Resources = null;
         Notify();
     }
+    public void SetStage(string stage) { Stage = stage; Notify(); }
+    public void SetImpact(GenerationImpact impact) { Impact = impact; Notify(); }
     public void Report(MapResourceReport report) { Resources = report; Notify(); }
     public void Notify() => Changed?.Invoke(this, EventArgs.Empty);
     public void Complete() { SetPhase(GeneratorPreviewPhase.Ready); Completed?.Invoke(this, EventArgs.Empty); }

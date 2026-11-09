@@ -23,12 +23,15 @@ public partial class TerrainGeneratorWindow : EditorWindow
         : BeachToggle.IsChecked == true ? TerrainWaterMode.Beach : TerrainWaterMode.None;
     private int revision;
     private TerrainPlan? cachedPlan;
+    private GenerationImpact? cachedImpact;
     private RasterImage? overview, detailPreview;
+    internal RasterImage? OverviewPreview => overview;
     private TerrainOptions? cachedOptions;
     private TerrainArea cachedArea;
     private Point? inspectionCentre;
     private Rect displayedRegion;
     internal GeneratorPreviewState PreviewState { get; } = new();
+    internal GeneratorWorkflow Workflow { get; }
     public TerrainPlan? Plan { get; private set; }
     internal bool PreferencesRestored { get; private set; }
     private readonly IReadOnlyDictionary<string, string>? savedParameters;
@@ -43,6 +46,7 @@ public partial class TerrainGeneratorWindow : EditorWindow
         GeneratorPreferences.Restore(this, savedParameters);
         previewTimer.Tick += PreviewTimerTick;
         Loaded += LoadAvailable;
+        Workflow = new(this, PreviewState, CancelPreview, SchedulePreview, () => previewCancellation != null || previewTimer.IsEnabled);
         Closed += (_, _) => { closed = true; previewTimer.Stop(); previewCancellation?.Cancel(); cancellation.Cancel(); };
     }
     private async void LoadAvailable(object sender, RoutedEventArgs e)
@@ -164,6 +168,12 @@ public partial class TerrainGeneratorWindow : EditorWindow
         PreviewHint.Text = LocalText.T("Updating preview\u2026");
         previewTimer.Start();
     }
+    internal void CancelPreview()
+    {
+        previewTimer.Stop(); Plan = null; ApplyButton.IsEnabled = false;
+        PreviewState.SetPhase(previewCancellation == null ? GeneratorPreviewPhase.Cancelled : GeneratorPreviewPhase.Cancelling);
+        previewCancellation?.Cancel();
+    }
     private void ShuffleClick(object sender, RoutedEventArgs e)
     {
         SeedBox.Text = Random.Shared.Next(int.MaxValue).ToString();
@@ -215,15 +225,20 @@ public partial class TerrainGeneratorWindow : EditorWindow
         previewCancellation = job;
         PreviewHint.Text = LocalText.T("Generating preview\u2026"); PreviewHint.IsVisible = true;
         PreviewState.SetPhase(GeneratorPreviewPhase.Generating);
+        PreviewState.SetStage("Planning layout and filling artwork…");
         try
         {
             var plan = cachedPlan != null && cachedOptions == options && cachedArea == area && cachedPlan.SourceRevision == document.PickupRevision
                 ? cachedPlan
                 : await Task.Run(() => TerrainGenerator.Plan(document, area, catalogue, options, job.Token,coastLayouts,requestedPieces,shoreComponents,islandCoast), job.Token);
+            job.Token.ThrowIfCancellationRequested();
             if (closed || requestedRevision != revision) return;
             // Changing preview detail does not change the terrain or rerun river planning.
-            if (!ReferenceEquals(cachedPlan, plan)) overview = detailPreview = null;
+            if (!ReferenceEquals(cachedPlan, plan)) { overview = detailPreview = null; cachedImpact = null; }
             cachedPlan = plan; cachedOptions = options; cachedArea = area;
+            cachedImpact ??= await Task.Run(() => GenerationImpact.Terrain(plan, job.Token), job.Token);
+            if (closed || requestedRevision != revision) return;
+            PreviewState.SetStage("Rendering preview…");
             var bitmap = (detail ? detailPreview : overview) ?? await Task.Run(() =>
             {
                 job.Token.ThrowIfCancellationRequested();
@@ -231,17 +246,18 @@ public partial class TerrainGeneratorWindow : EditorWindow
                 job.Token.ThrowIfCancellationRequested();
                 return result;
             }, job.Token);
+            job.Token.ThrowIfCancellationRequested();
             if (closed || requestedRevision != revision) return;
             if (detail) detailPreview = bitmap; else overview = bitmap;
             PreviewImage.Source = bitmap; PreviewImage.Opacity = 1;
             Plan = plan; ApplyButton.IsEnabled = true; PreviewHint.IsVisible = false;
             displayedRegion = TerrainPreview.Region(plan, detail, inspectionCentre);
             FeedbackText.Text = string.Concat(string.Concat(string.Concat(string.Concat(LocalText.Format("{0:N0} ground tiles",plan.Tiles.Count), ((plan.Water==null ? ("") : LocalText.Format(" + {0:N0} native bank sprites",plan.Water.Banks.Count)))), (string.Concat(plan.CoastObjects.Select(c=>$" + {c.Layout.Name}")))), LocalText.Format(" · Area {0},{1} — {2}×{3} cells · Seed {4}. Apply creates one undo step; existing objects and collisions are preserved.",plan.Area.X,plan.Area.Y,plan.Area.Width,plan.Area.Height,seed)), ((plan.Notes.Count==0 ? ("") : string.Concat(("\n"), (string.Join(" ",plan.Notes))))));
-            PreviewState.Complete();
+            PreviewState.SetImpact(cachedImpact); PreviewState.Complete();
         }
-        catch (OperationCanceledException) { }
+        catch (OperationCanceledException) { if (!closed && requestedRevision == revision) PreviewState.SetPhase(GeneratorPreviewPhase.Cancelled); }
         catch (Exception ex) { if (!closed && requestedRevision == revision) { Plan = null; PreviewImage.Source = null; PreviewHint.Text = LocalText.T("Preview unavailable"); FeedbackText.Text = (ex.Message); PreviewState.SetPhase(GeneratorPreviewPhase.Failed, ex.Message); } }
-        finally { if (ReferenceEquals(previewCancellation, job)) previewCancellation = null; job.Dispose(); }
+        finally { if (ReferenceEquals(previewCancellation, job)) { previewCancellation = null; if (PreviewState.Phase == GeneratorPreviewPhase.Cancelling) PreviewState.SetPhase(GeneratorPreviewPhase.Cancelled); else PreviewState.Notify(); } job.Dispose(); }
     }
     private void DetailChanged(object sender, RoutedEventArgs e)
     {
@@ -249,13 +265,16 @@ public partial class TerrainGeneratorWindow : EditorWindow
     }
     private void ReportResources()
     {
-        PreviewState.Report(new([
-            new("Base ground", true, BaseList.SelectedItem is TerrainSet basis && available.Contains(basis)),
-            new("River banks", false, coastPieces != null && waterReady, coastError),
-            new("Beach and shoreline", false, shoreComponents != null),
-            new("River crossing", false, bridgePieces != null),
-            new("Island coastline", IsIsland, islandCoast != null, IsIsland ? islandError : null)
-        ]));
+        var cache = new MapResourceCache(catalogue, assets);
+        var checks = new List<MapResourceCheck> { new("Base ground", true, BaseList.SelectedItem is TerrainSet basis && available.Contains(basis),
+            BaseList.SelectedItem is TerrainSet selected ? cache.GroundDetail(selected.Id, available.Contains(selected)) : null) };
+        if (PatchList.SelectedItem is TerrainSet patch) checks.Add(new("Patch terrain", true, available.Contains(patch), cache.GroundDetail(patch.Id, available.Contains(patch))));
+        if (PathList.SelectedItem is TerrainSet path) checks.Add(new("Path terrain", true, available.Contains(path), cache.GroundDetail(path.Id, available.Contains(path))));
+        if (RiverToggle.IsChecked == true) checks.Add(new("River banks", false, coastPieces != null && waterReady, coastError));
+        if (BeachToggle.IsChecked == true) checks.Add(new("Beach and shoreline", false, shoreComponents != null));
+        if (BridgeToggle.IsChecked == true) checks.Add(new("River crossing", false, bridgePieces != null));
+        if (IsIsland) checks.Add(new("Island coastline", true, islandCoast != null, islandError));
+        PreviewState.Report(new(checks));
     }
     internal void Inspect(Point normalized)
     {

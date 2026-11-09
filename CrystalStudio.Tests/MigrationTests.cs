@@ -274,6 +274,30 @@ public sealed class MigrationTests
     }
 
     [AvaloniaFact]
+    public async Task RebuildingUnchangedCategoriesPreservesPageSelectionAndNodeIdentity()
+    {
+        var window = await ShowCategoryWindow();
+        try
+        {
+            var tabs = window.FindControl<TabControl>("CategoryTabs")!;
+            var trees = tabs.Items.OfType<StampCategoryGroup>().Single(group => group.Name == "Tree"); tabs.SelectedItem = trees;
+            window.FindControl<Button>("NextButton")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            await PumpUntil(() => trees.Page == 1);
+            var list = CategoryList(tabs); list.SelectedIndex = 2;
+            await PumpUntil(() => window.FindControl<MapViewport>("Viewport")!.Stamp != null);
+            var selection = list.SelectedItem; var items = trees.Items.ToArray();
+            for (int attempt = 0; attempt < 5; attempt++)
+            {
+                typeof(MainWindow).GetMethod("BuildPage", BindingFlags.NonPublic | BindingFlags.Instance)!.Invoke(window, null);
+                Dispatcher.UIThread.RunJobs();
+                Assert.Equal(1, trees.Page); Assert.Same(selection, list.SelectedItem); Assert.Equal(items, trees.Items);
+                Assert.Equal(LocalText.Format("Page {0} of {1}", 2, 3), window.FindControl<TextBlock>("PageLabel")!.Text);
+            }
+        }
+        finally { window.Close(); }
+    }
+
+    [AvaloniaFact]
     public async Task ChineseStartupSupportsCategorySearchAndPendingPreferenceKeepsSelectionAndPage()
     {
         var store = new SettingsStore(); var saved = store.Load();

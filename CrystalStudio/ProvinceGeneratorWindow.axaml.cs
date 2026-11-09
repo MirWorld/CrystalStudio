@@ -19,13 +19,16 @@ public partial class ProvinceGeneratorWindow : EditorWindow
     private readonly ProvinceRuinResources ruins = new();
     private readonly ProvinceMineResources mines = new();
     private ProvincePlan? cached;
+    private GenerationImpact? cachedImpact;
     private ProvinceOptions? cachedRequest;
     private MapResourceCache resourceCache = null!;
     private Point? inspectionCentre;
     private Point? detailCentre;
     private Rect displayedRegion;
     internal GeneratorPreviewState PreviewState { get; } = new();
+    internal GeneratorWorkflow Workflow { get; }
     private RasterImage? overview, detailPreview;
+    internal RasterImage? OverviewPreview => overview;
     private bool ready, closed, changingSettings;
     private int revision;
     private readonly GeneratorChoiceDrafts sceneDrafts = new("SceneList");
@@ -46,6 +49,7 @@ public partial class ProvinceGeneratorWindow : EditorWindow
         GeneratorPreferences.Restore(this, savedParameters);
         timer.Tick += Generate;
         Loaded += Load;
+        Workflow = new(this, PreviewState, CancelPreview, () => { resourceCache?.Clear(); Schedule(); }, () => pending != null || timer.IsEnabled);
         Closed += (_, _) => { closed = true; timer.Stop(); pending?.Cancel(); lifetime.Cancel(); };
     }
 
@@ -143,6 +147,12 @@ public partial class ProvinceGeneratorWindow : EditorWindow
         PreviewState.SetPhase(GeneratorPreviewPhase.Waiting);
         PreviewImage.Opacity = .4; PreviewHint.IsVisible = true; PreviewHint.Text = LocalText.T("Updating province…"); timer.Start();
     }
+    internal void CancelPreview()
+    {
+        timer.Stop(); Plan = null; ApplyButton.IsEnabled = false;
+        PreviewState.SetPhase(pending == null ? GeneratorPreviewPhase.Cancelled : GeneratorPreviewPhase.Cancelling);
+        pending?.Cancel();
+    }
     private void ShuffleClick(object sender, RoutedEventArgs e) => SeedBox.Text = Random.Shared.Next(int.MaxValue).ToString();
     private void RandomizeClick(object sender, RoutedEventArgs e)
     {
@@ -170,6 +180,7 @@ public partial class ProvinceGeneratorWindow : EditorWindow
             DoorCountSlider.IsEnabled ? (int)DoorCountSlider.Value : 0, (ProvinceScene)SceneList.SelectedIndex, (int)RuinCountSlider.Value, (int)MineCountSlider.Value);
         int request = revision; bool detail = DetailToggle.IsChecked == true;
         var job = CancellationTokenSource.CreateLinkedTokenSource(lifetime.Token); pending = job;
+        PreviewState.SetStage("Checking required and optional artwork…");
         try
         {
             await worker.WaitAsync(job.Token);
@@ -180,12 +191,14 @@ public partial class ProvinceGeneratorWindow : EditorWindow
                 if (closed || request != revision) return;
                 PreviewState.Report(required); required.EnsureReady();
                 if (optionalResources?.IsCompleted != true) PreviewHint.Text = LocalText.T("Checking optional scenery and water artwork…");
+                PreviewState.SetStage("Loading optional scenery and water artwork…");
                 (scenery, water) = await LoadOptionalResources().WaitAsync(job.Token);
                 if (closed || request != revision) return;
                 var preflight = await Task.Run(() => MapResourcePreflight.Province(terrain, walls, assets, scenery, water, options, towns, resourceCache, job.Token), job.Token);
                 if (closed || request != revision) return;
                 PreviewState.Report(preflight.Report); preflight.Report.EnsureReady();
                 PreviewState.SetPhase(GeneratorPreviewPhase.Generating);
+                PreviewState.SetStage("Planning layout and filling artwork…");
                 Point? centre = inspectionCentre;
                 (plan, bitmap) = await Task.Run(() =>
                 {
@@ -195,8 +208,10 @@ public partial class ProvinceGeneratorWindow : EditorWindow
                         p = ProvinceGenerator.Plan(document, terrain, walls, scenery, preflight.Options, job.Token, water?.Banks, water?.Shore, assets, towns: towns, ruins: ruins, mines: mines);
                         // Keep a finished plan even if a preview-mode change cancels
                         // rendering. Only generation options invalidate the map.
-                        cached = p; cachedRequest = options; overview = detailPreview = null;
+                        cached = p; cachedRequest = options; overview = detailPreview = null; cachedImpact = null;
                     }
+                    cachedImpact ??= GenerationImpact.Compare(document, p.Generated, job.Token);
+                    Dispatcher.UIThread.Post(() => { if (!closed && request == revision && !job.IsCancellationRequested) PreviewState.SetStage("Rendering preview…"); });
                     var preview = detail ? detailCentre == centre ? detailPreview : null : overview;
                     preview ??= ProvincePreview.Create(p.Generated, assets, detail, job.Token, centre);
                     if (detail) { detailPreview = preview; detailCentre = centre; } else overview = preview;
@@ -204,19 +219,20 @@ public partial class ProvinceGeneratorWindow : EditorWindow
                 }, job.Token);
             }
             finally { worker.Release(); }
+            job.Token.ThrowIfCancellationRequested();
             if (closed || request != revision) return;
             Plan = plan; PreviewImage.Source = bitmap; PreviewImage.Opacity = 1;
             displayedRegion = ProvincePreview.Region(plan.Generated, detail, inspectionCentre);
             PreviewHint.IsVisible = false; ApplyButton.IsEnabled = true;
             FeedbackText.Text = string.Concat(string.Concat(LocalText.Format("{0} · {1}×{2} · Seed {3}\n",plan.Style.Name,document.Width,document.Height,seed), (string.Join(" · ", plan.Features))), ((plan.Notes.Count == 0 ? ("") : string.Concat(("\n"), (string.Join(" ", plan.Notes))))));
-            PreviewState.Complete();
+            PreviewState.SetImpact(cachedImpact!); PreviewState.Complete();
         }
-        catch (OperationCanceledException) { }
+        catch (OperationCanceledException) { if (!closed && request == revision) PreviewState.SetPhase(GeneratorPreviewPhase.Cancelled); }
         catch (Exception ex)
         {
             if (!closed && request == revision) { Plan = null; ApplyButton.IsEnabled = false; PreviewImage.Source = null; PreviewHint.Text = LocalText.T("Preview unavailable"); FeedbackText.Text = (ex.Message); PreviewState.SetPhase(GeneratorPreviewPhase.Failed, ex.Message); }
         }
-        finally { if (ReferenceEquals(pending, job)) pending = null; job.Dispose(); }
+        finally { if (ReferenceEquals(pending, job)) { pending = null; if (PreviewState.Phase == GeneratorPreviewPhase.Cancelling) PreviewState.SetPhase(GeneratorPreviewPhase.Cancelled); else PreviewState.Notify(); } job.Dispose(); }
     }
     internal void Inspect(Point normalized)
     {

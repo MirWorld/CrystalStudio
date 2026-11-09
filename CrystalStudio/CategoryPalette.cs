@@ -117,6 +117,7 @@ public partial class MainWindow
     private string? categoryQuery, categoryGroupingKey;
     private List<StampCategoryGroup> categoryGroups = [];
     private StampCategoryGroup? displayedCategory;
+    private int displayedCategoryPage = -1;
     private bool rebuildingCategories, restoringCategoryPosition, categoryWasVisible;
     private int matchingCategoryStamps;
     private readonly Dictionary<string, RasterImage> categoryPreviewCache = new(StringComparer.OrdinalIgnoreCase);
@@ -221,6 +222,9 @@ public partial class MainWindow
 
     private void BuildCategoryPage()
     {
+        if (displayedCategory != null && ReferenceEquals(displayedCategory, CategoryTabs.SelectedItem) &&
+            displayedCategoryPage == displayedCategory.Page && displayedCategory.Items.Count > 0 && !categoryPreviews.IsCancellationRequested)
+        { page = displayedCategory.Page; filteredCount = displayedCategory.Members.Count; UpdateWorkspace(); return; }
         rebuildingCategories = true;
         try
         {
@@ -232,6 +236,7 @@ public partial class MainWindow
             {
                 displayedCategory.Page = Math.Clamp(displayedCategory.Page, 0, Math.Max(0, (filteredCount - 1) / CategoryPageSize));
                 page = displayedCategory.Page;
+                displayedCategoryPage = page;
                 string objectRoot = categoryIndex.ObjectRoot;
                 var previewAssets = assets;
                 foreach (var stamp in displayedCategory.Members.Skip(page * CategoryPageSize).Take(CategoryPageSize))

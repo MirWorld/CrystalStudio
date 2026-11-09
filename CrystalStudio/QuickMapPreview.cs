@@ -15,6 +15,12 @@ internal sealed class QuickMapPreview
     {
         var navigation = new QuickMapPreview { confirm = confirm };
         Configured.Add(window, navigation);
+        switch (window)
+        {
+            case TerrainGeneratorWindow terrain: terrain.Workflow.UseQuickCreate(); break;
+            case ProvinceGeneratorWindow province: province.Workflow.UseQuickCreate(); break;
+            case TempleGeneratorWindow dungeon: dungeon.Workflow.UseQuickCreate(); break;
+        }
         var apply = window.GetLogicalDescendants().OfType<Button>().Single(button => button.Name == "ApplyButton");
         var summary = new TextBlock { Name = "QuickMapSummary", TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 12) };
         void UpdateSummary()
@@ -96,7 +102,7 @@ internal sealed class QuickMapPreview
         if (state == null) return;
         var report = new TextBlock { Name = "QuickMapResourceFeedback", TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 12) };
         settings?.Children.Insert(1, report);
-        var resourceDetails = new TextBlock { Name = "QuickMapResourceDetails", TextWrapping = TextWrapping.Wrap };
+        var resourceDetails = new ResourceDiagnosticsView(state);
         var diagnostics = new Expander { Name = "QuickMapResourceDiagnostics", Header = LocalText.T("Artwork details and recovery"),
             Content = resourceDetails, HorizontalAlignment = HorizontalAlignment.Stretch, Margin = new Thickness(0, 0, 0, 10) };
         settings?.Children.Insert(2, diagnostics);
@@ -112,10 +118,10 @@ internal sealed class QuickMapPreview
         var zoom = new TextBlock { VerticalAlignment = VerticalAlignment.Center, MinWidth = 48 };
         viewport.ViewChanged += () => zoom.Text = $"{viewport.Zoom:P0}";
         zoom.Text = $"{viewport.Zoom:P0}";
-        var toolbar = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
+        var toolbar = new WrapPanel { Orientation = Orientation.Horizontal };
         void Action(string name, string label, Action action)
         {
-            var button = new Button { Name = name, Content = LocalText.T(label), Padding = new Thickness(8, 3) };
+            var button = new Button { Name = name, Content = LocalText.T(label), Padding = new Thickness(8, 3), Margin = new Thickness(0, 0, 6, 4) };
             button.Click += (_, _) => action(); toolbar.Children.Add(button);
         }
         Action("QuickMapZoomOut", "Zoom out", () => viewport.ChangeZoom(1 / 1.2)); toolbar.Children.Add(zoom);
@@ -125,7 +131,7 @@ internal sealed class QuickMapPreview
         Action("QuickMapOverview", "Overview", () => { detail.IsChecked = false; viewport.ResetView(); });
         var inspection = new StackPanel { Spacing = 5, Margin = new Thickness(0, 8, 0, 0) };
         inspection.Children.Add(toolbar);
-        inspection.Children.Add(new TextBlock { Text = LocalText.T("Wheel: zoom · Drag: pan · Double-click: redraw local detail. Zoom enlarges the preview, not the original artwork."),
+        inspection.Children.Add(new TextBlock { Text = LocalText.T("Wheel: zoom · Drag: pan · Double-click: redraw local detail. Keyboard: + / - to zoom, arrows to pan, Home to fit, Enter for detail."),
             TextWrapping = TextWrapping.Wrap, FontSize = 11 });
         preview.RowDefinitions.Add(new RowDefinition(GridLength.Auto)); Grid.SetRow(inspection, preview.RowDefinitions.Count - 1); preview.Children.Add(inspection);
         viewport.InspectRequested += normalized =>
@@ -146,15 +152,20 @@ internal sealed class QuickMapPreview
         candidatePanel.Children.Add(candidateHint);
         preview.RowDefinitions.Add(new RowDefinition(GridLength.Auto)); Grid.SetRow(candidatePanel, preview.RowDefinitions.Count - 1); preview.Children.Add(candidatePanel);
         QuickMapCandidate? selected = null;
+        var compare = new Button { Name = "QuickMapCompare", Content = LocalText.T("Compare candidates A / B"), IsEnabled = false };
+        candidatePanel.Children.Insert(1, compare);
+        compare.Click += (_, _) => new QuickMapComparisonWindow(session.Candidates.Items.Where(candidate => candidate.CanRestore(session.Settings) && candidate.Comparison != null).ToArray(), selected).ShowDialog(window);
         void RefreshCandidates()
         {
             candidates.Children.Clear();
+            compare.IsEnabled = state.Phase == GeneratorPreviewPhase.Ready && session.Candidates.Items.Count(candidate => candidate.CanRestore(session.Settings) && candidate.Comparison != null) >= 2;
             foreach (var candidate in session.Candidates.Items)
             {
                 string seed = candidate.Parameters.GetValueOrDefault("SeedBox", "?");
                 var content = new StackPanel { Spacing = 3 };
                 content.Children.Add(new Image { Source = candidate.Thumbnail, Width = 94, Height = 48, Stretch = Stretch.Uniform });
                 content.Children.Add(new TextBlock { Text = LocalText.Format("Seed {0}", seed), FontSize = 11 });
+                if (candidate.Comparison == null) content.Children.Add(new TextBlock { Text = LocalText.T("Detail only"), FontSize = 11 });
                 var restore = new Button { Name = "QuickMapCandidate" + candidates.Children.Count, Content = content, Padding = new Thickness(4), IsEnabled = candidate.CanRestore(session.Settings), BorderThickness = new Thickness(ReferenceEquals(selected, candidate) ? 2 : 1) };
                 restore.SetTip(LocalText.T("Restore these parameters and regenerate with the currently loaded artwork."));
                 restore.Click += (_, _) => { GeneratorPreferences.Restore(window, candidate.Parameters); selected = candidate; RefreshCandidates(); };
@@ -165,19 +176,19 @@ internal sealed class QuickMapPreview
         }
         state.Changed += (_, _) =>
         {
+            compare.IsEnabled = state.Phase == GeneratorPreviewPhase.Ready && session.Candidates.Items.Count(candidate => candidate.CanRestore(session.Settings) && candidate.Comparison != null) >= 2;
             string phase = state.Phase switch
             {
                 GeneratorPreviewPhase.Waiting => "Parameters changed. Waiting to rebuild; the old preview cannot be applied.",
                 GeneratorPreviewPhase.Generating => "Generating preview…",
                 GeneratorPreviewPhase.Ready => "Ready to create a new map",
                 GeneratorPreviewPhase.Failed => "Preview failed. Review artwork details or change the style.",
+                GeneratorPreviewPhase.Cancelling => "Stopping… Please wait for cancellation to finish.",
+                GeneratorPreviewPhase.Cancelled => "Generation cancelled. The map was not changed.",
                 _ => "Checking required and optional artwork…"
             };
             report.Text = LocalText.T(phase) + (state.Resources is { } resources ? "\n" +
                 LocalText.Format("{0} required missing · {1} optional unavailable", resources.Errors.Count, resources.Warnings.Count) : "");
-            resourceDetails.Text = LocalText.T("Choose another style, or return to map settings and cancel the preview. Then check the library format and folder in Settings and reopen Quick Create. Do not reload libraries while this preview is open.")
-                + "\n\n" + (state.Resources?.Summary ?? "") + (state.Failure == null || state.Resources?.CanGenerate == false ? "" : "\n" + state.Failure)
-                + "\n\n" + state.SourceDescription;
             if (state.Phase == GeneratorPreviewPhase.Failed && window.GetLogicalDescendants().OfType<TextBlock>().FirstOrDefault(control => control.Name == "FeedbackText") is { } errorFeedback)
                 errorFeedback.Text = LocalText.T("Expand artwork details for the source and recovery steps. You can also go back without changing any maps.");
         };
@@ -185,9 +196,12 @@ internal sealed class QuickMapPreview
         {
             if (window is TerrainGeneratorWindow { PreferencesRestored: false }) return;
             if (!apply.IsEnabled || image.Source is not RasterImage bitmap) return;
-            selected = session.Candidates.Remember(session.Settings, GeneratorPreferences.Capture(window), bitmap);
+            var overview = window switch { TerrainGeneratorWindow terrain => terrain.OverviewPreview, ProvinceGeneratorWindow province => province.OverviewPreview, TempleGeneratorWindow dungeon => dungeon.OverviewPreview, _ => null };
+            selected = session.Candidates.Remember(session.Settings, GeneratorPreferences.Capture(window), overview ?? bitmap, overview != null || detail.IsChecked != true);
+            if (selected != null) selected.DisplayValues = GeneratorPreferences.Describe(window, selected.Parameters);
             candidateHint.Text = selected == null ? LocalText.T("All five candidates are favorites. Unfavorite one to retain another result.")
-                : LocalText.T("Candidates store parameters and thumbnails only; switching regenerates the map. Favorites are not saved after closing.");
+                : selected.Comparison == null ? LocalText.T("Local detail is not stored as an overview candidate. Switch to Overview to retain this result for A / B comparison.")
+                : LocalText.T("Candidates store parameters and bounded overview snapshots only; switching regenerates the map. Favorites are not saved after closing.");
             RefreshCandidates();
         };
         state.Notify(); RefreshCandidates();

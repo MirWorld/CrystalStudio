@@ -17,7 +17,7 @@ internal static class GeneratorPreferences
     public static Dictionary<string, string> Capture(EditorWindow window)
     {
         var values = new Dictionary<string, string>();
-        foreach (var control in window.GetLogicalDescendants().OfType<Control>().Where(control => control.Name != null && !control.Name.StartsWith("QuickMap", StringComparison.Ordinal)))
+        foreach (var control in window.GetLogicalDescendants().OfType<Control>().Where(control => control.Name != null && !control.Name.StartsWith("QuickMap", StringComparison.Ordinal) && !control.Name.StartsWith("Generator", StringComparison.Ordinal)))
         {
             string? value = control switch
             {
@@ -55,5 +55,22 @@ internal static class GeneratorPreferences
                     seed.Text = value; break;
             }
         }
+    }
+
+    public static IReadOnlyDictionary<string, string> Describe(EditorWindow window, IReadOnlyDictionary<string, string> values)
+    {
+        var descriptions = new Dictionary<string, string>(values);
+        foreach (var choice in window.GetLogicalDescendants().OfType<ComboBox>())
+        {
+            if (choice.Name == null || !values.TryGetValue(choice.Name, out string? value)) continue;
+            object? selected = value.StartsWith("index:", StringComparison.Ordinal) && int.TryParse(value.AsSpan(6), out int index) && index >= 0 && index < choice.ItemCount
+                ? choice.Items[index] : choice.Items.Cast<object>().FirstOrDefault(item => Choice(item) == value);
+            descriptions[choice.Name] = LocalText.T(selected switch
+            {
+                TerrainSet terrain => terrain.Name, ProvinceStyle province => province.Name, TempleDefinition temple => temple.Name,
+                ComboBoxItem item => item.Content?.ToString() ?? value, _ => selected?.ToString() ?? value
+            });
+        }
+        return descriptions;
     }
 }

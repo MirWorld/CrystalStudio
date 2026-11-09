@@ -59,13 +59,14 @@ internal sealed class PreviewNavigation
 internal sealed class MapPreviewViewport : Control
 {
     private readonly Image source;
-    private readonly PreviewNavigation navigation = new();
+    private readonly PreviewNavigation navigation;
     private Point? drag;
     public event Action<Point>? InspectRequested;
     public event Action? ViewChanged;
     public double Zoom => navigation.Zoom;
-    public MapPreviewViewport(Image source)
+    public MapPreviewViewport(Image source, PreviewNavigation? navigation = null)
     {
+        this.navigation = navigation ?? new();
         this.source = source; Focusable = true; ClipToBounds = true;
         Avalonia.Automation.AutomationProperties.SetName(this, LocalText.T("Interactive map preview"));
         this.SetTip(LocalText.T("Keyboard: + / - to zoom, arrows to pan, Home to fit, Enter to inspect the view centre."));
@@ -73,7 +74,7 @@ internal sealed class MapPreviewViewport : Control
         {
             if (args.Property == Image.SourceProperty)
             {
-                if (args.OldValue is not IImage previous || args.NewValue is not IImage current || previous.Size != current.Size) navigation.Reset();
+                if (args.OldValue is not IImage previous || args.NewValue is not IImage current || previous.Size != current.Size) this.navigation.Reset();
                 ViewChanged?.Invoke();
             }
             if (args.Property == Image.SourceProperty || args.Property == OpacityProperty) InvalidateVisual();
@@ -117,7 +118,7 @@ internal sealed class MapPreviewViewport : Control
     {
         base.OnPointerMoved(args);
         if (drag is not { } previous || source.Source == null) return;
-        var point = args.GetPosition(this); navigation.Pan(point - previous, Bounds.Size, source.Source.Size); drag = point; InvalidateVisual();
+        var point = args.GetPosition(this); navigation.Pan(point - previous, Bounds.Size, source.Source.Size); drag = point; InvalidateVisual(); ViewChanged?.Invoke();
     }
     protected override void OnPointerReleased(PointerReleasedEventArgs args)
     {
@@ -134,7 +135,7 @@ internal sealed class MapPreviewViewport : Control
         else if (source.Source is { } image && args.Key is Key.Left or Key.Right or Key.Up or Key.Down)
         {
             navigation.Pan(args.Key switch { Key.Left => new Vector(40, 0), Key.Right => new Vector(-40, 0), Key.Up => new Vector(0, 40), _ => new Vector(0, -40) }, Bounds.Size, image.Size);
-            InvalidateVisual();
+            InvalidateVisual(); ViewChanged?.Invoke();
         }
         else return;
         args.Handled = true;

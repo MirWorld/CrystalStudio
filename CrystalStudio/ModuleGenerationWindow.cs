@@ -4,7 +4,7 @@ using Avalonia.Data;
 
 namespace CrystalStudio;
 
-internal enum ModuleGenerationViewState { Empty, Generating, Ready, Stale, Failed }
+internal enum ModuleGenerationViewState { Empty, Generating, Ready, Stale, Failed, Cancelling }
 
 internal sealed class ModuleGenerationWindow : EditorWindow
 {
@@ -23,9 +23,10 @@ internal sealed class ModuleGenerationWindow : EditorWindow
     private int revision;
     private bool closed;
     private sealed record Candidate(string[] Modules, int Count, int Seed, int Width, int Height, ModuleLayout Layout, string Summary)
-    { public override string ToString() => Summary; }
+    { public QuickMapCandidate? Snapshot { get; init; } public override string ToString() => Summary; }
     private readonly List<Candidate> candidates = [];
     private readonly ComboBox candidateList = new() { Name = "ModuleGenerationCandidates", HorizontalAlignment = HorizontalAlignment.Stretch };
+    private readonly Button compareCandidates = new() { Name = "CompareModuleCandidates", Content = LocalText.T("Compare candidates A / B"), IsEnabled = false };
     internal ModuleConnectionCanvas? Preview { get; private set; }
     internal ModuleGenerationPlan? DisplayedPlan { get; private set; }
     internal ModuleGenerationViewState ViewState { get; private set; }
@@ -93,7 +94,8 @@ internal sealed class ModuleGenerationWindow : EditorWindow
         generate.Click += async (_, _) => await GeneratePreviewAsync(); commands.Children.Add(generate);
         var shuffle = new Button { Content = LocalText.T("New seed"), Margin = new Thickness(6, 0, 6, 0) };
         shuffle.Click += (_, _) => SeedBox.Text = Random.Shared.Next(int.MaxValue).ToString(CultureInfo.InvariantCulture); commands.Children.Add(shuffle);
-        stop.Click += (_, _) => pending?.Cancel(); commands.Children.Add(stop); form.Children.Add(commands); form.Children.Add(progress); form.Children.Add(Feedback);
+        stop.Click += (_, _) => { if (pending == null) return; SetState(ModuleGenerationViewState.Cancelling, LocalText.T("Stopping… Please wait for cancellation to finish.")); pending.Cancel(); };
+        commands.Children.Add(stop); form.Children.Add(commands); form.Children.Add(progress); form.Children.Add(Feedback);
         var actions = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Margin = new Thickness(0, 8, 0, 0) };
         ApplyButton.Click += (_, _) => { if (TryAccept()) DialogResult = true; };
         actions.Children.Add(ApplyButton); actions.Children.Add(new Button { Content = LocalText.T("Cancel"), IsCancel = true });
@@ -111,6 +113,8 @@ internal sealed class ModuleGenerationWindow : EditorWindow
         var compare = new StackPanel { Spacing = 5, Margin = new Thickness(0, 10, 0, 0) };
         compare.Children.Add(new TextBlock { Text = LocalText.T("Compare recent layouts (this session only)"), FontWeight = FontWeight.SemiBold });
         compare.Children.Add(candidateList);
+        compare.Children.Add(compareCandidates);
+        compareCandidates.Click += (_, _) => new QuickMapComparisonWindow(candidates.Select(candidate => candidate.Snapshot!).ToArray(), (candidateList.SelectedItem as Candidate)?.Snapshot, true).ShowDialog(this);
         var restore = new Button { Name = "RestoreModuleCandidate", Content = LocalText.T("Restore parameters and regenerate"), IsEnabled = false };
         candidateList.SelectionChanged += (_, _) => restore.IsEnabled = candidateList.SelectedItem is Candidate;
         restore.Click += async (_, _) =>
@@ -127,7 +131,7 @@ internal sealed class ModuleGenerationWindow : EditorWindow
             box.PropertyChanged += (_, change) => { if (change.Property == TextBox.TextProperty) InvalidatePreview(); };
         LayoutBox.SelectionChanged += (_, _) => InvalidatePreview();
         SearchBox.PropertyChanged += (_, change) => { if (change.Property == TextBox.TextProperty) FilterPool(); };
-        Closed += (_, _) => { closed = true; pending?.Cancel(); Preview?.Dispose(); foreach (var item in choices) item.Dispose(); };
+        Closed += (_, _) => { closed = true; pending?.Cancel(); Preview?.Dispose(); foreach (var item in choices) item.Dispose(); foreach (var candidate in candidates) candidate.Snapshot?.Comparison?.Dispose(); };
         FilterPool(); InvalidatePreview();
         if (choices.Count == 0) Feedback.Text = LocalText.T("No modules yet. Select a map region and use Tools → Create module from selection.");
     }
@@ -142,13 +146,15 @@ internal sealed class ModuleGenerationWindow : EditorWindow
         {
             ModuleGenerationViewState.Ready => LocalText.T("Preview ready · click a module to inspect its connections."),
             ModuleGenerationViewState.Generating => LocalText.T("Generating… Previous preview is for reference only."),
+            ModuleGenerationViewState.Cancelling => LocalText.T("Stopping… Please wait for cancellation to finish."),
             ModuleGenerationViewState.Stale => LocalText.T("Parameters changed. Generate again before applying."),
             ModuleGenerationViewState.Failed => LocalText.T("Generation failed. Previous preview is for reference only."),
             _ => LocalText.T("Generate a preview before applying.")
         };
         ApplyButton.IsEnabled = state == ModuleGenerationViewState.Ready && Plan != null;
-        progress.IsVisible = state == ModuleGenerationViewState.Generating;
-        stop.IsEnabled = state == ModuleGenerationViewState.Generating; generate.IsEnabled = state != ModuleGenerationViewState.Generating;
+        compareCandidates.IsEnabled = state == ModuleGenerationViewState.Ready && candidates.Count >= 2;
+        progress.IsVisible = state is ModuleGenerationViewState.Generating or ModuleGenerationViewState.Cancelling;
+        stop.IsEnabled = state == ModuleGenerationViewState.Generating; generate.IsEnabled = state is not (ModuleGenerationViewState.Generating or ModuleGenerationViewState.Cancelling);
     }
     private void InvalidatePreview()
     {
@@ -195,11 +201,17 @@ internal sealed class ModuleGenerationWindow : EditorWindow
             previewStatus.Text += "\n" + statistics;
             Feedback.Text += "\n" + statistics + "\n" + LocalText.T("Creates a new map. The original map is not modified.");
             string candidateSummary = LocalText.Format("Seed {0}", seed) + $" · {result.Placement.Source.Width} × {result.Placement.Source.Height} · " + statistics;
-            var candidate = new Candidate(selected.Select(entry => entry.Id).Order().ToArray(), count, seed, width, height, layout, candidateSummary);
-            candidates.RemoveAll(previous => previous.Seed == seed && previous.Count == count && previous.Width == width && previous.Height == height &&
-                previous.Layout == layout && previous.Modules.SequenceEqual(candidate.Modules));
-            candidates.Insert(0, candidate); if (candidates.Count > 5) candidates.RemoveAt(5);
+            var parameters = new Dictionary<string, string> { ["SeedBox"] = seed.ToString(CultureInfo.InvariantCulture), ["Module count"] = count.ToString(CultureInfo.InvariantCulture),
+                ["Reference width"] = width.ToString(CultureInfo.InvariantCulture), ["Reference height"] = height.ToString(CultureInfo.InvariantCulture), ["Layout"] = layout.ToString(),
+                ["Module types"] = string.Join(", ", selected.Select(entry => entry.Name).Order()) };
+            var snapshot = new QuickMapCandidate(new(MapCreationKind.Terrain, result.Placement.Source.Width, result.Placement.Source.Height), parameters, null) { Comparison = ModuleLayoutSnapshot.Create(result) };
+            var candidate = new Candidate(selected.Select(entry => entry.Id).Order().ToArray(), count, seed, width, height, layout, candidateSummary) { Snapshot = snapshot };
+            foreach (var previous in candidates.Where(previous => previous.Seed == seed && previous.Count == count && previous.Width == width && previous.Height == height &&
+                previous.Layout == layout && previous.Modules.SequenceEqual(candidate.Modules)).ToArray())
+            { previous.Snapshot?.Comparison?.Dispose(); candidates.Remove(previous); }
+            candidates.Insert(0, candidate); if (candidates.Count > 5) { candidates[5].Snapshot?.Comparison?.Dispose(); candidates.RemoveAt(5); }
             candidateList.ItemsSource = candidates.ToArray(); candidateList.SelectedIndex = 0;
+            compareCandidates.IsEnabled = candidates.Count >= 2;
             Dispatcher.UIThread.Post(() => { if (!closed) Preview?.Fit(); });
         }
         catch (OperationCanceledException)
@@ -215,7 +227,7 @@ internal sealed class ModuleGenerationWindow : EditorWindow
                 instanceInfo.Text = LocalText.Format("Problem module: {0} · Connection: {1} · Cell: ({2}, {3})", item?.Name ?? id, problem.ConnectionId ?? "—", problem.X?.ToString() ?? "—", problem.Y?.ToString() ?? "—");
             }
         }
-        finally { if (ReferenceEquals(pending, job)) pending = null; }
+        finally { if (ReferenceEquals(pending, job)) { pending = null; if (!closed && ViewState == ModuleGenerationViewState.Cancelling) SetState(DisplayedPlan == null ? ModuleGenerationViewState.Empty : ModuleGenerationViewState.Stale, LocalText.T("Generation cancelled. The map was not changed.")); } }
     }
     private void UpdateRegions(int selected)
     {
