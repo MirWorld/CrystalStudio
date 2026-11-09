@@ -58,7 +58,7 @@ public partial class MainWindow
                 if (map.Path == null && !map.KeepSourceFormat && !map.IsStamp) snapshot.SourceFormat = settings.AssetFormat;
                 string? path = map.Path; string name = MapDisplayName(map); var recipe = map.Recipe;
                 var metadata = new MapRecoveryEntry(1, recoveryStore.SessionId, map.RecoveryId, "", path, name, DateTime.UtcNow,
-                    snapshot.SourceFormat, recipe, map.IsStamp, map.StampOriginX, map.StampOriginY, map.Category, map.CategoryDirty);
+                    snapshot.SourceFormat, recipe, map.IsStamp, map.StampOriginX, map.StampOriginY, map.Category, map.CategoryDirty, Design: map.Design.Copy());
                 int storeVersion = recoveryStore.Version(map.RecoveryId);
                 await Task.Run(() => recoveryStore.Write(map.RecoveryId, snapshot, path, name, recipe, metadata, storeVersion));
                 if (closed || map.RecoveryVersion != version)
@@ -127,6 +127,7 @@ public partial class MainWindow
             if (closed) return;
             AddMapTab(document); activeMap!.Name = Path.GetFileNameWithoutExtension(entry.DisplayName) + LocalText.T(" (recovered)");
             activeMap.KeepSourceFormat = true; activeMap.Recipe = entry.Recipe; activeMap.RecoveryOrigin = entry;
+            activeMap.Design = entry.Design?.Copy() ?? entry.Recipe?.Design?.Copy() ?? new();
             activeMap.IsStamp = entry.IsStamp; activeMap.StampOriginX = entry.OriginX; activeMap.StampOriginY = entry.OriginY;
             activeMap.Category = entry.Category; activeMap.CategoryDirty = entry.CategoryDirty;
             stampProperties.IsVisible = entry.IsStamp;

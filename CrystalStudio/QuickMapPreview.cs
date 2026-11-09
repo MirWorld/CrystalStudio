@@ -7,9 +7,16 @@ internal sealed class QuickMapPreview
 {
     private static readonly ConditionalWeakTable<EditorWindow, QuickMapPreview> Configured = new();
     private Func<bool>? confirm;
+    private QuickMapProduction? production;
     public bool RestartRequested { get; private set; }
 
     public static bool Confirm(EditorWindow window) => !Configured.TryGetValue(window, out var preview) || preview.confirm?.Invoke() != false;
+
+    public static async Task<bool> ConfirmAsync(EditorWindow window)
+    {
+        if (Configured.TryGetValue(window, out var preview) && preview.production != null && !await preview.production.ConfirmAsync()) return false;
+        return Confirm(window);
+    }
 
     public static QuickMapPreview Configure(EditorWindow window, MapCreationSession session, Func<EditorWindow, bool> editSetup, Func<bool>? confirm = null)
     {
@@ -101,6 +108,9 @@ internal sealed class QuickMapPreview
         var state = State(window);
         if (state == null) return;
         var report = new TextBlock { Name = "QuickMapResourceFeedback", TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 12) };
+        var recipeFeedback = new TextBlock { Name = "QuickMapRecipeFeedback", TextWrapping = TextWrapping.Wrap, IsVisible = false };
+        bool restorationReported = false;
+        settings?.Children.Add(recipeFeedback);
         settings?.Children.Insert(1, report);
         var resourceDetails = new ResourceDiagnosticsView(state);
         var diagnostics = new Expander { Name = "QuickMapResourceDiagnostics", Header = LocalText.T("Artwork details and recovery"),
@@ -158,7 +168,7 @@ internal sealed class QuickMapPreview
         void RefreshCandidates()
         {
             candidates.Children.Clear();
-            compare.IsEnabled = state.Phase == GeneratorPreviewPhase.Ready && session.Candidates.Items.Count(candidate => candidate.CanRestore(session.Settings) && candidate.Comparison != null) >= 2;
+            compare.IsEnabled = !session.BatchRunning && state.Phase == GeneratorPreviewPhase.Ready && session.Candidates.Items.Count(candidate => candidate.CanRestore(session.Settings) && candidate.Comparison != null) >= 2;
             foreach (var candidate in session.Candidates.Items)
             {
                 string seed = candidate.Parameters.GetValueOrDefault("SeedBox", "?");
@@ -166,8 +176,9 @@ internal sealed class QuickMapPreview
                 content.Children.Add(new Image { Source = candidate.Thumbnail, Width = 94, Height = 48, Stretch = Stretch.Uniform });
                 content.Children.Add(new TextBlock { Text = LocalText.Format("Seed {0}", seed), FontSize = 11 });
                 if (candidate.Comparison == null) content.Children.Add(new TextBlock { Text = LocalText.T("Detail only"), FontSize = 11 });
-                var restore = new Button { Name = "QuickMapCandidate" + candidates.Children.Count, Content = content, Padding = new Thickness(4), IsEnabled = candidate.CanRestore(session.Settings), BorderThickness = new Thickness(ReferenceEquals(selected, candidate) ? 2 : 1) };
+                var restore = new Button { Name = "QuickMapCandidate" + candidates.Children.Count, Content = content, Padding = new Thickness(4), IsEnabled = !session.BatchRunning && candidate.CanRestore(session.Settings), BorderThickness = new Thickness(ReferenceEquals(selected, candidate) ? 2 : 1) };
                 restore.SetTip(LocalText.T("Restore these parameters and regenerate with the currently loaded artwork."));
+                if (candidate.Metrics != null) restore.SetTip(candidate.Metrics.ToString());
                 restore.Click += (_, _) => { GeneratorPreferences.Restore(window, candidate.Parameters); selected = candidate; RefreshCandidates(); };
                 var favorite = new CheckBox { Name = "QuickMapFavorite" + candidates.Children.Count, Content = LocalText.T("Favorite"), IsChecked = candidate.IsFavorite, FontSize = 11 };
                 favorite.IsCheckedChanged += (_, _) => session.Candidates.SetFavorite(candidate, favorite.IsChecked == true);
@@ -176,7 +187,7 @@ internal sealed class QuickMapPreview
         }
         state.Changed += (_, _) =>
         {
-            compare.IsEnabled = state.Phase == GeneratorPreviewPhase.Ready && session.Candidates.Items.Count(candidate => candidate.CanRestore(session.Settings) && candidate.Comparison != null) >= 2;
+            compare.IsEnabled = !session.BatchRunning && state.Phase == GeneratorPreviewPhase.Ready && session.Candidates.Items.Count(candidate => candidate.CanRestore(session.Settings) && candidate.Comparison != null) >= 2;
             string phase = state.Phase switch
             {
                 GeneratorPreviewPhase.Waiting => "Parameters changed. Waiting to rebuild; the old preview cannot be applied.",
@@ -194,7 +205,17 @@ internal sealed class QuickMapPreview
         };
         state.Completed += (_, _) =>
         {
+            if (session.BatchRunning) return;
             if (window is TerrainGeneratorWindow { PreferencesRestored: false }) return;
+            if (!restorationReported && session.ExpectedRecipeParameters is { } expected)
+            {
+                var actual = GeneratorPreferences.Capture(window).Where(pair => expected.ContainsKey(pair.Key) && pair.Key != "DetailToggle").ToDictionary(pair => pair.Key, pair => pair.Value);
+                var requested = expected.Where(pair => pair.Key != "DetailToggle").ToDictionary(pair => pair.Key, pair => pair.Value);
+                var differences = QuickMapComparisonWindow.Differences(requested, actual, GeneratorPreferences.Describe(window, requested), GeneratorPreferences.Describe(window, actual));
+                recipeFeedback.IsVisible = differences.Count > 0;
+                recipeFeedback.Text = LocalText.T("Recipe parameter adjustments:") + "\n" + string.Join("\n", differences.Take(8));
+                restorationReported = true;
+            }
             if (!apply.IsEnabled || image.Source is not RasterImage bitmap) return;
             var overview = window switch { TerrainGeneratorWindow terrain => terrain.OverviewPreview, ProvinceGeneratorWindow province => province.OverviewPreview, TempleGeneratorWindow dungeon => dungeon.OverviewPreview, _ => null };
             selected = session.Candidates.Remember(session.Settings, GeneratorPreferences.Capture(window), overview ?? bitmap, overview != null || detail.IsChecked != true);
@@ -205,6 +226,10 @@ internal sealed class QuickMapPreview
             RefreshCandidates();
         };
         state.Notify(); RefreshCandidates();
+        var production = new QuickMapProduction(window, session, state, apply);
+        if (Configured.TryGetValue(window, out var navigation)) navigation.production = production;
+        production.CandidatesChanged += RefreshCandidates;
+        settings?.Children.Add(new Expander { Name = "QuickMapProduction", Header = LocalText.T("Production tools and seed search"), Content = production, HorizontalAlignment = HorizontalAlignment.Stretch });
         var feedback = window.GetLogicalDescendants().OfType<TextBlock>().FirstOrDefault(control => control.Name == "FeedbackText");
         if (feedback?.Parent is StackPanel feedbackPanel)
         {

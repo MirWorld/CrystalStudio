@@ -8,6 +8,7 @@ internal sealed class QuickMapCandidate(MapCreationSettings settings, IReadOnlyD
     public RasterImage? Comparison { get; internal set; }
     public IReadOnlyDictionary<string, string>? DisplayValues { get; internal set; }
     public bool IsFavorite { get; internal set; }
+    public MapCandidateMetrics? Metrics { get; internal set; }
     public bool CanRestore(MapCreationSettings settings) => Generation.Kind == settings.Kind && Generation.Width == settings.Width && Generation.Height == settings.Height;
 }
 

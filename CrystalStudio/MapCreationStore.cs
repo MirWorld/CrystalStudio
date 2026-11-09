@@ -20,6 +20,7 @@ internal sealed record MapCreationRecipe(int Version, DateTime CreatedAtUtc, Map
     Dictionary<string, string> Parameters, Dictionary<string, string> CatalogueHashes)
 {
     public Dictionary<string, string> LibraryVersions { get; init; } = [];
+    public MapDesignSettings? Design { get; init; }
 }
 
 internal sealed class MapCreationStore

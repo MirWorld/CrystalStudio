@@ -5,7 +5,7 @@ namespace CrystalStudio;
 internal sealed record MapRecoveryEntry(int Version, Guid SessionId, Guid Id, string SnapshotFile,
     string? OriginalPath, string DisplayName, DateTime SavedAtUtc, AssetSourceFormat AssetFormat, MapCreationRecipe? Recipe,
     bool IsStamp = false, int OriginX = 0, int OriginY = 0, CategorizedStamp? Category = null,
-    bool CategoryDirty = false, bool LegacyJson = false);
+    bool CategoryDirty = false, bool LegacyJson = false, MapDesignSettings? Design = null);
 
 internal sealed class MapRecoveryStore : IDisposable
 {
@@ -49,7 +49,7 @@ internal sealed class MapRecoveryStore : IDisposable
                 snapshot.Save(target);
                 AtomicFile.WriteJson(manifest, new MapRecoveryEntry(1, sessionId, id, filename, originalPath, displayName,
                     DateTime.UtcNow, snapshot.SourceFormat, recipe, metadata?.IsStamp ?? false, metadata?.OriginX ?? 0, metadata?.OriginY ?? 0,
-                    metadata?.Category, metadata?.CategoryDirty ?? false));
+                    metadata?.Category, metadata?.CategoryDirty ?? false, Design: metadata?.Design?.Copy()));
             }
             catch { if (File.Exists(target)) File.Delete(target); throw; }
             foreach (string old in Directory.GetFiles(folder, id.ToString("N") + ".*.map"))

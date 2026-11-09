@@ -10,6 +10,7 @@ public partial class MainWindow
         public bool FitOnFirstDisplay = true;
         public bool KeepSourceFormat;
         public MapCreationRecipe? Recipe;
+        public MapDesignSettings Design = new();
         public DateTime? LastSavedAt;
         public DateTime? LastRecoveryAt;
         public bool RecoveryFailed;

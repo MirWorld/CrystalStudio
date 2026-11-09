@@ -479,9 +479,12 @@ public partial class MainWindow : EditorWindow
         AddMapTab(d, path);
         try { activeMap!.Recipe = MapCreationStore.LoadRecipe(path, d); }
         catch (Exception exception) { StudioLog.Error("MapCreation.LoadRecipe", exception, $"Path={path}"); }
+        string? designWarning = null;
+        try { activeMap!.Design = File.Exists(path + ".studio.json") ? MapDesignStore.Load(path, d) : activeMap.Recipe?.Design?.Copy() ?? new(); }
+        catch (Exception exception) { StudioLog.Error("MapDesign.Load", exception, $"Path={path}"); designWarning = LocalText.T("Design metadata could not be loaded: ") + exception.Message; }
         StudioLog.Info("Map.Open",$"Loaded; Path={path}; Size={d.Width}x{d.Height}; Stamps={d.PlacedStamps.Count}");
         RememberMap(path);
-        Status.Text = (d.MetadataWarning ?? LocalText.Format("Map loaded · {0:N0} remembered stamps", d.PlacedStamps.Count));
+        Status.Text = (designWarning ?? d.MetadataWarning ?? LocalText.Format("Map loaded · {0:N0} remembered stamps", d.PlacedStamps.Count));
     }
 
     private void IdentifyStampsClick(object s, RoutedEventArgs e)
@@ -536,6 +539,12 @@ public partial class MainWindow : EditorWindow
             {
                 try { activeMap.Recipe = recipe with { AssetFormat = Viewport.Document.SourceFormat }; MapCreationStore.SaveRecipe(target, activeMap.Recipe); }
                 catch (Exception exception) { StudioLog.Error("MapCreation.SaveRecipe", exception, $"Path={target}"); Status.Text = LocalText.T("Map saved, but its creation recipe could not be saved."); }
+            }
+            try { if (activeMap != null) MapDesignStore.Save(target, Viewport.Document, activeMap.Design); }
+            catch (Exception exception)
+            {
+                StudioLog.Error("MapDesign.Save", exception, $"Path={target}"); Viewport.History.MarkUnsaved(); UpdateMapTabLabels();
+                Status.Text = LocalText.T("Map saved, but design metadata could not be saved. Save again after correcting the markers.");
             }
             _ = RefreshSavedMapAsync(target); return true;
         }

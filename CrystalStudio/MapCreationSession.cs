@@ -7,6 +7,9 @@ internal sealed class MapCreationSession(MapCreationSettings settings, IReadOnly
     public string PresetName { get; private set; } = "";
     public int GenerationRevision { get; private set; }
     public QuickMapCandidates Candidates { get; } = new();
+    public MapDesignSettings Design { get; set; } = new();
+    public bool BatchRunning { get; set; }
+    public IReadOnlyDictionary<string, string>? ExpectedRecipeParameters { get; set; }
 
     public void RememberParameters(IReadOnlyDictionary<string, string> values) => Parameters = new(values);
 

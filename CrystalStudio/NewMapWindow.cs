@@ -41,7 +41,7 @@ internal sealed partial class NewMapWindow : EditorWindow
     public Dictionary<string, string>? SelectedParameters { get; private set; }
 
     public NewMapWindow(string directory, IReadOnlyDictionary<MapCreationKind, string?> availability,
-        MapCreationSettings? previous = null, MapCreationStore? store = null, MapCreationSession? session = null)
+        MapCreationSettings? previous = null, MapCreationStore? store = null, MapCreationSession? session = null, IReadOnlyDictionary<string, string>? initialParameters = null)
     {
         this.availability = availability; preferences = store;
         Title = LocalText.T("Quick Create Map"); Width = 600; Height = 780; MinWidth = 500; MinHeight = 480;
@@ -113,7 +113,7 @@ internal sealed partial class NewMapWindow : EditorWindow
         try { NameBox.Text = session != null || !initial.SaveImmediately ? initial.Name : MapCreationPaths.AvailableName(FolderBox.Text, initial.Name); }
         catch (ArgumentException) { NameBox.Text = "NewMap"; }
         SaveToggle.IsChecked = initial.SaveImmediately;
-        SelectedParameters = session == null ? store?.Parameters(currentKind) : new(session.Parameters);
+        SelectedParameters = session == null ? initialParameters == null ? store?.Parameters(currentKind) : new(initialParameters) : new(session.Parameters);
         PresetNameBox.Text = session?.PresetName;
         if (session == null && store != null) PresetBox.SelectedIndex = 0;
         PresetBox.SelectionChanged += (_, _) => ApplyPreset(initial);

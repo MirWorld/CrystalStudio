@@ -1,0 +1,210 @@
+using Avalonia.LogicalTree;
+using System.Globalization;
+
+namespace CrystalStudio;
+
+internal sealed record QuickMapBatchResult(int Seed, Dictionary<string, string> Parameters, MapCandidateMetrics? Metrics,
+    bool Accepted, string Details)
+{
+    public override string ToString() => LocalText.Format("Seed {0} · {1}", Seed, LocalText.T(Accepted ? "Accepted" : "Filtered")) + "\n" + (Metrics?.ToString() ?? Details) +
+        (Metrics != null && Details.Length > 0 ? "\n" + Details : "");
+}
+
+internal sealed class QuickMapProduction : StackPanel
+{
+    private readonly EditorWindow window;
+    private readonly MapCreationSession session;
+    private readonly GeneratorPreviewState state;
+    private readonly Button apply;
+    private readonly TextBlock feedback = new() { Name = "QuickMapProductionFeedback", TextWrapping = TextWrapping.Wrap };
+    private readonly ListBox results = new() { Name = "QuickMapBatchResults", MaxHeight = 220 };
+    private readonly List<QuickMapBatchResult> batchResults = [];
+    private readonly Button start = new() { Name = "QuickMapBatchStart", Content = LocalText.T("Search seeds") };
+    private readonly Button stop = new() { Name = "QuickMapBatchStop", Content = LocalText.T("Stop search"), IsEnabled = false };
+    private readonly Button restore = new() { Name = "QuickMapBatchRestore", Content = LocalText.T("Restore selected seed"), IsEnabled = false };
+    private readonly MapDesignEditor editor;
+    private readonly NumericUpDown attempts = MapDesignEditor.Number("QuickMapBatchCount", 2, 10, 5);
+    private readonly NumericUpDown minimumWalkable = MapDesignEditor.Number("QuickMapMinWalkable", 0, 100, 0);
+    private readonly NumericUpDown minimumConnected = MapDesignEditor.Number("QuickMapMinConnected", 0, 100, 0);
+    private readonly NumericUpDown minimumRooms = MapDesignEditor.Number("QuickMapMinRooms", 0, 1000, 0);
+    private CancellationTokenSource? pending;
+    private bool closed, confirming;
+    internal event Action? CandidatesChanged;
+
+    internal QuickMapProduction(EditorWindow window, MapCreationSession session, GeneratorPreviewState state, Button apply)
+    {
+        this.window = window; this.session = session; this.state = state; this.apply = apply; Spacing = 6;
+        editor = new(session.Design, session.Settings.Width, session.Settings.Height);
+        Children.Add(new Expander { Header = LocalText.T("Route points, reservations and protection"), Content = editor, HorizontalAlignment = HorizontalAlignment.Stretch });
+        Children.Add(MapDesignEditor.Hint("Reservations filter generated layouts; they do not carve roads or place server entities. Required conflicts block creation; preferences only warn. Search may find no matching seed."));
+        Children.Add(MapDesignEditor.Fields(("Attempts (2–10)", attempts), ("Min walkable %", minimumWalkable), ("Min connected %", minimumConnected), ("Min rooms (dungeon)", minimumRooms)));
+        minimumRooms.IsEnabled = session.Settings.Kind == MapCreationKind.Dungeon;
+        var actions = new WrapPanel(); actions.Children.Add(start); actions.Children.Add(stop); actions.Children.Add(restore);
+        foreach (Control child in actions.Children) child.Margin = new Thickness(0, 0, 6, 4);
+        Children.Add(actions); Children.Add(feedback); Children.Add(results);
+        results.ItemTemplate = new FuncDataTemplate<QuickMapBatchResult>((item, _) => new TextBlock { Text = item?.ToString(), TextWrapping = TextWrapping.Wrap, Margin = new Thickness(4) });
+        Children.Add(MapDesignEditor.Hint("Seeds are tested sequentially from the current seed. Only matching results enter the five bounded candidates; all-favorite candidates are never evicted. No map is applied automatically."));
+        results.SelectionChanged += (_, _) => restore.IsEnabled = !session.BatchRunning && results.SelectedItem is QuickMapBatchResult { Metrics: not null };
+        restore.Click += (_, _) => { if (results.SelectedItem is QuickMapBatchResult result) GeneratorPreferences.Restore(window, result.Parameters); };
+        start.Click += async (_, _) => await SearchAsync();
+        stop.Click += (_, _) => { pending?.Cancel(); CancelGenerator(); };
+        state.Changed += (_, _) =>
+        {
+            start.IsEnabled = !session.BatchRunning && !confirming && state.Phase == GeneratorPreviewPhase.Ready;
+            if (session.BatchRunning || confirming) apply.IsEnabled = false;
+        };
+        window.Closed += (_, _) => { closed = true; pending?.Cancel(); };
+        start.IsEnabled = state.Phase == GeneratorPreviewPhase.Ready;
+    }
+
+    internal static object? CurrentPlan(EditorWindow window) => window switch
+    {
+        TerrainGeneratorWindow terrain => terrain.Plan, ProvinceGeneratorWindow province => province.Plan,
+        TempleGeneratorWindow dungeon => dungeon.Plan, _ => null
+    };
+    internal static MapDocument Materialize(object plan, CancellationToken cancellation)
+    {
+        cancellation.ThrowIfCancellationRequested();
+        var map = plan switch
+        {
+            TerrainPlan terrain => GeneratedMapSnapshot.Terrain(terrain, cancellation),
+            ProvincePlan province => MapRecoveryStore.Capture(province.Generated),
+            TemplePlan dungeon => MapRecoveryStore.Capture(dungeon.Generated),
+            _ => throw new InvalidOperationException("No generated map is available.")
+        };
+        map.SourceFormat = plan switch { TerrainPlan terrain => terrain.Source.SourceFormat, ProvincePlan province => province.Source.SourceFormat, TemplePlan dungeon => dungeon.Source.SourceFormat, _ => map.SourceFormat };
+        return map;
+    }
+    private RasterImage? Overview => window switch
+    {
+        TerrainGeneratorWindow terrain => terrain.OverviewPreview,
+        ProvinceGeneratorWindow province => province.OverviewPreview,
+        TempleGeneratorWindow dungeon => dungeon.OverviewPreview, _ => null
+    };
+
+    internal async Task<bool> ConfirmAsync()
+    {
+        if (session.BatchRunning || confirming || closed || CurrentPlan(window) is not { } plan) return false;
+        if (session.Design.Empty) return true;
+        confirming = true; apply.IsEnabled = false;
+        using var job = new CancellationTokenSource(); pending = job;
+        var design = session.Design.Copy(); string identity = Convert.ToBase64String(StudioJson.SerializeToUtf8Bytes(new MapDesignFile(1, session.Settings.Width, session.Settings.Height, design)));
+        try
+        {
+            feedback.Text = LocalText.T("Checking layout constraints…");
+            var check = await Task.Run(() => MapDesignConstraints.Check(Materialize(plan, job.Token), design, job.Token), job.Token);
+            if (closed || !ReferenceEquals(CurrentPlan(window), plan) || identity != Convert.ToBase64String(StudioJson.SerializeToUtf8Bytes(new MapDesignFile(1, session.Settings.Width, session.Settings.Height, session.Design)))) return false;
+            feedback.Text = check.Findings.Count == 0 ? LocalText.T("All layout constraints are satisfied.") : string.Join("\n", check.Findings.Select(finding => finding.Name + ": " + finding.Message));
+            if (!check.Accepted) MessageBox.Show(window, feedback.Text, "Layout constraints", MessageBoxButton.OK, MessageBoxImage.Warning);
+            else if (check.Findings.Count > 0 && MessageBox.Show(window, feedback.Text + "\n\n" + LocalText.T("Preferred constraints were not met. Create this map anyway?"), "Layout constraints", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return false;
+            return check.Accepted;
+        }
+        catch (OperationCanceledException) { return false; }
+        catch (Exception exception) { feedback.Text = exception.Message; MessageBox.Show(window, exception.Message, "Layout constraints"); return false; }
+        finally
+        {
+            confirming = false; if (ReferenceEquals(pending, job)) pending = null;
+            if (!closed) { apply.IsEnabled = state.Phase == GeneratorPreviewPhase.Ready; state.Notify(); }
+        }
+    }
+
+    internal async Task SearchAsync()
+    {
+        if (session.BatchRunning || confirming || state.Phase != GeneratorPreviewPhase.Ready) return;
+        var seedBox = window.GetLogicalDescendants().OfType<TextBox>().Single(control => control.Name == "SeedBox");
+        if (!int.TryParse(seedBox.Text, out int firstSeed)) return;
+        var locked = window.GetLogicalDescendants().OfType<Control>().Where(control =>
+            control.Name != null && !control.Name.StartsWith("QuickMap", StringComparison.Ordinal) && !control.Name.StartsWith("Generator", StringComparison.Ordinal) &&
+            control is ComboBox or TextBox or Slider or CheckBox or Button).Select(control => (Control: control, Enabled: control.IsEnabled)).ToArray();
+        using var job = new CancellationTokenSource(); pending = job;
+        try
+        {
+            var design = session.Design.Copy(); design.Validate(session.Settings.Width, session.Settings.Height);
+            int count = MapDesignEditor.Value(attempts), walkable = MapDesignEditor.Value(minimumWalkable), connected = MapDesignEditor.Value(minimumConnected), rooms = MapDesignEditor.Value(minimumRooms);
+            session.BatchRunning = true; batchResults.Clear(); results.ItemsSource = null;
+            foreach (var item in locked) item.Control.IsEnabled = false;
+            editor.IsEnabled = start.IsEnabled = restore.IsEnabled = false; stop.IsEnabled = true;
+            attempts.IsEnabled = minimumWalkable.IsEnabled = minimumConnected.IsEnabled = minimumRooms.IsEnabled = false;
+            if (window.GetLogicalDescendants().OfType<Button>().FirstOrDefault(button => button.Name == "QuickMapBack") is { } back) back.IsEnabled = false;
+            CandidatesChanged?.Invoke();
+            var detail = window.GetLogicalDescendants().OfType<CheckBox>().Single(control => control.Name == "DetailToggle"); detail.IsChecked = false;
+            for (int index = 0; index < count; index++)
+            {
+                job.Token.ThrowIfCancellationRequested();
+                int seed = unchecked(firstSeed + index);
+                feedback.Text = LocalText.Format("Searching {0}/{1} · Seed {2}", index + 1, count, seed);
+                try
+                {
+                    await WaitForSeedAsync(seedBox, seed, job.Token);
+                    var plan = CurrentPlan(window) ?? throw new InvalidOperationException("Preview has no plan.");
+                    var parameters = GeneratorPreferences.Capture(window);
+                    var measured = await Task.Run(() =>
+                    {
+                        var map = Materialize(plan, job.Token);
+                        return (Metrics: MapRouteAnalysis.Measure(map, plan is TemplePlan dungeon ? dungeon.RoomCount : null, job.Token), Check: MapDesignConstraints.Check(map, design, job.Token));
+                    }, job.Token);
+                    job.Token.ThrowIfCancellationRequested();
+                    bool accepted = measured.Check.Accepted && measured.Metrics.WalkableRatio * 100 >= walkable &&
+                        measured.Metrics.ConnectedRatio * 100 >= connected && (session.Settings.Kind != MapCreationKind.Dungeon || measured.Metrics.Rooms >= rooms);
+                    string details = string.Join("; ", measured.Check.Findings.Select(finding => finding.Name + ": " + finding.Message));
+                    if (!accepted && details.Length == 0) details = LocalText.T("Below the selected metric thresholds.");
+                    if (accepted)
+                    {
+                        var candidate = session.Candidates.Remember(session.Settings, parameters, Overview);
+                        if (candidate != null) { candidate.Metrics = measured.Metrics; candidate.DisplayValues = GeneratorPreferences.Describe(window, candidate.Parameters); }
+                        else details = LocalText.T("All five candidates are favorites. Unfavorite one to retain another result.");
+                    }
+                    batchResults.Add(new(seed, parameters, measured.Metrics, accepted, details));
+                }
+                catch (OperationCanceledException) { throw; }
+                catch (Exception exception) { batchResults.Add(new(seed, GeneratorPreferences.Capture(window), null, false, exception.Message)); }
+                results.ItemsSource = batchResults.ToArray(); CandidatesChanged?.Invoke();
+            }
+            feedback.Text = LocalText.Format("Search complete: {0}/{1} matched. Select a result to restore; nothing was applied.", batchResults.Count(result => result.Accepted), count);
+        }
+        catch (OperationCanceledException) { if (!closed) feedback.Text = LocalText.T("Search stopped. Completed results are retained; no map was applied."); }
+        catch (Exception exception) { if (!closed) feedback.Text = exception.Message; }
+        finally
+        {
+            session.BatchRunning = false; if (ReferenceEquals(pending, job)) pending = null;
+            if (!closed)
+            {
+                foreach (var item in locked) item.Control.IsEnabled = item.Enabled;
+                editor.IsEnabled = attempts.IsEnabled = minimumWalkable.IsEnabled = minimumConnected.IsEnabled = true;
+                minimumRooms.IsEnabled = session.Settings.Kind == MapCreationKind.Dungeon; stop.IsEnabled = false;
+                if (window.GetLogicalDescendants().OfType<Button>().FirstOrDefault(button => button.Name == "QuickMapBack") is { } back) back.IsEnabled = true;
+                apply.IsEnabled = CurrentPlan(window) != null && state.Phase == GeneratorPreviewPhase.Ready;
+                restore.IsEnabled = results.SelectedItem is QuickMapBatchResult { Metrics: not null }; state.Notify(); CandidatesChanged?.Invoke();
+            }
+        }
+    }
+
+    private async Task WaitForSeedAsync(TextBox seedBox, int seed, CancellationToken cancellation)
+    {
+        var completion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        void Changed(object? sender, EventArgs args)
+        {
+            if (!int.TryParse(seedBox.Text, out int current) || current != seed) return;
+            if (state.Phase == GeneratorPreviewPhase.Ready && CurrentPlan(window) != null) completion.TrySetResult();
+            else if (state.Phase == GeneratorPreviewPhase.Failed) completion.TrySetException(new InvalidOperationException(state.Failure ?? LocalText.T("Preview unavailable")));
+            else if (state.Phase == GeneratorPreviewPhase.Cancelled) completion.TrySetCanceled();
+        }
+        state.Changed += Changed;
+        using var registration = cancellation.Register(() => completion.TrySetCanceled(cancellation));
+        try
+        {
+            seedBox.Text = seed.ToString(CultureInfo.InvariantCulture); Changed(null, EventArgs.Empty);
+            await completion.Task;
+        }
+        finally { state.Changed -= Changed; }
+    }
+    private void CancelGenerator()
+    {
+        switch (window)
+        {
+            case TerrainGeneratorWindow terrain: terrain.CancelPreview(); break;
+            case ProvinceGeneratorWindow province: province.CancelPreview(); break;
+            case TempleGeneratorWindow dungeon: dungeon.CancelPreview(); break;
+        }
+    }
+}

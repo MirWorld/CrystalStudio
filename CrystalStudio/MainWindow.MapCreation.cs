@@ -9,6 +9,7 @@ public partial class MainWindow
     {
         creationStore = new(Path.Combine(Path.GetDirectoryName(settingsStore.FilePath)!, "map-creation.json"));
         InitializeRecovery(NewButton.Parent as MenuItem);
+        InitializeMapProduction();
         try { creationStore.Load(); }
         catch (Exception exception) { StudioLog.Error("MapCreation.Preferences", exception); }
         if (NewButton.Parent is not MenuItem menu) return;
@@ -16,7 +17,9 @@ public partial class MainWindow
         quick.Click += QuickCreateClick; menu.Items.Insert(1, quick);
     }
 
-    private async void QuickCreateClick(object? sender, RoutedEventArgs args)
+    private async void QuickCreateClick(object? sender, RoutedEventArgs args) => await QuickCreateAsync();
+
+    private async Task QuickCreateAsync(MapCreationRecipe? recipe = null)
     {
         if (busy) return;
         var availability = Enum.GetValues<MapCreationKind>().ToDictionary(kind => kind, kind => kind == MapCreationKind.Blank || assets != null
@@ -28,13 +31,15 @@ public partial class MainWindow
                 kind == MapCreationKind.Dungeon && !File.Exists(WallCatalogue.ResolvePath());
             if (missing) availability[kind] = "Required generator catalogues are missing. Restore catalogue and Objects beside the editor.";
         }
-        var initial = creationStore.Data.Last ?? new MapCreationSettings(availability.GetValueOrDefault(MapCreationKind.Province) == null ? MapCreationKind.Province : MapCreationKind.Blank);
-        var session = new MapCreationSession(initial, creationStore.Parameters(initial.Kind));
+        if (recipe != null) MapRecipeRestore.Validate(recipe);
+        var initial = recipe != null ? new MapCreationSettings(recipe.Kind, recipe.Width, recipe.Height, "RecreatedMap", MapCreationPaths.DefaultDirectory(settings.LibraryFolder), false)
+            : creationStore.Data.Last ?? new MapCreationSettings(availability.GetValueOrDefault(MapCreationKind.Province) == null ? MapCreationKind.Province : MapCreationKind.Blank);
+        var session = new MapCreationSession(initial, recipe?.Parameters ?? creationStore.Parameters(initial.Kind)) { Design = recipe?.Design?.Copy() ?? new() };
         using var candidates = session.Candidates;
         bool ConfigureSetup(EditorWindow owner, bool returning)
         {
             var dialog = new NewMapWindow(MapCreationPaths.DefaultDirectory(settings.LibraryFolder), availability,
-                session.Settings, creationStore, returning ? session : null) { Owner = owner };
+                session.Settings, creationStore, returning ? session : null, !returning && recipe != null ? session.Parameters : null) { Owner = owner };
             if (dialog.ShowDialog() != true || dialog.Result is not { } result) return false;
             session.Update(result, dialog.SelectedParameters, dialog.PresetNameBox.Text?.Trim() ?? "");
             return true;
@@ -48,6 +53,7 @@ public partial class MainWindow
                 var draft = new MapDocument(session.Settings.Width, session.Settings.Height) { SourceFormat = settings.AssetFormat };
                 if (session.Settings.Kind == MapCreationKind.Blank) { document = draft; break; }
                 EditorWindow preview;
+                if (recipe != null) session.ExpectedRecipeParameters = new Dictionary<string, string>(session.Parameters);
                 if (session.Settings.Kind == MapCreationKind.Terrain)
                 {
                     var catalogue = await Task.Run(() => TerrainCatalogue.Load(format: settings.AssetFormat));
@@ -96,6 +102,7 @@ public partial class MainWindow
             document.SourceFormat = settings.AssetFormat;
             AddMapTab(document);
             activeMap!.Name = request.Name; activeMap.KeepSourceFormat = true;
+            activeMap.Design = session.Design.Copy();
             RememberGeneration(request.Kind, parameters);
             try
             {
@@ -116,13 +123,13 @@ public partial class MainWindow
         });
     }
 
-    private void RememberGeneration(MapCreationKind kind, EditorWindow window) => RememberGeneration(kind, GeneratorPreferences.Capture(window));
-    private void RememberGeneration(MapCreationKind kind, IReadOnlyDictionary<string, string> parameters)
+    private void RememberGeneration(MapCreationKind kind, EditorWindow window) => RememberGeneration(kind, GeneratorPreferences.Capture(window), false);
+    private void RememberGeneration(MapCreationKind kind, IReadOnlyDictionary<string, string> parameters, bool includeDesign = true)
     {
         try
         {
             if (activeMap != null) activeMap.Recipe = MapCreationStore.Recipe(Viewport.Document, kind, parameters, settings, assets) with
-                { AssetFormat = mapPath == null && !activeMap.KeepSourceFormat ? settings.AssetFormat : Viewport.Document.SourceFormat };
+                { AssetFormat = mapPath == null && !activeMap.KeepSourceFormat ? settings.AssetFormat : Viewport.Document.SourceFormat, Design = includeDesign ? activeMap.Design.Copy() : null };
             creationStore.SetParameters(kind, parameters); creationStore.Save();
         }
         catch (Exception exception) { StudioLog.Error("MapCreation.Recipe", exception); }
